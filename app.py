@@ -143,7 +143,7 @@ def llamar_ia_hibrida(prompt_completo):
     return "Servicio temporalmente saturado. Por favor, reintenta en unos instantes."
 
 # ==========================================
-# ENDPOINT DE PRONÓSTICOS Y CARTELERAS (FOOTBALL-DATA.ORG + SUDAMERICANAS)
+# ENDPOINT DE PRONÓSTICOS Y CARTELERAS (100% DATOS REALES Y FILTRADOS)
 # ==========================================
 @app.route('/obtener-pronostico', methods=['GET'])
 def obtener_pronostico():
@@ -153,9 +153,15 @@ def obtener_pronostico():
             return jsonify(CACHE_PARTIDOS_DATA)
 
         headers = { "X-Auth-Token": api_key_futbol }
-        hoy = datetime.now()
-        fecha_actual_str = hoy.strftime('%Y-%m-%d')
         
+        # FILTRO DE TIEMPO ESTRICTO (Ajustado a UTC-5 Hora de Perú)
+        hoy_utc = datetime.utcnow()
+        hoy_peru = hoy_utc - timedelta(hours=5)
+        
+        fecha_actual_str = hoy_peru.strftime('%Y-%m-%d')
+        fecha_fin_str = (hoy_peru + timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        # LISTA DE COMPETENCIAS REALES VÍA API (Se quitó Perú. Se agregó Libertadores y Brasil reales)
         COMPETENCIAS_EUROPEAS = [
             ('CL', 'UEFA Champions League'),
             ('PL', 'Premier League (Inglaterra)'),
@@ -164,54 +170,17 @@ def obtener_pronostico():
             ('BL1', 'Bundesliga (Alemania)'),
             ('FL1', 'Ligue 1 (Francia)'),
             ('PPL', 'Primeira Liga (Portugal)'),
-            ('DED', 'Eredivisie (Países Bajos)')
+            ('DED', 'Eredivisie (Países Bajos)'),
+            ('CLI', 'CONMEBOL Libertadores'),
+            ('BSA', 'Brasileirão Série A Betano')
         ]
 
         partidos_por_competicion = {}
         partidos_clave_ia = []
 
-        def build_fecha(dias_offset, hora="19:00"):
-            dt = hoy + timedelta(days=dias_offset)
-            return dt.strftime('%d/%m/%Y ') + hora, dt.strftime('%Y-%m-%d') + f"T{hora}:00Z"
-
-        f1_txt, _ = build_fecha(1, "19:30")
-        f2_txt, _ = build_fecha(2, "21:30")
-        f3_txt, _ = build_fecha(3, "19:00")
-        
-        # Sudamericanas y Nacionales
-        partidos_libertadores = [
-            {"id": "lib-1", "partido": "Flamengo vs River Plate", "competicion": "CONMEBOL Libertadores", "fecha": f1_txt},
-            {"id": "lib-2", "partido": "Palmeiras vs Boca Juniors", "competicion": "CONMEBOL Libertadores", "fecha": f2_txt}
-        ]
-        partidos_por_competicion["CONMEBOL Libertadores"] = partidos_libertadores
-        partidos_clave_ia.append(partidos_libertadores[0])
-
-        partidos_sudamericana = [
-            {"id": "sud-1", "partido": "Corinthians vs Racing Club", "competicion": "CONMEBOL Sudamericana", "fecha": f1_txt},
-            {"id": "sud-2", "partido": "Cruzeiro vs Lanús", "competicion": "CONMEBOL Sudamericana", "fecha": f2_txt}
-        ]
-        partidos_por_competicion["CONMEBOL Sudamericana"] = partidos_sudamericana
-        partidos_clave_ia.append(partidos_sudamericana[0])
-
-        partidos_peru = [
-            {"id": "per-1", "partido": "Universitario vs Alianza Lima", "competicion": "Liga 1 (Perú)", "fecha": f1_txt},
-            {"id": "per-2", "partido": "Sporting Cristal vs FBC Melgar", "competicion": "Liga 1 (Perú)", "fecha": f2_txt},
-            {"id": "per-3", "partido": "Cienciano vs Cusco FC", "competicion": "Liga 1 (Perú)", "fecha": f3_txt}
-        ]
-        partidos_por_competicion["Liga 1 (Perú)"] = partidos_peru
-        partidos_clave_ia.append(partidos_peru[0])
-
-        partidos_brasil = [
-            {"id": "bsa-1", "partido": "Palmeiras vs Flamengo", "competicion": "Brasileirão Série A Betano", "fecha": f1_txt},
-            {"id": "bsa-2", "partido": "Botafogo vs São Paulo", "competicion": "Brasileirão Série A Betano", "fecha": f3_txt},
-            {"id": "bsa-3", "partido": "Fluminense vs Corinthians", "competicion": "Brasileirão Série A Betano", "fecha": f2_txt}
-        ]
-        partidos_por_competicion["Brasileirão Série A Betano"] = partidos_brasil
-        partidos_clave_ia.append(partidos_brasil[0])
-
-        # Consulta Europeas vía football-data.org
+        # Consulta 100% Real vía football-data.org (SIN PARTIDOS FIJOS/INVENTADOS)
         for comp_code, comp_nombre in COMPETENCIAS_EUROPEAS:
-            url_fd = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=SCHEDULED"
+            url_fd = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=SCHEDULED&dateFrom={fecha_actual_str}&dateTo={fecha_fin_str}"
             partidos_de_esta_liga = []
             try:
                 resp = requests.get(url_fd, headers=headers, timeout=4)
@@ -219,19 +188,25 @@ def obtener_pronostico():
                     data = resp.json()
                     for m in data.get('matches', []):
                         utc_date = m.get('utcDate', '')
-                        if utc_date and utc_date[:10] >= fecha_actual_str:
+                        if utc_date:
                             try:
+                                # Leemos la hora de la API (UTC Londres)
                                 dt_obj = datetime.strptime(utc_date, '%Y-%m-%dT%H:%M:%SZ')
-                                f_fmt = dt_obj.strftime('%d/%m/%Y %H:%M')
+                                # Transformamos a la hora de Lima (UTC-5)
+                                dt_partido_peru = dt_obj - timedelta(hours=5)
+                                
+                                # FILTRO CRÍTICO: Si la hora del partido ya pasó hoy, se elimina automáticamente
+                                if dt_partido_peru > hoy_peru:
+                                    f_fmt = dt_partido_peru.strftime('%d/%m/%Y %H:%M')
+                                    partidos_de_esta_liga.append({
+                                        "id": m.get('id'),
+                                        "partido": f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}",
+                                        "competicion": comp_nombre,
+                                        "fecha": f_fmt
+                                    })
                             except Exception:
-                                f_fmt = "Próximamente"
+                                pass
 
-                            partidos_de_esta_liga.append({
-                                "id": m.get('id'),
-                                "partido": f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}",
-                                "competicion": comp_nombre,
-                                "fecha": f_fmt
-                            })
                     if partidos_de_esta_liga:
                         partidos_por_competicion[comp_nombre] = partidos_de_esta_liga
                         partidos_clave_ia.append(partidos_de_esta_liga[0])
@@ -239,11 +214,28 @@ def obtener_pronostico():
                 continue
 
         partidos_analizar = partidos_clave_ia[:8]
-        partidos_texto = "\n".join([f"- {p['partido']} ({p['competicion']})" for p in partidos_analizar])
+        
+        # Si por casualidad hoy no hay ningún partido programado en todo el mundo, enviamos vacío (Cero inventos)
+        if not partidos_analizar:
+            payload_vacio = {
+                "todos_los_partidos": {},
+                "pronosticos_destacados": [],
+                "total_partidos": 0
+            }
+            CACHE_PARTIDOS_DATA = payload_vacio
+            CACHE_PARTIDOS_TIMESTAMP = time.time()
+            return jsonify(payload_vacio)
+
+        partidos_texto = "\n".join([f"- {p['partido']} ({p['competicion']}) | Fecha: {p['fecha']}" for p in partidos_analizar])
 
         prompt_lote = f"""
-        INSTRUCCIÓN: Actúa como el motor cuantitativo de PredicXion IA bajo el protocolo de razonamiento ampliado. Analiza estos partidos y evalúa su Expected Value (EV+):
+        INSTRUCCIÓN: Actúa como el motor cuantitativo de PredicXion IA bajo el protocolo de razonamiento ampliado. Analiza estos partidos exactos y evalúa su Expected Value (EV+):
         {partidos_texto}
+        
+        REGLA DE ORO DE VERACIDAD (ANTI-VACÍOS): 
+        1. Está TOTALMENTE PROHIBIDO devolver "N/A", "Falta información" o campos en blanco.
+        2. Si no dispones de las alineaciones exactas del día de hoy, DEBES usar el HISTORIAL estadístico de rendimiento de ambos equipos para deducir y proyectar las cuotas de forma realista.
+        3. Prohibido mencionar a la Liga de Perú o partidos inventados.
 
         Devuelve un JSON exacto, sin bloques de código markdown ni texto adicional fuera del arreglo JSON:
         [
