@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PredicXion IA - Dashboard Profesional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Plus+Jakarta+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        outfit: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .toast-notification {
+            visibility: hidden; min-width: 250px; background-color: #10b981; color: #fff;
+            text-align: center; border-radius: 8px; padding: 12px; position: fixed;
+            z-index: 100; left: 50%; bottom: 30px; font-size: 14px; transform: translateX(-50%);
+            opacity: 0; transition: opacity 0.3s, bottom 0.3s;
+        }
+        .toast-notification.show { visibility: visible; opacity: 1; bottom: 50px; }
+    </style>
+</head>
+
+<body class="bg-slate-900 text-slate-100 font-sans antialiased min-h-screen flex flex-col items-center py-6 px-4 sm:px-0">
+    
+    <div id="toast" class="toast-notification shadow-xl font-bold shadow-emerald-500/30">
+        <i class="fa-solid fa-check-circle mr-2"></i> ¡Pick copiado al portapapeles!
+    </div>
+
+    <div class="w-full max-w-7xl flex flex-col lg:flex-row justify-center gap-6 relative">
+        
+        <aside class="w-full lg:w-80 flex-shrink-0 flex flex-col gap-4 lg:order-first lg:sticky lg:top-6 lg:h-[calc(100vh-48px)]">
+            
+            <!-- WIDGET 1: Medidor Circular de Efectividad -->
+            <div class="rounded-2xl border border-emerald-800/40 bg-gradient-to-br from-emerald-950/70 to-slate-900/70 p-5 shadow-lg flex-shrink-0 text-center">
+                <p class="mb-3 text-[11px] font-black uppercase tracking-wider text-emerald-400">Efectividad de Pronósticos</p>
+                <div class="relative h-20 w-20 mx-auto mb-2">
+                    <svg viewBox="0 0 80 80" class="h-full w-full -rotate-90">
+                        <circle cx="40" cy="40" r="32" fill="none" stroke-width="7" class="stroke-emerald-900/50"></circle>
+                        <circle cx="40" cy="40" r="32" fill="none" stroke-width="7" stroke-linecap="round" stroke="#34d399" stroke-dasharray="155 200" style="filter:drop-shadow(0 0 4px rgba(52,211,153,.6))"></circle>
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center text-2xl font-black text-white font-outfit">77%</div>
+                </div>
+            </div>
+
+            <!-- WIDGET 2: Historial Verificado -->
+            <div class="rounded-2xl bg-slate-800/50 border border-slate-700/80 p-4 shadow-md flex-shrink-0">
+                <p class="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400"><i class="fa-solid fa-shield-check text-blue-400"></i> Historial Verificado (7 Días)</p>
+                <div class="flex items-center justify-between">
+                    <div class="flex gap-2">
+                        <span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold px-2 py-0.5 rounded text-[11px]">18 ✅ Verdes</span>
+                        <span class="bg-red-500/20 text-red-400 border border-red-500/30 font-bold px-2 py-0.5 rounded text-[11px]">6 ❌ Rojas</span>
+                    </div>
+                    <span class="text-xs font-black text-emerald-300">75% WIN</span>
+                </div>
+            </div>
+
+            <!-- WIDGET 3: Acordeón de Ligas + Checkboxes de Parlay -->
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col flex-1 min-h-[300px] overflow-hidden relative">
+                <div class="px-4 py-3 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                    <div>
+                        <p class="text-[11px] font-black uppercase tracking-wider text-slate-400">📅 Partidos disponibles</p>
+                        <p class="text-[9px] text-slate-500 font-medium">Elige una liga o arma tu combinada con ✅</p>
+                    </div>
+                    <span id="total-matches-badge" class="text-[10px] font-black bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-2 py-0.5 rounded-full">0</span>
+                </div>
+
+                <div class="px-3 pt-2 pb-2 border-b border-slate-800">
+                    <input type="text" id="sidebar-search" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-slate-800/80 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none transition-all">
+                </div>
+
+                <div id="sidebar-matches" class="p-2 overflow-y-auto flex-1 space-y-1.5 pb-20">
+                    <div class="text-center text-xs text-slate-500 py-4"><i class="fa-solid fa-spinner fa-spin"></i> Cargando carteleras...</div>
+                </div>
+
+                <!-- WIDGET FLOTANTE: Generador de Parlays Personalizados -->
+                <div id="parlay-builder-widget" class="absolute bottom-0 left-0 right-0 p-3 bg-slate-900 border-t border-emerald-900/50 shadow-[0_-10px_20px_rgba(0,0,0,0.5)] transition-transform translate-y-full flex flex-col gap-2 z-20">
+                    <p class="text-[10px] text-emerald-400 font-bold text-center">Partidos en el boleto: <span id="parlay-count" class="text-white">0</span></p>
+                    <button onclick="generarParlayIA()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-lg transition-colors shadow-lg shadow-emerald-600/20">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Analizar Combinada Exacta
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <div class="flex flex-col w-full lg:max-w-4xl min-w-0">
+            
+            <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div>
+                    <h1 class="font-outfit font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400 text-3xl md:text-4xl">PredicXion IA</h1>
+                    <p class="text-xs text-slate-400 font-medium mt-1">Motor Híbrido Dual: Groq + Gemini Pro con Protocolo de Razonamiento Ampliado</p>
+                </div>
+                <button onclick="cargarPronosticos()" class="text-xs font-bold py-2 px-4 rounded-lg border border-emerald-500/40 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors">
+                    <i class="fa-solid fa-rotate"></i> Recargar Datos
+                </button>
+            </header>
+
+            <!-- CHAT ANALISTA TÁCTICO -->
+            <div class="w-full bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden mb-8 h-[500px]">
+                <div class="px-5 py-3 border-b border-slate-700 bg-slate-900/50 flex items-center gap-2">
+                    <i class="fa-solid fa-robot text-emerald-400"></i>
+                    <span class="font-bold text-white text-sm">PredicXion IA (Analista Táctico Cuantitativo con Chain-of-Thought)</span>
+                </div>
+                
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-5 space-y-5 bg-slate-900/60 scroll-smooth">
+                    <div class="flex justify-start">
+                        <div class="bg-slate-800 border border-slate-700 text-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[90%] text-[13px] leading-relaxed shadow-lg">
+                            <strong class="text-emerald-400 block mb-1 text-xs uppercase">PredicXion IA</strong>
+                            ¡Hola! He procesado la cartelera completa de Europa, Brasil, Perú y torneos sudamericanos bajo rigurosas métricas de xG y EV+.<br><br>
+                            1️⃣ Haz clic en <strong>Chat IA</strong> en cualquier partido o selecciónalo en la barra lateral para su radiografía táctica.<br>
+                            2️⃣ Marca las casillas (✅) en la barra lateral para crear tu propio Parlay personalizado y evaluaré su valor matemático.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-800 border-t border-slate-700 flex-shrink-0">
+                    <div class="flex gap-3">
+                        <input type="text" id="chat-input" onkeypress="if(event.key==='Enter') enviarMensajeChat()" placeholder="Ej: Analiza las bajas y xG de Flamengo vs River Plate..." class="flex-1 bg-slate-900 border border-slate-600 focus:border-blue-500 rounded-xl px-4 text-sm text-slate-100 placeholder-slate-500 focus:outline-none">
+                        <button onclick="enviarMensajeChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-xl font-bold transition-colors">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PREDICCIONES DESTACADAS -->
+            <div>
+                <p class="text-sm font-black uppercase tracking-wider text-emerald-300 mb-4">✅ Predicciones y Parlays Destacados</p>
+                <div id="app-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-10">
+                    <div class="col-span-full text-center py-10 bg-slate-800/50 rounded-xl border border-slate-700">
+                        <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-500"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
+        
+        let globalTodosPartidos = {};
+        const ligasAbiertas = {};
+        let parlaySeleccionados = new Set();
+
+        function getIcon(liga) {
+            const l = (liga||'').toLowerCase();
+            if (l.includes('libertadores')) return 'fa-solid fa-trophy text-amber-400';
+            if (l.includes('sudamericana')) return 'fa-solid fa-earth-americas text-cyan-400';
+            if (l.includes('perú') || l.includes('liga 1')) return 'fa-solid fa-sun text-rose-400';
+            if (l.includes('brasil')) return 'fa-solid fa-shield-halved text-emerald-400';
+            if (l.includes('champions')) return 'fa-solid fa-star text-yellow-300';
+            if (l.includes('premier')) return 'fa-solid fa-crown text-purple-400';
+            if (l.includes('españa') || l.includes('liga')) return 'fa-solid fa-futbol text-orange-400';
+            return 'fa-solid fa-medal text-slate-400';
+        }
+
+        async function cargarPronosticos() {
+            try {
+                const resp = await fetch(`${API_BASE}/obtener-pronostico`);
+                const data = await resp.json();
+                
+                if (data.todos_los_partidos) {
+                    globalTodosPartidos = data.todos_los_partidos;
+                    document.getElementById('total-matches-badge').innerText = data.total_partidos || 0;
+                    renderizarSidebar(globalTodosPartidos);
+                    renderizarTarjetas(data.pronosticos_destacados || []);
+                }
+            } catch (e) {
+                console.error("Error al cargar pronósticos:", e);
+                document.getElementById('app-container').innerHTML = `
+                    <div class="col-span-full text-center py-10 bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-400 text-2xl mb-2"></i>
+                        <p class="text-xs text-slate-300 font-bold mb-1">El servidor se está iniciando en la nube...</p>
+                        <p class="text-[11px] text-slate-500 mb-4">Los servidores gratuitos pueden tardar hasta 50 segundos en despertar en el primer acceso.</p>
+                        <button onclick="cargarPronosticos()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold">Reintentar Conexión</button>
+                    </div>
+                `;
+            }
+        }
+
+        function toggleCheckbox(event, nombrePartido) {
+            event.stopPropagation();
+            if (event.target.checked) {
+                parlaySeleccionados.add(nombrePartido);
+            } else {
+                parlaySeleccionados.delete(nombrePartido);
+            }
+            
+            const widget = document.getElementById('parlay-builder-widget');
+            document.getElementById('parlay-count').innerText = parlaySeleccionados.size;
+            
+            if (parlaySeleccionados.size > 1) {
+                widget.classList.remove('translate-y-full');
+            } else {
+                widget.classList.add('translate-y-full');
+            }
+        }
+
+        function generarParlayIA() {
+            if (parlaySeleccionados.size < 2) return;
+            const lista = Array.from(parlaySeleccionados).join(" / ");
+            const prompt = `Actúa como Tipster Profesional de PredicXion IA. He seleccionado estos ${parlaySeleccionados.size} partidos para armar un boleto combinado (Parlay): ${lista}. Evalúa detalladamente la viabilidad conjunta, correlación táctica, cuotas con valor (EV+) y entrega el pronóstico final.`;
+            
+            document.getElementById('chat-input').value = prompt;
+            enviarMensajeChat();
+            
+            parlaySeleccionados.clear();
+            document.getElementById('parlay-builder-widget').classList.add('translate-y-full');
+            renderizarSidebar(globalTodosPartidos, document.getElementById('sidebar-search').value);
+            document.querySelector('header').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function compartirPick(btn, partido, pick, liga) {
+            const texto = `🔥 PICK VIP PREDICXION IA 🔥\n🏆 ${liga}\n⚽ ${partido}\n🎯 Jugada Sugerida: ${pick}\n\n🤖 Analizado con métricas xG y EV+ en PredicXion IA`;
+            navigator.clipboard.writeText(texto).then(() => {
+                const toast = document.getElementById('toast');
+                toast.classList.add('show');
+                
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = `<i class="fa-solid fa-check"></i> Copiado`;
+                btn.classList.add('bg-emerald-600', 'text-white');
+                btn.classList.remove('text-emerald-400');
+                
+                setTimeout(() => { 
+                    toast.classList.remove('show'); 
+                    btn.innerHTML = originalHTML;
+                    btn.classList.remove('bg-emerald-600', 'text-white');
+                    btn.classList.add('text-emerald-400');
+                }, 2500);
+            });
+        }
+
+        function renderizarSidebar(partidosPorLiga, filtro="") {
+            const query = filtro.toLowerCase().trim();
+            let html = '';
+            let id = 0;
+
+            for (const [liga, partidos] of Object.entries(partidosPorLiga)) {
+                const filtrados = partidos.filter(p => !query || p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query));
+                if (filtrados.length === 0) continue;
+
+                const abierta = query ? true : ligasAbiertas[liga];
+                html += `
+                    <div class="border border-slate-700 rounded-lg overflow-hidden bg-slate-900/40">
+                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full flex justify-between p-2.5 bg-slate-800 hover:bg-slate-700 transition text-left">
+                            <div class="flex items-center gap-2">
+                                <i class="${getIcon(liga)} text-xs"></i>
+                                <span class="text-xs font-bold">${liga}</span>
+                                <span class="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded text-slate-400">${filtrados.length}</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-slate-500 transition-transform ${abierta?'rotate-180':''}"></i>
+                        </button>
+                        <div id="l-${id}" class="${abierta?'block':'hidden'} p-2 space-y-1 bg-slate-950/30">
+                `;
+                
+                filtrados.forEach(p => {
+                    const esc = p.partido.replace(/'/g, "\\'");
+                    const checked = parlaySeleccionados.has(p.partido) ? 'checked' : '';
+                    html += `
+                        <div class="flex items-center gap-2 p-2 rounded bg-slate-800/80 border border-slate-700/50 hover:border-emerald-500/50 transition">
+                            <input type="checkbox" ${checked} onclick="toggleCheckbox(event, '${esc}')" class="w-3.5 h-3.5 accent-emerald-500 cursor-pointer rounded-sm">
+                            <button onclick="preguntarPartido('${esc}')" class="flex-1 text-left text-xs font-bold text-slate-300 hover:text-emerald-400 truncate">
+                                ${p.partido}
+                            </button>
+                        </div>
+                    `;
+                });
+                html += `</div></div>`;
+                id++;
+            }
+            document.getElementById('sidebar-matches').innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No hay resultados coincidentes.</p>`;
+        }
+
+        function toggleLiga(liga, id) {
+            const div = document.getElementById(id);
+            div.classList.toggle('hidden');
+            ligasAbiertas[liga] = !div.classList.contains('hidden');
+            renderizarSidebar(globalTodosPartidos, document.getElementById('sidebar-search').value);
+        }
+
+        function filtrarSidebar() {
+            renderizarSidebar(globalTodosPartidos, document.getElementById('sidebar-search').value);
+        }
+
+        function renderizarTarjetas(datos) {
+            const container = document.getElementById('app-container');
+            let html = '';
+            
+            datos.forEach(item => {
+                const escPart = (item.partido||'Equipo Desconocido').replace(/'/g, "\\'");
+                const escPick = (item.principal||'Pick N/A').replace(/'/g, "\\'");
+                const escLiga = (item.competicion||'Liga N/A').replace(/'/g, "\\'");
+                
+                const badgeEV = item.ev_alto ? `
+                    <div class="absolute -top-3 -right-2 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-[0_0_12px_rgba(245,158,11,0.6)] border border-amber-300 animate-pulse z-10">
+                        ⚡ EV+ ALTO
+                    </div>` : '';
+
+                html += `
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl shadow-xl flex flex-col relative mt-2">
+                        ${badgeEV}
+                        <div class="px-3 py-2 border-b border-slate-700 bg-slate-900/40 flex justify-between items-center text-[10px]">
+                            <span class="font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1"><i class="${getIcon(item.competicion)}"></i> ${item.competicion || 'Liga'}</span>
+                            <span class="text-slate-400">${item.fecha || 'Próximamente'}</span>
+                        </div>
+                        <div class="p-4 flex-1 flex flex-col">
+                            <h3 class="font-bold text-[14px] text-white text-center mb-3 font-outfit">${item.partido || 'Cargando Partido'}</h3>
+                            <div class="bg-blue-900/20 border border-blue-800/30 rounded px-2 py-1.5 text-[10px] text-blue-300 text-center mb-3 font-semibold">
+                                📊 ${item.probabilidad || '50% - 50%'}
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 mb-3">
+                                <div class="bg-slate-900/80 rounded p-2 border border-slate-700/50">
+                                    <div class="text-[9px] text-emerald-400 font-black uppercase mb-1">🔥 Pick Seguro</div>
+                                    <div class="font-bold text-emerald-300 text-xs">${item.principal || 'N/A'}</div>
+                                </div>
+                                <div class="bg-slate-900/80 rounded p-2 border border-slate-700/50">
+                                    <div class="text-[9px] text-slate-400 font-black uppercase mb-1">⚡ Alternativa EV+</div>
+                                    <div class="font-bold text-slate-200 text-xs">${item.alternativa || 'N/A'}</div>
+                                </div>
+                            </div>
+                            <div class="mb-3 bg-emerald-900/20 rounded p-2 border border-emerald-800/40 text-center">
+                                <div class="text-[9px] text-emerald-400 font-black uppercase mb-0.5">🎯 Parlay Recomendado</div>
+                                <div class="font-bold text-emerald-100 text-[11px]">${item.parlay || 'N/A'}</div>
+                            </div>
+                            <div class="mt-auto bg-slate-900/50 rounded p-2.5 text-[10px] text-slate-300 border-l-2 border-slate-600 mb-3">
+                                <span class="font-bold text-slate-400">💡 Análisis PredicXion:</span> ${item.argumento || 'Evaluando métricas tácticas y cuotas de mercado.'}
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="preguntarPartido('${escPart}')" class="py-2 bg-slate-900/80 hover:bg-slate-900 text-blue-400 text-xs font-bold border border-slate-700 rounded transition flex justify-center items-center gap-1">
+                                    <i class="fa-solid fa-robot"></i> Chat IA
+                                </button>
+                                <button onclick="compartirPick(this, '${escPart}', '${escPick}', '${escLiga}')" class="py-2 bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 text-xs font-bold border border-emerald-800/50 rounded transition flex justify-center items-center gap-1">
+                                    <i class="fa-solid fa-share-nodes"></i> Compartir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function preguntarPartido(p) {
+            document.getElementById('chat-input').value = `Hazme la radiografía táctica completa, métricas xG y sugerencia de apuesta para el partido: ${p}.`;
+            enviarMensajeChat();
+            document.querySelector('header').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function enviarMensajeChat() {
+            const input = document.getElementById('chat-input');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            const chat = document.getElementById('chat-messages');
+            chat.innerHTML += `<div class="flex justify-end"><div class="bg-blue-600 text-white p-3.5 rounded-2xl rounded-tr-sm max-w-[85%] text-[13px] shadow">${msg}</div></div>`;
+            input.value = '';
+            chat.scrollTop = chat.scrollHeight;
+
+            const idLoad = 'load-' + Date.now();
+            chat.innerHTML += `<div id="${idLoad}" class="flex justify-start"><div class="bg-slate-800 text-slate-400 p-3 rounded-2xl border border-slate-700 text-xs"><i class="fa-solid fa-circle-notch fa-spin text-emerald-500"></i> Procesando datos tácticos...</div></div>`;
+            chat.scrollTop = chat.scrollHeight;
+
+            try {
+                const res = await fetch(`${API_BASE}/chat-ia`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mensaje: msg })
+                });
+                const data = await res.json();
+                document.getElementById(idLoad)?.remove();
+                
+                const fmt = (data.respuesta||data.error||"Error").replace(/\*\*(.*?)\*\*/g, '<strong class="text-emerald-300 font-bold">$1</strong>').replace(/\n/g, '<br>');
+                
+                chat.innerHTML += `<div class="flex justify-start"><div class="bg-slate-800 border border-slate-700 text-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[90%] text-[13px] leading-relaxed shadow-lg"><strong class="text-emerald-400 block mb-2 text-xs uppercase"><i class="fa-solid fa-bolt text-yellow-400"></i> PredicXion IA</strong>${fmt}</div></div>`;
+            } catch (e) {
+                document.getElementById(idLoad)?.remove();
+                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-900/50 border border-red-700 text-slate-200 p-4 rounded-2xl text-xs">Error de conexión con el servidor. Reintenta en unos momentos.</div></div>`;
+            }
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        cargarPronosticos();
+    </script>
+</body>
+</html>
