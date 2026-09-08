@@ -10,7 +10,6 @@
     
     <!-- SDK DE MERCADO PAGO -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
-    <!-- SDK DE FIREBASE CDN -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -66,7 +65,7 @@
     
     <!-- NOTIFICACIONES TOAST -->
     <div id="toast" class="toast-notification shadow-2xl font-bold shadow-emerald-500/40">
-        <i class="fa-solid fa-check-circle mr-2"></i> <span id="toast-text">Acción realizada con éxito</span>
+        <i class="fa-solid fa-check-circle mr-2"></i> <span id="toast-text">Accion realizada con exito</span>
     </div>
 
     <nav class="w-full max-w-7xl mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between shadow-xl gap-3">
@@ -94,12 +93,12 @@
             <div id="auth-container" class="flex items-center gap-2">
                 <button onclick="abrirAuthModal()" id="btn-login-header" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl transition">
                     <i class="fa-solid fa-user"></i>
-                    <span>Iniciar Sesión</span>
+                    <span>Iniciar Sesion</span>
                 </button>
                 <div id="profile-logged" class="hidden flex items-center gap-2.5 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-xl">
                     <div class="w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 font-bold text-xs" id="user-avatar">U</div>
                     <span class="text-xs font-bold text-slate-200" id="user-name-display">Usuario</span>
-                    <button onclick="cerrarSesion()" title="Cerrar Sesión" class="text-slate-400 hover:text-red-400 text-xs transition ml-1">
+                    <button onclick="cerrarSesion()" title="Cerrar Sesion" class="text-slate-400 hover:text-red-400 text-xs transition ml-1">
                         <i class="fa-solid fa-right-from-bracket"></i>
                     </button>
                 </div>
@@ -182,7 +181,7 @@
                 </div>
             </div>
 
-            <!-- FUNCION VIP: ACCESO TELEGRAM -->
+            <!-- FUNCIÓN VIP: ACCESO TELEGRAM -->
             <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-hidden shadow-lg">
                 <div id="vip-gate-telegram" class="absolute inset-0 vip-glass z-10 flex flex-col items-center justify-center p-4 text-center">
                     <i class="fa-solid fa-lock text-amber-400 text-2xl mb-2"></i>
@@ -242,7 +241,7 @@
                     <div class="flex items-center gap-2">
                         <i class="fa-solid fa-robot text-emerald-400"></i>
                         <span class="font-bold text-white text-sm">PredicXion IA</span>
-                        <span id="chat-vip-badge" class="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black border border-slate-700">Free (3 Consultas/Día)</span>
+                        <span id="chat-vip-badge" class="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-black border border-slate-700">Free (3 Consultas/Dia)</span>
                     </div>
                     <span class="text-[10px] bg-emerald-950 text-emerald-400 px-2.5 py-0.5 rounded-full font-bold border border-emerald-800/40">🟢 Motor Conectado</span>
                 </div>
@@ -258,7 +257,7 @@
 
                 <div class="p-3 bg-slate-900 border-t border-slate-800 flex-shrink-0">
                     <div class="flex gap-2.5">
-                        <input type="text" id="chat-input" onkeypress="if(event.key==='Enter') enviarMensajeChat()" placeholder="Ej: Ármame un parlay para la Champions de hoy..." class="flex-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 text-xs text-slate-100 placeholder-slate-500 focus:outline-none">
+                        <input type="text" id="chat-input" onkeypress="if(event.key==='Enter') enviarMensajeChat()" placeholder="Ej: Armame un parlay para la Champions de hoy..." class="flex-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 text-xs text-slate-100 placeholder-slate-500 focus:outline-none">
                         <button onclick="enviarMensajeChat()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-bold transition shadow-lg shadow-emerald-600/30">
                             <i class="fa-solid fa-paper-plane"></i>
                         </button>
@@ -279,18 +278,18 @@
                     <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-hidden shadow-lg">
                         <div id="vip-gate-1" class="absolute inset-0 vip-glass z-10 flex flex-col items-center justify-center p-4 text-center">
                             <i class="fa-solid fa-lock text-amber-400 text-2xl mb-2"></i>
-                            <h4 class="text-xs font-black text-white uppercase tracking-wider mb-1">Escáner de Córners y Tarjetas</h4>
-                            <p class="text-[11px] text-slate-300 max-w-xs mb-3">Pronósticos especializados en tiros de esquina y amonestaciones.</p>
+                            <h4 class="text-xs font-black text-white uppercase tracking-wider mb-1">Escaner de Corners y Tarjetas</h4>
+                            <p class="text-[11px] text-slate-300 max-w-xs mb-3">Pronosticos especializados en tiros de esquina y amonestaciones.</p>
                             <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl shadow-lg">Desbloquear</button>
                         </div>
                         <div class="vip-blur">
                             <div class="flex justify-between text-xs mb-2">
-                                <span class="font-bold text-cyan-400">🏴󠁡󠁲󠁿 Real Madrid vs Inter</span>
-                                <span class="text-emerald-400 font-bold">Alta Fricción</span>
+                                <span class="font-bold text-cyan-400">⚽ Real Madrid vs Inter</span>
+                                <span class="text-emerald-400 font-bold">Alta Friccion</span>
                             </div>
                             <div class="space-y-1.5 text-xs text-slate-300">
-                                <p>• Córners proyectados: <strong>Más de 9.5 (@1.88)</strong></p>
-                                <p>• Jugador a rematar al arco: <strong>Mbappé (+1.5)</strong></p>
+                                <p>• Corners proyectados: <strong>Mas de 9.5 (@1.88)</strong></p>
+                                <p>• Jugador a rematar al arco: <strong>Mbappe (+1.5)</strong></p>
                             </div>
                         </div>
                     </div>
@@ -299,12 +298,12 @@
                         <div id="vip-gate-2" class="absolute inset-0 vip-glass z-10 flex flex-col items-center justify-center p-4 text-center">
                             <i class="fa-solid fa-lock text-amber-400 text-2xl mb-2"></i>
                             <h4 class="text-xs font-black text-white uppercase tracking-wider mb-1">Smart Money Tracker</h4>
-                            <p class="text-[11px] text-slate-300 max-w-xs mb-3">Detecta caídas repentinas de cuotas por sindicatos profesionales.</p>
+                            <p class="text-[11px] text-slate-300 max-w-xs mb-3">Detecta caidas repentinas de cuotas por sindicatos profesionales.</p>
                             <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl shadow-lg">Desbloquear</button>
                         </div>
                         <div class="vip-blur">
                             <div class="flex justify-between text-xs mb-2">
-                                <span class="font-bold text-amber-400">⚡ Alerta de Caída</span>
+                                <span class="font-bold text-amber-400">⚡ Alerta de Caida</span>
                                 <span class="text-red-400 font-mono font-bold">-22% Drop</span>
                             </div>
                             <div class="space-y-1.5 text-xs text-slate-300">
@@ -319,13 +318,13 @@
             <div>
                 <div class="flex justify-between items-center mb-4">
                     <p class="text-sm font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
-                        <i class="fa-solid fa-chart-line"></i> 10 Pronósticos y Parlays Top
+                        <i class="fa-solid fa-chart-line"></i> 10 Pronosticos y Parlays Top
                     </p>
                 </div>
                 <div id="app-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
                     <div class="col-span-full text-center py-10 bg-slate-900/50 rounded-2xl border border-slate-800">
                         <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-500"></i>
-                        <p class="text-xs text-slate-400 mt-2 font-semibold">Cargando pronósticos calculados...</p>
+                        <p class="text-xs text-slate-400 mt-2 font-semibold">Cargando pronosticos calculados...</p>
                     </div>
                 </div>
             </div>
@@ -364,17 +363,17 @@
                     <input type="text" id="auth-user" placeholder="ej: CrackDeLasApuestas" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none">
                 </div>
                 <div>
-                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Correo Electrónico:</label>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Correo Electronico:</label>
                     <input type="email" id="auth-email" required placeholder="correo@ejemplo.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none">
                 </div>
                 <div>
-                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Contraseña:</label>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Contrasena:</label>
                     <input type="password" id="auth-password" required placeholder="••••••••" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none">
                 </div>
-                <button type="submit" id="auth-btn-submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl transition">Iniciar Sesión</button>
+                <button type="submit" id="auth-btn-submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl transition">Iniciar Sesion</button>
             </form>
             <div class="mt-4 text-center">
-                <p class="text-xs text-slate-400"><span id="auth-toggle-label">¿No tienes cuenta?</span> <button type="button" onclick="alternarModoAuth()" id="auth-toggle-btn" class="text-emerald-400 font-bold ml-1">Regístrate aquí</button></p>
+                <p class="text-xs text-slate-400"><span id="auth-toggle-label">¿No tienes cuenta?</span> <button type="button" onclick="alternarModoAuth()" id="auth-toggle-btn" class="text-emerald-400 font-bold ml-1">Registrate aqui</button></p>
             </div>
         </div>
     </div>
@@ -384,7 +383,7 @@
             <button onclick="cerrarVipModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
 
             <div class="text-center mb-6">
-                <span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">Membresía Exclusiva</span>
+                <span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">Membresia Exclusiva</span>
                 <h3 class="font-outfit font-black text-2xl sm:text-3xl text-white mt-2">Pase VIP PredicXion IA</h3>
             </div>
 
@@ -395,7 +394,7 @@
                     <div class="font-outfit font-black text-2xl text-white">S/ 14.90</div>
                 </div>
                 <div onclick="seleccionarPlan(39.90, 'Mensual Pro')" id="plan-card-39" class="plan-card cursor-pointer bg-slate-950 border-2 border-amber-500 rounded-2xl p-4 text-center relative shadow-lg shadow-amber-500/10">
-                    <span class="absolute -top-2.5 left-1/2 transform -translate-x-1/2 bg-amber-500 text-slate-950 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">Más Popular</span>
+                    <span class="absolute -top-2.5 left-1/2 transform -translate-x-1/2 bg-amber-500 text-slate-950 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">Mas Popular</span>
                     <span class="text-[10px] font-black text-amber-400 uppercase block mb-1">Mensual Pro</span>
                     <div class="font-outfit font-black text-2xl text-white">S/ 39.90</div>
                 </div>
@@ -415,24 +414,24 @@
 
                 <!-- FORMULARIOS DE PAGO -->
                 <div id="form-yape" class="metodo-form bg-slate-950 border border-purple-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between"><span class="text-xs font-black text-purple-400"><i class="fa-solid fa-bolt mr-1"></i> Yape Instantáneo (1 Clic)</span></div>
+                    <div class="flex items-center justify-between"><span class="text-xs font-black text-purple-400"><i class="fa-solid fa-bolt mr-1"></i> Yape Instantaneo (1 Clic)</span></div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div><label class="text-[10px] font-bold text-slate-400 block mb-1">N° Celular Yape:</label><input type="tel" id="yape-phone" maxlength="9" placeholder="999888777" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Código Aprobación (6 dígitos):</label><input type="text" id="yape-code" maxlength="6" placeholder="123456" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Codigo Aprobacion (6 digitos):</label><input type="text" id="yape-code" maxlength="6" placeholder="123456" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     </div>
                 </div>
 
                 <div id="form-plin" class="metodo-form hidden bg-slate-950 border border-cyan-900/40 rounded-2xl p-4 space-y-3">
                     <div class="flex items-center justify-between"><span class="text-xs font-black text-cyan-400"><i class="fa-solid fa-mobile-screen mr-1"></i> Plin Directo / Transferencia</span></div>
-                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Teléfono Plin:</label><input type="tel" id="plin-phone" maxlength="9" placeholder="999888777" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
-                    <p class="text-[10px] text-slate-500">Al confirmar, serás redirigido a WhatsApp con un enlace directo para transferir y activar tu cuenta.</p>
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Numero de Telefono Plin:</label><input type="tel" id="plin-phone" maxlength="9" placeholder="999888777" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                    <p class="text-[10px] text-slate-500">Al confirmar, seras redirigido a WhatsApp con un enlace directo para transferir y activar tu cuenta.</p>
                 </div>
 
                 <div id="form-tarjeta" class="metodo-form hidden bg-slate-950 border border-emerald-900/40 rounded-2xl p-4 space-y-3">
                     <div id="mercadopago-brick-container"></div>
                     <div id="simulacion-tarjeta">
-                        <div class="flex items-center justify-between"><span class="text-xs font-black text-emerald-400"><i class="fa-solid fa-credit-card mr-1"></i> Tarjeta Débito/Crédito</span></div>
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Tarjeta:</label><input type="text" id="card-number" placeholder="4000 1234 5678 9010" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div class="flex items-center justify-between"><span class="text-xs font-black text-emerald-400"><i class="fa-solid fa-credit-card mr-1"></i> Tarjeta Debito/Credito</span></div>
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Numero de Tarjeta:</label><input type="text" id="card-number" placeholder="4000 1234 5678 9010" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                         <div class="grid grid-cols-2 gap-2.5">
                             <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Vencimiento:</label><input type="text" id="card-exp" placeholder="MM/AA" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                             <div><label class="text-[10px] font-bold text-slate-400 block mb-1">CVV:</label><input type="password" id="card-cvv" placeholder="123" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
@@ -449,7 +448,7 @@
     </div>
 
     <script>
-        // CONFIGURACIÓN DE FIREBASE CON TUS CREDENCIALES REALES
+        // CONFIGURACIÓN DE FIREBASE CON TUS CREDENCIALES
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
             authDomain: "predicxion-ia.firebaseapp.com",
@@ -472,7 +471,6 @@
         let parlaySeleccionados = new Set();
         const votosComunidad = {};
 
-        // Inicializar Firebase Auth de forma segura
         let authInstance = null;
         window.addEventListener('DOMContentLoaded', () => {
             try {
@@ -513,7 +511,7 @@
                 if (usuarioActual.esVip) {
                     navBadge.className = 'text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50';
                     navBadge.innerText = '👑 VIP PRO';
-                    document.getElementById('nav-vip-text').innerText = 'Membresía Activa';
+                    document.getElementById('nav-vip-text').innerText = 'Membresia Activa';
                     document.getElementById('chat-vip-badge').className = 'text-[9px] bg-amber-950 text-amber-400 px-2 py-0.5 rounded font-black border border-amber-800/40';
                     document.getElementById('chat-vip-badge').innerText = 'VIP Ilimitado';
 
@@ -536,10 +534,10 @@
         function alternarModoAuth() {
             modoRegistro = !modoRegistro;
             document.getElementById('auth-title').innerText = modoRegistro ? 'Crear Cuenta' : 'Acceder';
-            document.getElementById('auth-btn-submit').innerText = modoRegistro ? 'Registrarse' : 'Iniciar Sesión';
+            document.getElementById('auth-btn-submit').innerText = modoRegistro ? 'Registrarse' : 'Iniciar Sesion';
             document.getElementById('campo-usuario').classList.toggle('hidden', !modoRegistro);
             document.getElementById('auth-toggle-label').innerText = modoRegistro ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?';
-            document.getElementById('auth-toggle-btn').innerText = modoRegistro ? 'Inicia sesión' : 'Regístrate aquí';
+            document.getElementById('auth-toggle-btn').innerText = modoRegistro ? 'Inicia sesion' : 'Registrate aqui';
         }
 
         async function iniciarSesionGoogle() {
@@ -573,7 +571,7 @@
                         marcarLogueado(cred.user.displayName || userNombre, email);
                     }
                 } catch (err) {
-                    notificar("Error de autenticación: " + (err.message || 'Verifica tus datos'));
+                    notificar("Error de autenticacion: " + (err.message || 'Verifica tus datos'));
                 }
             } else {
                 marcarLogueado(userNombre, email);
@@ -638,7 +636,7 @@
                 btn.disabled = false;
                 cerrarVipModal();
                 actualizarInterfazUsuario();
-                notificar(`¡Felicidades! Activaste tu ${planSeleccionadoTexto} con éxito 👑`);
+                notificar(`¡Felicidades! Activaste tu ${planSeleccionadoTexto} con exito 👑`);
             }, 1800);
         }
 
@@ -653,7 +651,7 @@
             if (l.includes('libertadores')) return 'fa-solid fa-trophy text-amber-400';
             if (l.includes('champions')) return 'fa-solid fa-star text-yellow-300';
             if (l.includes('premier')) return 'fa-solid fa-crown text-purple-400';
-            if (l.includes('españa') || l.includes('liga')) return 'fa-solid fa-futbol text-orange-400';
+            if (l.includes('espana') || l.includes('liga')) return 'fa-solid fa-futbol text-orange-400';
             return 'fa-solid fa-shield-halved text-emerald-400';
         }
 
@@ -675,7 +673,7 @@
                     renderizarTarjetas(data.pronosticos_destacados || []);
                 }
             } catch (e) {
-                container.innerHTML = `<div class="col-span-full text-center py-10"><p class="text-xs text-amber-400">Error de conexión con el motor.</p></div>`;
+                container.innerHTML = `<div class="col-span-full text-center py-10"><p class="text-xs text-amber-400">Error de conexion con el motor.</p></div>`;
             } finally {
                 if (icono) icono.classList.remove('fa-spin');
             }
@@ -694,7 +692,7 @@
         function generarParlayIA() {
             if (parlaySeleccionados.size < 2) return;
             const lista = Array.from(parlaySeleccionados).join(" / ");
-            document.getElementById('chat-input').value = `Ármame una combinada (parlay blindado) con cuotas individuales y cuota total multiplicada para estos partidos: ${lista}.`;
+            document.getElementById('chat-input').value = `Armame una combinada (parlay blindado) con cuotas individuales y cuota total multiplicada para estos partidos: ${lista}.`;
             enviarMensajeChat();
             parlaySeleccionados.clear();
             document.getElementById('parlay-builder-widget').classList.add('translate-y-full');
@@ -773,7 +771,7 @@
                         ${badgeEV}
                         <div class="px-3.5 py-2.5 border-b border-slate-800 bg-slate-950/60 flex justify-between items-center text-[10px] rounded-t-2xl">
                             <span class="font-black text-cyan-400 uppercase tracking-wider flex items-center gap-1.5"><i class="${getIcon(item.competicion)}"></i> ${item.competicion || 'Liga'}</span>
-                            <span class="text-slate-400 font-medium">${item.fecha || 'Próximamente'}</span>
+                            <span class="text-slate-400 font-medium">${item.fecha || 'Proximamente'}</span>
                         </div>
                         <div class="p-4 flex-1 flex flex-col">
                             <h3 class="font-bold text-[14.5px] text-white text-center mb-3 font-outfit">${item.partido || 'Cargando'}</h3>
@@ -801,13 +799,13 @@
                             </div>
 
                             <div class="mb-3 bg-emerald-950/20 rounded-xl p-2 border border-emerald-800/30 text-center">
-                                <div class="text-[9px] text-emerald-400 font-black uppercase mb-0.5">🚀 Opción de Parlay Recomendado</div>
+                                <div class="text-[9px] text-emerald-400 font-black uppercase mb-0.5">🚀 Opcion de Parlay Recomendado</div>
                                 <div class="font-bold text-emerald-200 text-[11px]">${item.parlay || 'N/A'}</div>
                             </div>
 
                             <!-- MODO COMUNIDAD -->
                             <div id="voto-box-${cardId}" class="mb-3 bg-slate-950 rounded-xl p-2.5 border border-slate-800">
-                                <div class="text-[10px] text-slate-400 font-bold mb-1.5 flex justify-between"><span>¿Cuál es tu pronóstico?</span></div>
+                                <div class="text-[10px] text-slate-400 font-bold mb-1.5 flex justify-between"><span>¿Cual es tu pronostico?</span></div>
                                 <div class="grid grid-cols-3 gap-1.5">
                                     <button onclick="votar('${cardId}', 'local')" class="bg-slate-900 hover:bg-cyan-900/40 text-cyan-400 border border-slate-800 py-1 rounded-lg text-[10px] font-bold transition">Local</button>
                                     <button onclick="votar('${cardId}', 'empate')" class="bg-slate-900 hover:bg-amber-900/40 text-amber-400 border border-slate-800 py-1 rounded-lg text-[10px] font-bold transition">Empate</button>
@@ -816,7 +814,7 @@
                             </div>
 
                             <div class="mt-auto bg-slate-950/60 rounded-xl p-2.5 text-[11px] text-slate-300 border-l-2 border-emerald-500 mb-3">
-                                <span class="font-bold text-slate-400">💡 Fundamento:</span> ${item.argumento || 'Evaluando métricas tácticas vigentes.'}
+                                <span class="font-bold text-slate-400">💡 Fundamento:</span> ${item.argumento || 'Evaluando metricas tacticas vigentes.'}
                             </div>
                             
                             <div class="grid grid-cols-2 gap-2">
@@ -846,7 +844,7 @@
             `;
         }
 
-        function preguntarPartido(p) { document.getElementById('chat-input').value = `Ármame un parlay y un análisis táctico detallado para: ${p}`; enviarMensajeChat(); window.scrollTo({ top: 300, behavior: 'smooth' }); }
+        function preguntarPartido(p) { document.getElementById('chat-input').value = `Armame un parlay y un analisis tactico detallado para: ${p}`; enviarMensajeChat(); window.scrollTo({ top: 300, behavior: 'smooth' }); }
 
         async function enviarMensajeChat() {
             const input = document.getElementById('chat-input');
@@ -855,7 +853,7 @@
 
             if (!usuarioActual.esVip) {
                 let consultas = parseInt(localStorage.getItem('consultas_free') || '0');
-                if (consultas >= 3) { abrirVipModal(); notificar('Límite de 3 consultas diarias alcanzado. Hazte VIP.'); return; }
+                if (consultas >= 3) { abrirVipModal(); notificar('Limite de 3 consultas diarias alcanzado. Hazte VIP.'); return; }
                 localStorage.setItem('consultas_free', (consultas + 1).toString());
             }
 
@@ -875,7 +873,7 @@
                 chat.innerHTML += `<div class="flex justify-start"><div class="bg-slate-900 border border-slate-800 text-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[95%] text-[13.5px] font-medium leading-relaxed shadow-lg"><strong class="text-emerald-400 block mb-2 text-xs uppercase font-black"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</strong>${fmt}</div></div>`;
             } catch (e) {
                 document.getElementById(idLoad)?.remove();
-                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-slate-200 p-4 rounded-2xl text-xs">Error de conexión. Reintenta en breve.</div></div>`;
+                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-slate-200 p-4 rounded-2xl text-xs">Error de conexion. Reintenta en breve.</div></div>`;
             }
             chat.scrollTop = chat.scrollHeight;
         }
