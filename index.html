@@ -428,7 +428,7 @@
             appId: "1:436589068486:web:77c3d1c62f31b7082e17c7",
             measurementId: "G-CXHWTK9K8L"
         };
-        const MERCADOPAGO_PUBLIC_KEY = "APP_USR-bb86d74c-be2a-4367-b9b8-8547ef6f355b"; 
+        const MERCADOPAGO_PUBLIC_KEY = ""; 
 
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -458,7 +458,6 @@
             calcularBanca();
             cargarPronosticos();
             
-            // Intervalo optimizado a 5 segundos para actualización ultra rápida en vivo
             setInterval(async () => {
                 try {
                     const resp = await fetch(`${API_BASE}/obtener-vivos`);
@@ -530,11 +529,11 @@
                 } catch (e) {
                     console.error("Error Firebase Google Auth (Posible bloqueo de popup):", e);
                     notificar('Conectando en Modo Seguro...');
-                    setTimeout(() => marcarLogueado('Usuario Invitado', 'invitado@predicxionia.com'), 800);
+                    setTimeout(() => marcarLogueado('Usuario Invitado', 'fabiancermaz@gmail.com'), 800);
                 }
             } else {
                 notificar('Simulando conexión con Google...');
-                setTimeout(() => marcarLogueado('Apostador Google', 'usuario@google.com'), 800);
+                setTimeout(() => marcarLogueado('Apostador Google', 'fabiancermaz@gmail.com'), 800);
             }
         }
 
@@ -566,11 +565,25 @@
         }
 
         function marcarLogueado(nombre, email) {
-            usuarioActual = { logueado: true, nombre: nombre, email: email, esVip: false, plan: null };
+            const CORREOS_VIP_AUTORIZADOS = [
+                "fabiancermaz@gmail.com"
+            ];
+
+            const emailLimpio = (email || "").toLowerCase().trim();
+            const esDuenoMaster = CORREOS_VIP_AUTORIZADOS.includes(emailLimpio);
+
+            usuarioActual = { 
+                logueado: true, 
+                nombre: nombre, 
+                email: email, 
+                esVip: esDuenoMaster ? true : false, 
+                plan: esDuenoMaster ? "VIP Pro (Dueño)" : null 
+            };
+
             localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
             actualizarInterfazUsuario();
             cerrarAuthModal();
-            notificar('¡Bienvenido, ' + nombre + '!');
+            notificar(esDuenoMaster ? '👑 ¡Bienvenido Propietario! VIP Activado.' : '¡Bienvenido, ' + nombre + '!');
         }
 
         async function cerrarSesion() {
@@ -912,7 +925,7 @@
                 chat.innerHTML += `<div class="flex justify-start"><div class="bg-slate-900 border border-slate-800 text-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[95%] text-[13.5px] font-medium leading-relaxed shadow-lg"><strong class="text-emerald-400 block mb-2 text-xs uppercase font-black"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</strong>${fmt}</div></div>`;
             } catch (e) {
                 document.getElementById(idLoad)?.remove();
-                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-slate-200 p-4 rounded-2xl text-xs">Error de conexión. Reintenta en breve.</div></div>`;
+                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-slate-200 p-4 rounded-2xl text-xs">Error de conexión. Reintenta en unos breve.</div></div>`;
             }
             chat.scrollTop = chat.scrollHeight;
         }
