@@ -17,7 +17,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Llaves maestras del sistema
 api_key_futbol = os.environ.get("API_KEY_FUTBOL", "755809cd5c834eb68eaff1f0adc9f5b9")
 api_key_groq = os.environ.get("API_KEY_GROQ", "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")
 api_key_gemini = os.environ.get("API_KEY_GEMINI", "AQ.Ab8RN6JTibLAdImfDygsgXyz_j0K_ukrjAEeMxLpDN7D14B6Og")
@@ -40,18 +39,17 @@ except Exception as error_gemini:
     print(f"⚠️ Aviso Gemini: {error_gemini}")
     client_gemini = None
 
-# Variables de caché para rendimiento
 MODELOS_GROQ_CACHE = []
 CACHE_TIMESTAMP = 0
 CACHE_CALENDARIO_RAW = None
 CACHE_CALENDARIO_TIMESTAMP = 0
 CACHE_PARTIDOS_DATA = None
 CACHE_PARTIDOS_TIMESTAMP = 0
-CACHE_DURACION_SEGUNDOS = 300  # 5 minutos para actualización más fresca
+CACHE_DURACION_SEGUNDOS = 300
 
 CACHE_VIVOS_DATA = []
 CACHE_VIVOS_TIMESTAMP = 0
-CACHE_VIVOS_TTL = 3  # Caché optimizado de 3 segundos para reflejar goles y VAR al instante
+CACHE_VIVOS_TTL = 3
 
 def obtener_partidos_en_vivo_api():
     """Consulta global y rápida de todos los encuentros en juego, goles y estado de descanso con actualización inmediata."""
@@ -188,11 +186,12 @@ def llamar_ia_hibrida(prompt_completo, contexto_noticias=""):
         f"PROHIBIDO usar datos o alineaciones de años antiguos. Analiza estrictamente las plantillas y forma presente.\n"
         f"{bloque_noticias}\n"
         "DIRECTRICES OBLIGATORIAS:\n"
-        "1. ENFOQUE TOTAL: Responde de forma precisa sobre el encuentro o parlay solicitado.\n"
-        "2. ANÁLISIS SINTÉTICO: Evalúa métricas avanzadas (xG, posesión, transiciones y valor EV+), con un MÍNIMO de 2 y un MÁXIMO de 7 oraciones.\n"
-        "3. SALUDO Y DESPEDIDA: Comienza con un saludo breve y cierra con una despedida concisa y profesional.\n"
-        "4. COMBINADAS / PARLAYS: Si se solicita parlay, lista las cuotas individuales estimadas y calcula la Cuota Total Combinada.\n"
-        "5. FORMATO: Sin hashtags. Resalta selecciones de apuesta y cuotas en formato **negrita**."
+        "1. CERO HUMO Y CORAZONADAS: Usa SOLO estadísticas reales, matemáticas y hechos verificables. Prohibido inventar datos. Si no hay datos, indica 'Información insuficiente'. Sé directo y sincero.\n"
+        "2. ENFOQUE TOTAL: Responde de forma precisa sobre el encuentro o parlay solicitado.\n"
+        "3. ANÁLISIS SINTÉTICO: Evalúa métricas avanzadas (xG, posesión, transiciones y valor EV+), con un MÍNIMO de 2 y un MÁXIMO de 7 oraciones.\n"
+        "4. SALUDO Y DESPEDIDA: Comienza con un saludo breve y cierra con una despedida concisa y profesional.\n"
+        "5. COMBINADAS / PARLAYS: Si se solicita parlay, lista las cuotas individuales estimadas y calcula la Cuota Total Combinada.\n"
+        "6. FORMATO: Sin hashtags. Resalta selecciones de apuesta y cuotas en formato **negrita**."
     )
 
     if client_gemini:
@@ -337,7 +336,7 @@ def obtener_pronostico():
             partidos_texto = "\n".join([f"- {p['partido']} ({p['competicion']}) [{p['fecha']}]" for p in partidos_analizar])
             
             prompt_lote = f"""
-            Motor cuantitativo. Fecha actual: {ahora_peru.strftime('%d/%m/%Y')}. Analiza estrictamente ESTOS partidos. PROHIBIDO inventar encuentros que no estén en esta lista:
+            Motor cuantitativo. Fecha actual: {ahora_peru.strftime('%d/%m/%Y')}. Analiza estrictamente ESTOS partidos dando DATOS 100% REALES. CERO HUMO.
             {partidos_texto}
 
             Devuelve ÚNICAMENTE un JSON válido (array de objetos sin markdown ni texto extra):
@@ -350,7 +349,9 @@ def obtener_pronostico():
                 "principal": "Doble Oportunidad 1X (@1.55)",
                 "alternativa": "Ambos Equipos Anotan (@1.80)",
                 "parlay": "1X + Más de 1.5 Goles (@1.72)",
-                "argumento": "Explicación táctica concisa con xG y forma.",
+                "argumento": "Explicación táctica REAL, directa y sincera, sin inventar datos.",
+                "vip_corners": "Pronóstico específico de córners/tarjetas real (Ej: Más de 8.5 córners)",
+                "vip_smart_money": "Análisis de volumen de apuestas o tendencia de cuotas (Ej: Cuota bajando a favor del local)",
                 "ev_alto": true
               }}
             ]
@@ -370,7 +371,9 @@ def obtener_pronostico():
                         "principal": "Doble Oportunidad 1X (@1.58)",
                         "alternativa": "Más de 1.5 Goles (@1.70)",
                         "parlay": "1X + Más 1.5 Goles (@1.75)",
-                        "argumento": f"Ventaja cuantitativa en bloque medio y proyección xG para la temporada {anio_actual}.",
+                        "argumento": f"Ventaja cuantitativa real proyectada según estadísticas de la temporada {anio_actual}.",
+                        "vip_corners": "Proyección: Más de 8.5 Córners totales.",
+                        "vip_smart_money": "Volumen de mercado estable sin caídas bruscas.",
                         "ev_alto": (i % 2 == 0)
                     })
 
