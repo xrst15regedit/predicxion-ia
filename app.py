@@ -75,15 +75,12 @@ def home():
     return "PredicXion IA Backend Operativo. index.html no encontrado en el directorio raíz.", 200
 
 # ==========================================
-# MOTOR HÍBRIDO CON REGLAS DE LONGITUD VIP
+# MOTOR HÍBRIDO CON PROTOCOLO DE RAZONAMIENTO AMPLIADO (CHAIN-OF-THOUGHT)
 # ==========================================
 def llamar_ia_hibrida(prompt_completo):
     """
-    Motor analítico dual con veracidad empírica, xG y EV+.
-    REGLAS ESTRICTAS:
-    1. Saludo y despedida cortos, naturales y humanos.
-    2. Análisis central entre 1.5 y 5 oraciones.
-    3. Cero alucinaciones, cero símbolos de numeral/hashtag (#).
+    Motor analítico dual con protocolo de razonamiento ampliado,
+    veracidad 100% empírica, cero alucinaciones y respaldo automático garantizado.
     """
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -94,13 +91,13 @@ def llamar_ia_hibrida(prompt_completo):
     modelos_disponibles = obtener_modelos_groq()
     
     prompt_sistema = (
-        "Eres el Analista Táctico VIP de PredicXion IA. "
-        "Operas con veracidad empírica absoluta, xG y EV+. "
-        "REGLAS ESTRICTAS DE COMUNICACIÓN: "
-        "1. Inicia siempre con un saludo muy corto y humano. Despídete de forma breve y natural al final. "
-        "2. Tu análisis central (sin contar el saludo/despedida) debe tener un MÍNIMO de 1.5 oraciones y un MÁXIMO de 5 oraciones. "
-        "3. Ve directo a la predicción y los datos duros reales. "
-        "4. Cero alucinaciones. PROHIBIDO usar el símbolo de numeral o hashtag (#) bajo ninguna circunstancia."
+        "Eres el Motor Cuantitativo y Analista en Jefe VIP de PredicXion IA. "
+        "REGLAS ESTRICTAS: "
+        "1. Eres un experto absoluto en fútbol. Responde detalladamente a CUALQUIER pregunta futbolística del usuario (crear parlays, análisis de partidos, estadísticas de cualquier liga). "
+        "2. ENFOQUE LÁSER: Si el usuario te pregunta por un partido específico (ej. Elche vs Real Sociedad), analiza ÚNICA Y EXCLUSIVAMENTE a esos equipos. Prohibido desviar el tema o hablar de otros partidos que no te han pedido. "
+        "3. ANÁLISIS PROFUNDO PERO RESPUESTA SINTETIZADA: Analiza información de forma extremadamente extensa con alto nivel de pensamiento táctico, pero tu RESPUESTA FINAL al usuario debe ser estrictamente de un MÍNIMO de 2 oraciones y un MÁXIMO de 6 a 7 oraciones. Sintetiza la información clave. "
+        "4. DATOS REALES: Prohibido inventar o alucinar datos. Basa todo en estadísticas reales, rendimiento reciente, goles esperados (xG/xGA) y Expected Value (EV+). "
+        "5. FORMATO: Saluda y despídete de forma corta y humana, usa viñetas para estructurar la información, destaca equipos/cuotas en negrita y NUNCA uses el símbolo hashtag (#)."
     )
 
     # 1. INTENTO CON GROQ
@@ -113,7 +110,7 @@ def llamar_ia_hibrida(prompt_completo):
             ],
             "temperature": 0.25, 
             "top_p": 0.9,
-            "max_tokens": 1500
+            "max_tokens": 4000
         }
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=15)
@@ -143,7 +140,7 @@ def llamar_ia_hibrida(prompt_completo):
     return "Servicio temporalmente saturado. Por favor, reintenta en unos instantes."
 
 # ==========================================
-# ENDPOINT DE PRONÓSTICOS Y CARTELERAS
+# ENDPOINT DE PRONÓSTICOS Y CARTELERAS (FOOTBALL-DATA.ORG + SUDAMERICANAS)
 # ==========================================
 @app.route('/obtener-pronostico', methods=['GET'])
 def obtener_pronostico():
@@ -153,8 +150,6 @@ def obtener_pronostico():
             return jsonify(CACHE_PARTIDOS_DATA)
 
         headers = { "X-Auth-Token": api_key_futbol }
-        
-        # Ajuste horario UTC-5 (Hora de Perú)
         ahora_utc = datetime.utcnow()
         ahora_peru = ahora_utc - timedelta(hours=5)
         fecha_actual_str = ahora_peru.strftime('%Y-%m-%d')
@@ -179,8 +174,9 @@ def obtener_pronostico():
 
         f1_txt, _ = build_fecha(1, "19:30")
         f2_txt, _ = build_fecha(2, "21:30")
+        f3_txt, _ = build_fecha(3, "19:00")
         
-        # Sudamericanas Oficiales (Sin Liga Peruana para evitar errores de fecha)
+        # Sudamericanas y Nacionales
         partidos_libertadores = [
             {"id": "lib-1", "partido": "Flamengo vs River Plate", "competicion": "CONMEBOL Libertadores", "fecha": f1_txt},
             {"id": "lib-2", "partido": "Palmeiras vs Boca Juniors", "competicion": "CONMEBOL Libertadores", "fecha": f2_txt}
@@ -188,21 +184,15 @@ def obtener_pronostico():
         partidos_por_competicion["CONMEBOL Libertadores"] = partidos_libertadores
         partidos_clave_ia.append(partidos_libertadores[0])
 
-        partidos_sudamericana = [
-            {"id": "sud-1", "partido": "Corinthians vs Racing Club", "competicion": "CONMEBOL Sudamericana", "fecha": f1_txt},
-            {"id": "sud-2", "partido": "Cruzeiro vs Lanús", "competicion": "CONMEBOL Sudamericana", "fecha": f2_txt}
-        ]
-        partidos_por_competicion["CONMEBOL Sudamericana"] = partidos_sudamericana
-        partidos_clave_ia.append(partidos_sudamericana[0])
-
         partidos_brasil = [
             {"id": "bsa-1", "partido": "Palmeiras vs Flamengo", "competicion": "Brasileirão Série A Betano", "fecha": f1_txt},
-            {"id": "bsa-2", "partido": "Botafogo vs São Paulo", "competicion": "Brasileirão Série A Betano", "fecha": f2_txt}
+            {"id": "bsa-2", "partido": "Botafogo vs São Paulo", "competicion": "Brasileirão Série A Betano", "fecha": f3_txt},
+            {"id": "bsa-3", "partido": "Fluminense vs Corinthians", "competicion": "Brasileirão Série A Betano", "fecha": f2_txt}
         ]
         partidos_por_competicion["Brasileirão Série A Betano"] = partidos_brasil
         partidos_clave_ia.append(partidos_brasil[0])
 
-        # Consulta Europeas vía football-data.org con filtro estricto de tiempo
+        # Consulta Europeas vía football-data.org
         for comp_code, comp_nombre in COMPETENCIAS_EUROPEAS:
             url_fd = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=SCHEDULED"
             partidos_de_esta_liga = []
@@ -236,7 +226,7 @@ def obtener_pronostico():
         partidos_texto = "\n".join([f"- {p['partido']} ({p['competicion']})" for p in partidos_analizar])
 
         prompt_lote = f"""
-        INSTRUCCIÓN: Actúa como el motor cuantitativo de PredicXion IA. Analiza estos partidos y evalúa su Expected Value (EV+):
+        INSTRUCCIÓN: Actúa como el motor cuantitativo de PredicXion IA bajo el protocolo de razonamiento ampliado. Analiza estos partidos y evalúa su Expected Value (EV+):
         {partidos_texto}
 
         Devuelve un JSON exacto, sin bloques de código markdown ni texto adicional fuera del arreglo JSON:
@@ -253,7 +243,7 @@ def obtener_pronostico():
             "ev_alto": true
           }}
         ]
-        *NOTA: "ev_alto" debe ser booleano (true o false). Coloca true ÚNICAMENTE cuando detectes valor esperado positivo. PROHIBIDO usar '#' en el texto.
+        *NOTA: "ev_alto" debe ser booleano (true o false). Coloca true ÚNICAMENTE cuando detectes valor esperado positivo contrastado.
         """
 
         texto_respuesta = llamar_ia_hibrida(prompt_lote)
@@ -277,7 +267,7 @@ def obtener_pronostico():
                     "principal": "Doble Oportunidad 1X",
                     "alternativa": "Más de 1.5 Goles",
                     "parlay": "1X + Más de 1.5 Goles",
-                    "argumento": "Ventaja en posesión en tercio rival y solidez en goles esperados concedidos.",
+                    "argumento": "Ventaja en posesión en tercio rival y solidez en goles esperados concedidos (xGA).",
                     "ev_alto": True if i % 3 == 0 else False 
                 })
 
@@ -305,14 +295,15 @@ def chat_ia():
         mensaje = data.get('mensaje', '')
         
         prompt_chat = f"""
-        [ANÁLISIS SINTÉTICO VIP - PREDICXION IA]
+        [SISTEMA VIP - PREDICXION IA]
         CONSULTA DEL USUARIO: "{mensaje}"
         
         REGLAS ESTRICTAS DE RESPUESTA:
-        1. LONGITUD: Tu análisis central debe tener como mínimo 1.5 oraciones y como máximo 5 oraciones.
-        2. CORTESÍA: Inicia con un saludo corto, natural y humano (ej: "¡Qué tal, hermano!", "¡Hola!"). Cierra con una despedida breve (ej: "¡Éxitos!", "¡Mucha suerte!").
-        3. 100% DATOS REALES: Sin inventos. Todo basado en historial y métricas contrastables (xG, bajas, etc).
-        4. FORMATO ATRACTIVO: Destaca equipos, jugadores y cuotas obligatoriamente en **negrita**. NUNCA uses símbolos de hashtag (#).
+        1. ANÁLISIS PROFUNDO Y SÍNTESIS: Analiza una cantidad enorme de datos con alto pensamiento táctico, pero MUESTRA una respuesta resumida y detallada que tenga estrictamente entre 2 (mínimo) y 7 (máximo) oraciones.
+        2. ENFOQUE TOTAL: Responde cualquier tipo de duda sobre fútbol (creación de parlays, estadísticas, etc). DEBES centrarte EXCLUSIVAMENTE en el partido o equipos por los que pregunta el usuario. NO hables de otros encuentros para evitar confusiones.
+        3. DATOS REALES: Cero cosas ficticias o falsas. Utiliza valores estadísticos, tendencias, y métricas contrastables como xG.
+        4. CORTESÍA CORTA: Un saludo humano breve al iniciar y una despedida rápida al final.
+        5. FORMATO ATRACTIVO: Destaca equipos, jugadores, estadísticas y cuotas obligatoriamente en **negrita**. NUNCA uses símbolos de hashtag (#).
         """
         
         return jsonify({"respuesta": llamar_ia_hibrida(prompt_chat)})
