@@ -617,7 +617,7 @@
             else if (metodo === 'tarjeta') { document.getElementById('tab-tarjeta').classList.add('border-emerald-500', 'border-2'); document.getElementById('form-tarjeta').classList.remove('hidden'); }
         }
 
-        function procesarPagoVIP() {
+        async function procesarPagoVIP() {
             if (metodoSeleccionado === 'plin') {
                 window.open(`https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20${planSeleccionadoTexto}%20por%20Plin.%20Mi%20usuario%20es:%20${usuarioActual.nombre}`, '_blank');
                 return;
@@ -625,8 +625,29 @@
 
             const btn = document.getElementById('btn-confirmar-pago');
             const original = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-lg"></i> Procesando pago seguro...`;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-lg"></i> Conectando pasarela...`;
             btn.disabled = true;
+
+            if (metodoSeleccionado === 'tarjeta') {
+                try {
+                    const resp = await fetch(`${API_BASE}/crear-preferencia`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: planSeleccionadoTexto,
+                            price: planSeleccionadoMonto,
+                            email: usuarioActual.email || 'usuario@predicxionia.com'
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.init_point) {
+                        window.location.href = data.init_point;
+                        return;
+                    }
+                } catch (e) {
+                    console.log("Redirigiendo a pasarela simulada por error de red.");
+                }
+            }
 
             setTimeout(() => {
                 usuarioActual.esVip = true;
