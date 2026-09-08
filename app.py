@@ -65,7 +65,6 @@ def obtener_partidos_en_vivo_api():
     ahora_utc = datetime.utcnow()
 
     try:
-        # Petición directa a los estados oficiales IN_PLAY y PAUSED de la API v4
         url_live = "https://api.football-data.org/v4/matches?status=IN_PLAY,PAUSED"
         resp = requests.get(url_live, headers=headers, timeout=4.0)
 
@@ -79,7 +78,6 @@ def obtener_partidos_en_vivo_api():
                 home = ml.get('homeTeam', {}).get('name', 'Local')
                 away = ml.get('awayTeam', {}).get('name', 'Visita')
 
-                # Lectura precisa del marcador en tiempo real (soporta VAR y actualizaciones inmediatas)
                 score_obj = ml.get('score', {})
                 ft = score_obj.get('fullTime') or {}
                 rt = score_obj.get('regularTime') or {}
@@ -91,7 +89,6 @@ def obtener_partidos_en_vivo_api():
                 h_goals = int(h_goals) if h_goals is not None else 0
                 a_goals = int(a_goals) if a_goals is not None else 0
 
-                # Detección estricta de Entretiempo/Descanso y Minutos en juego independientes por partido
                 if st == 'PAUSED':
                     minuto_txt = "Descanso"
                 else:
@@ -251,7 +248,6 @@ def obtener_pronostico():
         ahora_peru = ahora_utc - timedelta(hours=5)
         ahora_utc_str = ahora_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
         
-        # FILTRO ESTRICTO DE FECHAS: Solo partidos de Hoy, Mañana y Pasado Mañana (3 días máximo)
         limite_futuro = ahora_utc + timedelta(days=3)
         limite_futuro_str = limite_futuro.strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -277,14 +273,12 @@ def obtener_pronostico():
 
         for comp_code, comp_nombre in COMPETENCIAS_OFICIALES:
             try:
-                # 1. Obtener partidos programados cercanos
                 url_fd = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=SCHEDULED"
                 resp = requests.get(url_fd, headers=headers_football, timeout=4)
                 partidos_liga = []
                 if resp.status_code == 200:
                     for m in resp.json().get('matches', []):
                         f_partido = m.get('utcDate', '')
-                        # Validamos que esté estrictamente en el rango de los 3 días definidos
                         if ahora_utc_str <= f_partido <= limite_futuro_str:
                             dt_local = datetime.strptime(f_partido, '%Y-%m-%dT%H:%M:%SZ') - timedelta(hours=5)
                             encuentro = {
@@ -302,7 +296,6 @@ def obtener_pronostico():
 
         partidos_en_vivo_reales = obtener_partidos_en_vivo_api()
 
-        # Seleccionar partidos a analizar
         partidos_analizar = []
         if todos_los_partidos_plano:
             pool = list(todos_los_partidos_plano)
@@ -316,8 +309,6 @@ def obtener_pronostico():
                     restantes.append(p)
             partidos_analizar = (diversos + restantes)[:10]
 
-        # REGLA ANTI-VACÍO: Si la API no retorna partidos en los próximos 3 días (ej. Fecha FIFA)
-        # Inyectamos encuentros asegurando que sus fechas caigan exactamente HOY, MAÑANA y PASADO.
         if not partidos_analizar:
             pares_seguros = [
                 ("Real Madrid", "Barcelona"), 
@@ -328,7 +319,6 @@ def obtener_pronostico():
             ]
             ligas_seguras = ["La Liga", "Premier League", "Liga Profesional", "Bundesliga", "Serie A"]
             for i in range(5):
-                # Distribuimos los partidos estrictamente entre hoy (0), mañana (1) y pasado mañana (2)
                 dt_partido = ahora_peru + timedelta(days=(i % 3))
                 enc_seguro = {
                     "id": f"seguro_{i}",
@@ -474,4 +464,3 @@ def webhook_pagos():
 if __name__ == '__main__':
     puerto = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=puerto, debug=False)
-```eof
