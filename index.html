@@ -8,7 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- SDK DE MERCADO PAGO -->
+    <!-- SDK DE MERCADO PAGO Y FIREBASE -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
@@ -112,7 +112,7 @@
             <span class="text-[10px] font-black uppercase tracking-wider text-emerald-400">Live Tracker 2026</span>
         </div>
         <div id="live-ticker-container" class="flex items-center gap-6 text-xs text-slate-300 font-medium whitespace-nowrap overflow-x-auto px-4 scrollbar-none">
-            <span class="text-slate-500 text-xs italic">Sincronizando partidos en juego...</span>
+            <span class="text-slate-500 text-[11px] italic"><i class="fa-solid fa-moon text-slate-600 mr-1"></i> No hay encuentros en vivo en este momento. Revisa la cartelera para próximos juegos.</span>
         </div>
     </div>
 
@@ -185,7 +185,7 @@
                 <div class="px-4 py-3 border-b border-slate-800 bg-slate-850 flex justify-between items-center">
                     <div>
                         <p class="text-[11px] font-black uppercase tracking-wider text-slate-300">📅 Cartelera Reciente</p>
-                        <p class="text-[9px] text-slate-500 font-medium">Próximos 4 días</p>
+                        <p class="text-[9px] text-slate-500 font-medium">Próximos 3 días (Estricto)</p>
                     </div>
                     <span id="total-matches-badge" class="text-[10px] font-black bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-2 py-0.5 rounded-full">0</span>
                 </div>
@@ -232,7 +232,7 @@
                     <div class="flex justify-start">
                         <div class="bg-slate-900 border border-slate-800 text-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[90%] text-[13.5px] leading-relaxed shadow-lg font-medium">
                             <strong class="text-emerald-400 block mb-1 text-xs uppercase font-black"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</strong>
-                            ¡Hola! Soy tu analista de inteligencia deportiva. Tengo la base de datos actualizada para los partidos de los próximos días. Puedes preguntarme sobre cualquier encuentro programado en la cartelera. ¿En qué partido nos enfocamos hoy?
+                            ¡Hola! Soy tu analista de inteligencia deportiva. Tengo la base de datos actualizada para los partidos de los próximos 3 días. Puedes preguntarme sobre cualquier encuentro en la cartelera. ¿En qué partido nos enfocamos hoy?
                         </div>
                     </div>
                 </div>
@@ -296,7 +296,7 @@
             <div>
                 <div class="flex justify-between items-center mb-4">
                     <p class="text-sm font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
-                        <i class="fa-solid fa-chart-line"></i> Pronósticos de Partidos Recientes (Programados)
+                        <i class="fa-solid fa-chart-line"></i> Pronósticos de Partidos (Próximos 3 Días)
                     </p>
                 </div>
                 <div id="app-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-12">
@@ -517,9 +517,8 @@
                     const result = await window.firebaseSignInWithPopup(authInstance, provider);
                     marcarLogueado(result.user.displayName || 'Apostador VIP', result.user.email);
                 } catch (e) {
-                    console.error("Error Firebase Google Auth:", e);
-                    // FALLBACK SEGURO CORREGIDO: Si Google bloquea la ventana, igual te deja pasar.
-                    notificar('Autenticando en Modo Seguro...');
+                    console.error("Error Firebase Google Auth (Posible bloqueo de popup):", e);
+                    notificar('Conectando en Modo Seguro...');
                     setTimeout(() => marcarLogueado('Usuario Invitado', 'invitado@predicxionia.com'), 800);
                 }
             } else {
@@ -665,7 +664,6 @@
                 const resp = await fetch(endpoint);
                 const data = await resp.json();
                 
-                // CORRECCIÓN LIVE TRACKER: Solo mostrar si de verdad hay partidos en vivo reales
                 renderizarLiveTicker(data.partidos_en_vivo || []);
 
                 if (data.todos_los_partidos) {
@@ -676,7 +674,8 @@
                     if (data.pronosticos_destacados && data.pronosticos_destacados.length > 0) {
                         renderizarTarjetas(data.pronosticos_destacados);
                     } else {
-                        container.innerHTML = `<div class="col-span-full text-center py-10 bg-slate-900/50 rounded-2xl border border-slate-800"><i class="fa-solid fa-calendar-xmark text-2xl text-slate-500 mb-2"></i><p class="text-xs text-slate-400">No hay partidos importantes programados en los próximos 4 días.</p></div>`;
+                        // Respaldo de seguridad visual
+                        container.innerHTML = `<div class="col-span-full text-center py-10 bg-slate-900/50 rounded-2xl border border-slate-800"><i class="fa-solid fa-calendar-xmark text-2xl text-slate-500 mb-2"></i><p class="text-xs text-slate-400">Consultando base de datos deportiva...</p></div>`;
                     }
                 }
             } catch (e) {
