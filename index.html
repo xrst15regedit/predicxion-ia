@@ -457,6 +457,16 @@
             if (saved) { try { usuarioActual = JSON.parse(saved); actualizarInterfazUsuario(); } catch(e){} }
             calcularBanca();
             cargarPronosticos();
+            
+            setInterval(async () => {
+                try {
+                    const resp = await fetch(`${API_BASE}/obtener-vivos`);
+                    const data = await resp.json();
+                    if (data && data.partidos_en_vivo) {
+                        renderizarLiveTicker(data.partidos_en_vivo);
+                    }
+                } catch(e) {}
+            }, 10000);
         }
 
         function notificar(texto) {
@@ -693,10 +703,17 @@
             }
             let html = '';
             listaVivos.forEach(m => {
+                const esDescanso = (m.minuto || '').toLowerCase().includes('descanso');
+                const badgeEstado = esDescanso
+                    ? `<span class="text-[10px] bg-amber-950/90 text-amber-300 border border-amber-500/50 px-2 py-0.5 rounded-full font-black uppercase flex items-center gap-1 shadow-sm"><i class="fa-solid fa-pause text-[8px]"></i> Descanso</span>`
+                    : `<span class="text-[10px] bg-red-950/90 text-red-400 border border-red-500/60 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1.5 shadow-sm shadow-red-950/50"><span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span> ${m.minuto || 'LIVE'}</span>`;
+
                 html += `
-                    <div class="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50 flex-shrink-0">
-                        <span class="text-cyan-400 font-bold">${m.partido}</span>
-                        <span class="text-[10px] bg-red-950 text-red-400 px-1.5 py-0.5 rounded font-mono font-bold">${m.minuto || 'LIVE'}</span>
+                    <div class="flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700/70 hover:border-emerald-500/40 transition-all flex-shrink-0 shadow-md">
+                        <span class="text-xs font-bold text-slate-200">${m.local || ''}</span>
+                        <span class="text-xs font-black text-white bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-700 font-mono tracking-wider">${m.goles_local ?? 0} - ${m.goles_visita ?? 0}</span>
+                        <span class="text-xs font-bold text-slate-200 mr-1">${m.visita || ''}</span>
+                        ${badgeEstado}
                     </div>
                 `;
             });
