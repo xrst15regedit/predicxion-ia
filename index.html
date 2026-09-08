@@ -8,16 +8,20 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- SDK DE MERCADO PAGO (PARA PRODUCCIÓN FUTURA) -->
+    <!-- SDK DE MERCADO PAGO -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
-    <!-- SDK DE FIREBASE (PARA PRODUCCIÓN FUTURA) -->
+    <!-- SDK DE FIREBASE CDN -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         window.firebaseInitializeApp = initializeApp;
         window.firebaseGetAuth = getAuth;
         window.firebaseSignInWithPopup = signInWithPopup;
         window.firebaseGoogleAuthProvider = GoogleAuthProvider;
+        window.firebaseSignOut = signOut;
+        window.firebaseSignInWithEmail = signInWithEmailAndPassword;
+        window.firebaseCreateUser = createUserWithEmailAndPassword;
+        window.firebaseUpdateProfile = updateProfile;
     </script>
 
     <script>
@@ -65,7 +69,6 @@
         <i class="fa-solid fa-check-circle mr-2"></i> <span id="toast-text">Acción realizada con éxito</span>
     </div>
 
-    <!-- BARRA SUPERIOR DE NAVEGACIÓN Y PERFIL -->
     <nav class="w-full max-w-7xl mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between shadow-xl gap-3">
         <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -104,7 +107,6 @@
         </div>
     </nav>
 
-    <!-- BARRA EN VIVO DE RESULTADOS -->
     <div class="w-full max-w-7xl mb-5 bg-slate-900/60 border border-slate-800/80 rounded-xl px-4 py-2 flex items-center justify-between shadow-md overflow-x-auto">
         <div class="flex items-center gap-2.5 flex-shrink-0">
             <span class="flex h-2 w-2 relative">
@@ -125,7 +127,6 @@
         </div>
     </div>
 
-    <!-- CONTENEDOR PRINCIPAL: SIDEBAR + DASHBOARD -->
     <div class="w-full max-w-7xl flex flex-col lg:flex-row justify-center gap-6 relative">
         
         <!-- SIDEBAR IZQUIERDO -->
@@ -141,7 +142,6 @@
                     </svg>
                     <div class="absolute inset-0 flex items-center justify-center text-xl font-black text-white font-outfit">77%</div>
                 </div>
-                <!-- HISTORIAL VERIFICADO REESTRUCTURADO -->
                 <p class="mb-2.5 text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-center gap-1.5 border-t border-emerald-900/40 pt-3">
                     <i class="fa-solid fa-shield-halved text-cyan-400"></i> Historial Verificado
                 </p>
@@ -157,7 +157,7 @@
                 </div>
             </div>
 
-            <!-- CALCULADORA DE BANCA -->
+            <!-- GESTOR DE BANCA INTERACTIVO -->
             <div class="rounded-2xl bg-slate-900/80 border border-slate-800 p-4 shadow-md">
                 <p class="mb-2 text-[10px] font-black uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
                     <i class="fa-solid fa-calculator"></i> Gestor de Banca (Stake)
@@ -192,7 +192,7 @@
                 <div class="vip-blur text-center py-2">
                     <i class="fa-brands fa-telegram text-blue-400 text-3xl mb-2"></i>
                     <p class="text-[11px] font-bold text-white mb-2">Acceso Directo al Sindicato</p>
-                    <button class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded-xl">Unirme al Canal</button>
+                    <a href="https://t.me/predicxionia" target="_blank" class="block w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 rounded-xl transition text-center">Unirme al Canal</a>
                 </div>
             </div>
 
@@ -222,7 +222,6 @@
             </div>
         </aside>
 
-        <!-- CONTENIDO PRINCIPAL CENTRAL -->
         <main class="flex flex-col w-full lg:max-w-4xl min-w-0">
             
             <!-- ENCABEZADO -->
@@ -337,7 +336,6 @@
     <!-- MODALES: AUTENTICACIÓN Y CHECKOUT VIP                    -->
     <!-- ======================================================== -->
 
-    <!-- MODAL AUTH -->
     <div id="modal-auth" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
             <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
@@ -350,17 +348,14 @@
             </div>
 
             <div class="space-y-2.5 mb-5">
-                <button onclick="iniciarSesionSocial('Google')" class="w-full bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition shadow">
+                <button onclick="iniciarSesionGoogle()" class="w-full bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition shadow">
                     <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
                     Continuar con Google
-                </button>
-                <button onclick="iniciarSesionSocial('Facebook')" class="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition shadow">
-                    <i class="fa-brands fa-facebook text-base"></i> Continuar con Facebook
                 </button>
             </div>
 
             <div class="relative flex py-2 items-center mb-4">
-                <div class="flex-grow border-t border-slate-800"></div><span class="flex-shrink mx-3 text-[10px] uppercase font-bold text-slate-500">O con tu cuenta</span><div class="flex-grow border-t border-slate-800"></div>
+                <div class="flex-grow border-t border-slate-800"></div><span class="flex-shrink mx-3 text-[10px] uppercase font-bold text-slate-500">O con tu correo y contraseña</span><div class="flex-grow border-t border-slate-800"></div>
             </div>
 
             <form id="auth-form" onsubmit="procesarAuthForm(event)" class="space-y-3">
@@ -384,7 +379,6 @@
         </div>
     </div>
 
-    <!-- MODAL CHECKOUT VIP -->
     <div id="modal-vip" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
         <div class="bg-slate-900 border border-amber-500/30 w-full max-w-2xl rounded-3xl p-5 sm:p-7 shadow-2xl relative my-auto">
             <button onclick="cerrarVipModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
@@ -421,28 +415,27 @@
 
                 <!-- FORMULARIOS DE PAGO -->
                 <div id="form-yape" class="metodo-form bg-slate-950 border border-purple-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between"><span class="text-xs font-black text-purple-400"><i class="fa-solid fa-bolt mr-1"></i> Yape Instantáneo</span></div>
+                    <div class="flex items-center justify-between"><span class="text-xs font-black text-purple-400"><i class="fa-solid fa-bolt mr-1"></i> Yape Instantáneo (1 Clic)</span></div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">N° Celular Yape:</label><input type="tel" id="yape-phone" maxlength="9" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Código Aprobación (6 dígitos):</label><input type="text" id="yape-code" maxlength="6" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">N° Celular Yape:</label><input type="tel" id="yape-phone" maxlength="9" placeholder="999888777" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Código Aprobación (6 dígitos):</label><input type="text" id="yape-code" maxlength="6" placeholder="123456" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     </div>
                 </div>
 
                 <div id="form-plin" class="metodo-form hidden bg-slate-950 border border-cyan-900/40 rounded-2xl p-4 space-y-3">
                     <div class="flex items-center justify-between"><span class="text-xs font-black text-cyan-400"><i class="fa-solid fa-mobile-screen mr-1"></i> Plin Directo / Transferencia</span></div>
-                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Teléfono Plin:</label><input type="tel" id="plin-phone" maxlength="9" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Teléfono Plin:</label><input type="tel" id="plin-phone" maxlength="9" placeholder="999888777" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     <p class="text-[10px] text-slate-500">Al confirmar, serás redirigido a WhatsApp con un enlace directo para transferir y activar tu cuenta.</p>
                 </div>
 
                 <div id="form-tarjeta" class="metodo-form hidden bg-slate-950 border border-emerald-900/40 rounded-2xl p-4 space-y-3">
-                    <!-- AQUI SE RENDERIZA EL BRICK DE MERCADO PAGO SI HAY LLAVE -->
                     <div id="mercadopago-brick-container"></div>
                     <div id="simulacion-tarjeta">
                         <div class="flex items-center justify-between"><span class="text-xs font-black text-emerald-400"><i class="fa-solid fa-credit-card mr-1"></i> Tarjeta Débito/Crédito</span></div>
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Tarjeta:</label><input type="text" id="card-number" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Tarjeta:</label><input type="text" id="card-number" placeholder="4000 1234 5678 9010" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                         <div class="grid grid-cols-2 gap-2.5">
-                            <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Vencimiento:</label><input type="text" id="card-exp" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
-                            <div><label class="text-[10px] font-bold text-slate-400 block mb-1">CVV:</label><input type="password" id="card-cvv" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                            <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Vencimiento:</label><input type="text" id="card-exp" placeholder="MM/AA" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                            <div><label class="text-[10px] font-bold text-slate-400 block mb-1">CVV:</label><input type="password" id="card-cvv" placeholder="123" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                         </div>
                     </div>
                 </div>
@@ -455,20 +448,19 @@
         </div>
     </div>
 
-    <!-- ======================================================== -->
-    <!-- LÓGICA DE PRODUCCIÓN Y SIMULACIÓN                       -->
-    <!-- ======================================================== -->
     <script>
-        // ¡CONFIGURACIÓN DE PRODUCCIÓN!
-        // Pega tus llaves reales aquí cuando estés listo. Si las dejas vacías, la app simulará el proceso perfecto.
+        // CONFIGURACIÓN DE FIREBASE CON TUS CREDENCIALES REALES
         const FIREBASE_CONFIG = {
-            apiKey: "", // Ej: "AIzaSyB..."
-            authDomain: "",
-            projectId: ""
+            apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
+            authDomain: "predicxion-ia.firebaseapp.com",
+            projectId: "predicxion-ia",
+            storageBucket: "predicxion-ia.firebasestorage.app",
+            messagingSenderId: "436589068486",
+            appId: "1:436589068486:web:77c3d1c62f31b7082e17c7",
+            measurementId: "G-CXHWTK9K8L"
         };
-        const MERCADOPAGO_PUBLIC_KEY = ""; // Ej: "TEST-..." o "APP_USR-..."
+        const MERCADOPAGO_PUBLIC_KEY = ""; 
 
-        // ==========================================
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
         let planSeleccionadoMonto = 39.90;
@@ -480,12 +472,17 @@
         let parlaySeleccionados = new Set();
         const votosComunidad = {};
 
-        // Inicializar Firebase si hay llave
-        let auth = null;
-        if (FIREBASE_CONFIG.apiKey && window.firebaseInitializeApp) {
-            const app = window.firebaseInitializeApp(FIREBASE_CONFIG);
-            auth = window.firebaseGetAuth(app);
-        }
+        // Inicializar Firebase Auth de forma segura
+        let authInstance = null;
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                if (window.firebaseInitializeApp && FIREBASE_CONFIG.apiKey) {
+                    const app = window.firebaseInitializeApp(FIREBASE_CONFIG);
+                    authInstance = window.firebaseGetAuth(app);
+                }
+            } catch (e) { console.log("Firebase inicializado en modo simulado."); }
+            initSession();
+        });
 
         function initSession() {
             const saved = localStorage.getItem('predicxion_user');
@@ -505,8 +502,6 @@
             const navBadge = document.getElementById('nav-user-badge');
             const btnLogin = document.getElementById('btn-login-header');
             const profileLogged = document.getElementById('profile-logged');
-            
-            // Gates VIP
             const gates = ['vip-gate-1', 'vip-gate-2', 'vip-gate-telegram'];
 
             if (usuarioActual.logueado) {
@@ -522,7 +517,6 @@
                     document.getElementById('chat-vip-badge').className = 'text-[9px] bg-amber-950 text-amber-400 px-2 py-0.5 rounded font-black border border-amber-800/40';
                     document.getElementById('chat-vip-badge').innerText = 'VIP Ilimitado';
 
-                    // Quitar candados
                     gates.forEach(g => { if(document.getElementById(g)) document.getElementById(g).classList.add('hidden'); });
                     document.querySelectorAll('.vip-blur').forEach(el => el.classList.remove('vip-blur'));
                 } else {
@@ -548,24 +542,42 @@
             document.getElementById('auth-toggle-btn').innerText = modoRegistro ? 'Inicia sesión' : 'Regístrate aquí';
         }
 
-        function iniciarSesionSocial(proveedor) {
-            if (auth && proveedor === 'Google') {
-                const provider = new window.firebaseGoogleAuthProvider();
-                window.firebaseSignInWithPopup(auth, provider).then((result) => {
-                    marcarLogueado(result.user.displayName || 'Usuario Google', result.user.email);
-                }).catch(e => notificar("Error al conectar con Google."));
+        async function iniciarSesionGoogle() {
+            if (authInstance && window.firebaseSignInWithPopup) {
+                try {
+                    const provider = new window.firebaseGoogleAuthProvider();
+                    const result = await window.firebaseSignInWithPopup(authInstance, provider);
+                    marcarLogueado(result.user.displayName || 'Apostador Google', result.user.email);
+                } catch (e) { notificar("Error al conectar con Google."); }
             } else {
-                // Simulación Segura (Fallback)
-                marcarLogueado(proveedor === 'Google' ? 'Apostador Google' : 'Apostador FB', `usuario@${proveedor.toLowerCase()}.com`);
+                marcarLogueado('Apostador Google', 'usuario@google.com');
             }
         }
 
-        function procesarAuthForm(e) {
+        async function procesarAuthForm(e) {
             e.preventDefault();
             const email = document.getElementById('auth-email').value;
-            const user = modoRegistro ? document.getElementById('auth-user').value || email.split('@')[0] : email.split('@')[0];
-            // Lógica de Firebase Email/Pass iría aquí. Usamos fallback:
-            marcarLogueado(user, email);
+            const password = document.getElementById('auth-password').value;
+            const userNombre = document.getElementById('auth-user')?.value || email.split('@')[0];
+
+            if (authInstance && window.firebaseSignInWithEmail && window.firebaseCreateUser) {
+                try {
+                    if (modoRegistro) {
+                        const cred = await window.firebaseCreateUser(authInstance, email, password);
+                        if (window.firebaseUpdateProfile) {
+                            await window.firebaseUpdateProfile(cred.user, { displayName: userNombre });
+                        }
+                        marcarLogueado(userNombre, email);
+                    } else {
+                        const cred = await window.firebaseSignInWithEmail(authInstance, email, password);
+                        marcarLogueado(cred.user.displayName || userNombre, email);
+                    }
+                } catch (err) {
+                    notificar("Error de autenticación: " + (err.message || 'Verifica tus datos'));
+                }
+            } else {
+                marcarLogueado(userNombre, email);
+            }
         }
 
         function marcarLogueado(nombre, email) {
@@ -573,17 +585,16 @@
             localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
             actualizarInterfazUsuario();
             cerrarAuthModal();
-            notificar('¡Bienvenido!');
+            notificar('¡Bienvenido, ' + nombre + '!');
         }
 
-        function cerrarSesion() {
+        async function cerrarSesion() {
+            if (authInstance && window.firebaseSignOut) { await window.firebaseSignOut(authInstance); }
             usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
             localStorage.removeItem('predicxion_user');
-            if (auth) auth.signOut();
             location.reload();
         }
 
-        // ==========================================
         function abrirVipModal() {
             if (!usuarioActual.logueado) { abrirAuthModal(); notificar('Crea una cuenta para continuar.'); return; }
             document.getElementById('modal-vip').classList.remove('hidden');
@@ -619,7 +630,6 @@
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-lg"></i> Procesando pago seguro...`;
             btn.disabled = true;
 
-            // Simulación Segura (Funciona sin llave de MP)
             setTimeout(() => {
                 usuarioActual.esVip = true;
                 usuarioActual.plan = planSeleccionadoTexto;
@@ -632,8 +642,6 @@
             }, 1800);
         }
 
-        // ==========================================
-        // Lógica de Sidebar, Parlays y Cartelera (Mantenida intacta)
         function calcularBanca() {
             const capital = parseFloat(document.getElementById('bankroll-input').value) || 100;
             const risk = parseFloat(document.getElementById('bankroll-risk').value) || 0.02;
@@ -758,7 +766,6 @@
                 const escPick = (item.principal||'Pick N/A').replace(/'/g, "\\'");
                 const escLiga = (item.competicion||'Liga N/A').replace(/'/g, "\\'");
                 const cardId = `c-${index}`;
-                
                 const badgeEV = item.ev_alto ? `<div class="absolute -top-3 -right-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 text-[10px] font-black px-3 py-0.5 rounded-full shadow-lg border border-amber-300 z-10 flex items-center gap-1"><i class="fa-solid fa-bolt text-[9px]"></i> VALOR EV+</div>` : '';
 
                 html += `
@@ -872,8 +879,6 @@
             }
             chat.scrollTop = chat.scrollHeight;
         }
-
-        initSession();
     </script>
 </body>
 </html>
