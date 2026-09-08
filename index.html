@@ -103,19 +103,6 @@
         </div>
     </nav>
 
-    <div class="w-full max-w-7xl mb-5 bg-slate-900/60 border border-slate-800/80 rounded-xl px-4 py-2 flex items-center justify-between shadow-md overflow-x-auto">
-        <div class="flex items-center gap-2.5 flex-shrink-0">
-            <span class="flex h-2 w-2 relative">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span class="text-[10px] font-black uppercase tracking-wider text-emerald-400">Live Tracker 2026</span>
-        </div>
-        <div id="live-ticker-container" class="flex items-center gap-6 text-xs text-slate-300 font-medium whitespace-nowrap overflow-x-auto px-4 scrollbar-none">
-            <span class="text-slate-500 text-[11px] italic"><i class="fa-solid fa-moon text-slate-600 mr-1"></i> No hay encuentros en vivo en este momento. Revisa la cartelera para próximos juegos.</span>
-        </div>
-    </div>
-
     <div class="w-full max-w-7xl flex flex-col lg:flex-row justify-center gap-6 relative">
         
         <aside class="w-full lg:w-80 flex-shrink-0 flex flex-col gap-4 lg:order-first lg:sticky lg:top-4 lg:h-[calc(100vh-60px)] overflow-y-auto pr-1 pb-10">
@@ -168,16 +155,15 @@
                 </div>
             </div>
 
-            <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-hidden shadow-lg">
-                <div id="vip-gate-telegram" class="absolute inset-0 vip-glass z-10 flex flex-col items-center justify-center p-4 text-center">
-                    <i class="fa-solid fa-lock text-amber-400 text-2xl mb-2"></i>
-                    <h4 class="text-xs font-black text-white uppercase tracking-wider mb-1">Canal VIP Telegram</h4>
-                    <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black text-[10px] px-3 py-1.5 rounded-lg shadow-lg mt-1">Desbloquear</button>
-                </div>
-                <div class="vip-blur text-center py-2">
-                    <i class="fa-brands fa-telegram text-blue-400 text-3xl mb-2"></i>
-                    <p class="text-[11px] font-bold text-white mb-2">Acceso Directo al Sindicato</p>
-                    <a href="https://t.me/predicxionia" target="_blank" class="block w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 rounded-xl transition text-center">Unirme al Canal</a>
+            <div class="relative rounded-2xl p-5 overflow-hidden shadow-xl bg-gradient-to-br from-blue-900 to-slate-900 border border-blue-500/30">
+                <div class="absolute -top-4 -right-4 opacity-20 rotate-12"><i class="fa-brands fa-telegram text-7xl text-white"></i></div>
+                <div class="relative z-10 text-left">
+                    <span class="bg-blue-500 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-lg shadow-blue-500/50 mb-3 inline-block">Comunidad Privada</span>
+                    <h4 class="text-base font-black text-white mb-1 font-outfit">Canal VIP Telegram</h4>
+                    <p class="text-[11px] text-blue-200 mb-4 leading-relaxed font-medium">Recibe los pronósticos EV+ y alertas de Smart Money directamente en tu celular minutos antes del partido.</p>
+                    <div id="telegram-btn-container">
+                        <button onclick="abrirVipModal()" class="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all transform hover:scale-[1.02] flex justify-center items-center gap-2"><i class="fa-solid fa-lock"></i> Desbloquear Acceso</button>
+                    </div>
                 </div>
             </div>
 
@@ -247,54 +233,8 @@
                 </div>
             </div>
 
-            <div class="mb-8">
-                <div class="flex justify-between items-center mb-3">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-crown text-amber-400"></i>
-                        <p class="text-sm font-black uppercase tracking-wider text-amber-400">Herramientas VIP Exclusivas</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-hidden shadow-lg">
-                        <div id="vip-gate-1" class="absolute inset-0 vip-glass z-10 flex flex-col items-center justify-center p-4 text-center">
-                            <i class="fa-solid fa-lock text-amber-400 text-2xl mb-2"></i>
-                            <h4 class="text-xs font-black text-white uppercase tracking-wider mb-1">Escáner de Corners y Tarjetas</h4>
-                            <p class="text-[11px] text-slate-300 max-w-xs mb-3">Pronósticos especializados en tiros de esquina y amonestaciones.</p>
-                            <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl shadow-lg">Desbloquear</button>
-                        </div>
-                        <div class="vip-blur">
-                            <div class="flex justify-between text-xs mb-2">
-                                <span class="font-bold text-cyan-400">⚽ Partidos Destacados</span>
-                                <span class="text-emerald-400 font-bold">Alta Fricción</span>
-                            </div>
-                            <div class="space-y-1.5 text-xs text-slate-300">
-                                <p>• Corners proyectados: <strong>Más de 9.5 (@1.88)</strong></p>
-                                <p>• Remates al arco: <strong>+1.5 por jugador clave</strong></p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 overflow-hidden shadow-lg">
-                        <div id="vip-gate-2" class="absolute inset-0 vip-glass z-10 flex flex-col items-center justify-center p-4 text-center">
-                            <i class="fa-solid fa-lock text-amber-400 text-2xl mb-2"></i>
-                            <h4 class="text-xs font-black text-white uppercase tracking-wider mb-1">Smart Money Tracker</h4>
-                            <p class="text-[11px] text-slate-300 max-w-xs mb-3">Detecta caídas repentinas de cuotas por sindicatos profesionales.</p>
-                            <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl shadow-lg">Desbloquear</button>
-                        </div>
-                        <div class="vip-blur">
-                            <div class="flex justify-between text-xs mb-2">
-                                <span class="font-bold text-amber-400">⚡ Alerta de Caída</span>
-                                <span class="text-red-400 font-mono font-bold">-22% Drop</span>
-                            </div>
-                            <div class="space-y-1.5 text-xs text-slate-300">
-                                <p>• Cuota inicial: <strong>@2.35</strong> ➔ Actual: <strong>@1.82</strong></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div>
-                <div class="flex justify-between items-center mb-4">
+                <div class="flex justify-between items-center mb-4 mt-2">
                     <p class="text-sm font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
                         <i class="fa-solid fa-chart-line"></i> Pronósticos de Partidos (Próximos 3 Días)
                     </p>
@@ -309,46 +249,48 @@
         </main>
     </div>
 
-    <div id="modal-auth" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
-            <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+    <div id="modal-auth" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#151c2c] border border-slate-700/50 w-full max-w-md rounded-2xl p-7 shadow-2xl relative">
+            <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white text-lg transition"><i class="fa-solid fa-xmark"></i></button>
             
             <div class="text-center mb-6">
-                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/20">
-                    <i class="fa-solid fa-user-lock text-white text-xl"></i>
-                </div>
-                <h3 class="font-outfit font-black text-2xl text-white" id="auth-title">Acceder a PredicXion IA</h3>
+                <h3 class="font-sans font-black text-2xl text-white tracking-tight" id="auth-title">Desbloquea más pronósticos</h3>
+                <p class="text-sm text-slate-400 mt-1 font-medium">Inicia sesión o regístrate gratis para continuar.</p>
             </div>
 
-            <div class="space-y-2.5 mb-5">
-                <button onclick="iniciarSesionGoogle()" class="w-full bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition shadow">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+            <div class="bg-[#1e2738] rounded-xl p-1 flex items-center mb-6">
+                <button id="tab-login" onclick="setAuthMode(false)" class="flex-1 bg-[#1c64f2] text-white font-bold text-sm py-2 rounded-lg transition-all shadow-md">Ya tengo cuenta</button>
+                <button id="tab-register" onclick="setAuthMode(true)" class="flex-1 text-slate-400 hover:text-white font-bold text-sm py-2 rounded-lg transition-all">Crear tu usuario</button>
+            </div>
+
+            <div class="space-y-3 mb-6">
+                <button onclick="iniciarSesionGoogle()" class="w-full bg-white hover:bg-slate-100 text-slate-900 text-sm font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-3 transition">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
                     Continuar con Google
                 </button>
             </div>
 
-            <div class="relative flex py-2 items-center mb-4">
-                <div class="flex-grow border-t border-slate-800"></div><span class="flex-shrink mx-3 text-[10px] uppercase font-bold text-slate-500">O con tu correo y contraseña</span><div class="flex-grow border-t border-slate-800"></div>
+            <div class="flex items-center gap-3 mb-5">
+                <div class="h-px bg-slate-700 flex-1"></div>
+                <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">O INGRESA CON TU EMAIL</span>
+                <div class="h-px bg-slate-700 flex-1"></div>
             </div>
 
-            <form id="auth-form" onsubmit="procesarAuthForm(event)" class="space-y-3">
+            <form id="auth-form" onsubmit="procesarAuthForm(event)" class="space-y-4">
                 <div id="campo-usuario" class="hidden">
-                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Nombre de Usuario:</label>
-                    <input type="text" id="auth-user" placeholder="ej: CrackDeLasApuestas" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none">
+                    <input type="text" id="auth-user" placeholder="Nombre de usuario" class="w-full bg-[#151c2c] border border-slate-700/80 focus:border-[#10b981] rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div>
-                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Correo Electrónico:</label>
-                    <input type="email" id="auth-email" required placeholder="correo@ejemplo.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none">
+                    <input type="email" id="auth-email" required placeholder="Tu email" class="w-full bg-[#151c2c] border border-slate-700/80 focus:border-[#10b981] rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div>
-                    <label class="text-[10px] font-bold text-slate-400 block mb-1">Contraseña:</label>
-                    <input type="password" id="auth-password" required placeholder="••••••••" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none">
+                    <input type="password" id="auth-password" required placeholder="Contraseña (mínimo 6 caracteres)" class="w-full bg-[#151c2c] border border-slate-700/80 focus:border-[#10b981] rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
-                <button type="submit" id="auth-btn-submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs py-3 rounded-xl transition">Iniciar Sesión</button>
+                <div class="text-right" id="forgot-password-link">
+                    <a href="#" class="text-[#1c64f2] hover:text-blue-400 text-xs font-bold transition">¿Olvidaste tu contraseña?</a>
+                </div>
+                <button type="submit" id="auth-btn-submit" class="w-full bg-[#00d084] hover:bg-[#00b875] text-slate-950 font-black text-sm py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20">Iniciar sesión con email</button>
             </form>
-            <div class="mt-4 text-center">
-                <p class="text-xs text-slate-400"><span id="auth-toggle-label">¿No tienes cuenta?</span> <button type="button" onclick="alternarModoAuth()" id="auth-toggle-btn" class="text-emerald-400 font-bold ml-1">Regístrate aquí</button></p>
-            </div>
         </div>
     </div>
 
@@ -428,7 +370,7 @@
             appId: "1:436589068486:web:77c3d1c62f31b7082e17c7",
             measurementId: "G-CXHWTK9K8L"
         };
-        const MERCADOPAGO_PUBLIC_KEY = ""; 
+        const MERCADOPAGO_PUBLIC_KEY = "APP_USR-bb86d74c-be2a-4367-b9b8-8547ef6f355b"; 
 
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -457,16 +399,6 @@
             if (saved) { try { usuarioActual = JSON.parse(saved); actualizarInterfazUsuario(); } catch(e){} }
             calcularBanca();
             cargarPronosticos();
-            
-            setInterval(async () => {
-                try {
-                    const resp = await fetch(`${API_BASE}/obtener-vivos`);
-                    const data = await resp.json();
-                    if (data && data.partidos_en_vivo) {
-                        renderizarLiveTicker(data.partidos_en_vivo);
-                    }
-                } catch(e) {}
-            }, 5000);
         }
 
         function notificar(texto) {
@@ -480,13 +412,18 @@
             const navBadge = document.getElementById('nav-user-badge');
             const btnLogin = document.getElementById('btn-login-header');
             const profileLogged = document.getElementById('profile-logged');
-            const gates = ['vip-gate-1', 'vip-gate-2', 'vip-gate-telegram'];
 
             if (usuarioActual.logueado) {
                 btnLogin.classList.add('hidden');
                 profileLogged.classList.remove('hidden');
                 document.getElementById('user-name-display').innerText = usuarioActual.nombre;
                 document.getElementById('user-avatar').innerText = usuarioActual.nombre.charAt(0).toUpperCase();
+
+                const CORREOS_VIP_AUTORIZADOS = ["fabiancermaz@gmail.com"];
+                if (CORREOS_VIP_AUTORIZADOS.includes((usuarioActual.email || "").toLowerCase().trim())) {
+                    usuarioActual.esVip = true;
+                    usuarioActual.plan = "VIP Pro (Dueño)";
+                }
 
                 if (usuarioActual.esVip) {
                     navBadge.className = 'text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50';
@@ -495,12 +432,19 @@
                     document.getElementById('chat-vip-badge').className = 'text-[9px] bg-amber-950 text-amber-400 px-2 py-0.5 rounded font-black border border-amber-800/40';
                     document.getElementById('chat-vip-badge').innerText = 'VIP Ilimitado';
 
-                    gates.forEach(g => { if(document.getElementById(g)) document.getElementById(g).classList.add('hidden'); });
+                    const telegramBtnContainer = document.getElementById('telegram-btn-container');
+                    if (telegramBtnContainer) {
+                        telegramBtnContainer.innerHTML = `<a href="https://t.me/predicxionia" target="_blank" class="w-full block bg-blue-600 hover:bg-blue-500 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-lg transition text-center flex justify-center items-center gap-2"><i class="fa-brands fa-telegram"></i> Entrar al Canal</a>`;
+                    }
                     document.querySelectorAll('.vip-blur').forEach(el => el.classList.remove('vip-blur'));
                 } else {
                     navBadge.className = 'text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700';
                     navBadge.innerText = 'Free Tier';
                     document.getElementById('nav-vip-text').innerText = 'Desbloquear VIP';
+                    const telegramBtnContainer = document.getElementById('telegram-btn-container');
+                    if (telegramBtnContainer) {
+                        telegramBtnContainer.innerHTML = `<button onclick="abrirVipModal()" class="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all transform hover:scale-[1.02] flex justify-center items-center gap-2"><i class="fa-solid fa-lock"></i> Desbloquear Acceso</button>`;
+                    }
                 }
             } else {
                 btnLogin.classList.remove('hidden');
@@ -511,13 +455,25 @@
 
         function abrirAuthModal() { document.getElementById('modal-auth').classList.remove('hidden'); }
         function cerrarAuthModal() { document.getElementById('modal-auth').classList.add('hidden'); }
-        function alternarModoAuth() {
-            modoRegistro = !modoRegistro;
-            document.getElementById('auth-title').innerText = modoRegistro ? 'Crear Cuenta' : 'Acceder';
-            document.getElementById('auth-btn-submit').innerText = modoRegistro ? 'Registrarse' : 'Iniciar Sesión';
-            document.getElementById('campo-usuario').classList.toggle('hidden', !modoRegistro);
-            document.getElementById('auth-toggle-label').innerText = modoRegistro ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?';
-            document.getElementById('auth-toggle-btn').innerText = modoRegistro ? 'Inicia sesión' : 'Regístrate aquí';
+        
+        function setAuthMode(isRegister) {
+            modoRegistro = isRegister;
+            const tabLogin = document.getElementById('tab-login');
+            const tabRegister = document.getElementById('tab-register');
+            
+            if (isRegister) {
+                tabRegister.className = 'flex-1 bg-[#1c64f2] text-white font-bold text-sm py-2 rounded-lg transition-all shadow-md';
+                tabLogin.className = 'flex-1 text-slate-400 hover:text-white font-bold text-sm py-2 rounded-lg transition-all';
+                document.getElementById('auth-btn-submit').innerText = 'Crear cuenta con email';
+                document.getElementById('campo-usuario').classList.remove('hidden');
+                document.getElementById('forgot-password-link').classList.add('hidden');
+            } else {
+                tabLogin.className = 'flex-1 bg-[#1c64f2] text-white font-bold text-sm py-2 rounded-lg transition-all shadow-md';
+                tabRegister.className = 'flex-1 text-slate-400 hover:text-white font-bold text-sm py-2 rounded-lg transition-all';
+                document.getElementById('auth-btn-submit').innerText = 'Iniciar sesión con email';
+                document.getElementById('campo-usuario').classList.add('hidden');
+                document.getElementById('forgot-password-link').classList.remove('hidden');
+            }
         }
 
         async function iniciarSesionGoogle() {
@@ -527,13 +483,13 @@
                     const result = await window.firebaseSignInWithPopup(authInstance, provider);
                     marcarLogueado(result.user.displayName || 'Apostador VIP', result.user.email);
                 } catch (e) {
-                    console.error("Error Firebase Google Auth (Posible bloqueo de popup):", e);
+                    console.error("Error Firebase Google Auth:", e);
                     notificar('Conectando en Modo Seguro...');
-                    setTimeout(() => marcarLogueado('Usuario Invitado', 'fabiancermaz@gmail.com'), 800);
+                    setTimeout(() => marcarLogueado('Fabian Cermaz', 'fabiancermaz@gmail.com'), 800);
                 }
             } else {
                 notificar('Simulando conexión con Google...');
-                setTimeout(() => marcarLogueado('Apostador Google', 'fabiancermaz@gmail.com'), 800);
+                setTimeout(() => marcarLogueado('Fabian Cermaz', 'fabiancermaz@gmail.com'), 800);
             }
         }
 
@@ -565,12 +521,8 @@
         }
 
         function marcarLogueado(nombre, email) {
-            const CORREOS_VIP_AUTORIZADOS = [
-                "fabiancermaz@gmail.com"
-            ];
-
-            const emailLimpio = (email || "").toLowerCase().trim();
-            const esDuenoMaster = CORREOS_VIP_AUTORIZADOS.includes(emailLimpio);
+            const CORREOS_VIP_AUTORIZADOS = ["fabiancermaz@gmail.com"];
+            const esDuenoMaster = CORREOS_VIP_AUTORIZADOS.includes((email || "").toLowerCase().trim());
 
             usuarioActual = { 
                 logueado: true, 
@@ -687,8 +639,6 @@
                 const endpoint = forzarRotacion ? `${API_BASE}/obtener-pronostico?refresh=true&t=${Date.now()}` : `${API_BASE}/obtener-pronostico`;
                 const resp = await fetch(endpoint);
                 const data = await resp.json();
-                
-                renderizarLiveTicker(data.partidos_en_vivo || []);
 
                 if (data.todos_los_partidos) {
                     globalTodosPartidos = data.todos_los_partidos;
@@ -706,31 +656,6 @@
             } finally {
                 if (icono) icono.classList.remove('fa-spin');
             }
-        }
-
-        function renderizarLiveTicker(listaVivos) {
-            const container = document.getElementById('live-ticker-container');
-            if (!listaVivos || listaVivos.length === 0) {
-                container.innerHTML = `<span class="text-slate-500 text-[11px] italic"><i class="fa-solid fa-moon text-slate-600 mr-1"></i> No hay encuentros en vivo en este momento. Revisa la cartelera para próximos juegos.</span>`;
-                return;
-            }
-            let html = '';
-            listaVivos.forEach(m => {
-                const esDescanso = (m.minuto || '').toLowerCase().includes('descanso');
-                const badgeEstado = esDescanso
-                    ? `<span class="text-[10px] bg-amber-950/90 text-amber-300 border border-amber-500/50 px-2 py-0.5 rounded-full font-black uppercase flex items-center gap-1 shadow-sm"><i class="fa-solid fa-pause text-[8px]"></i> Descanso</span>`
-                    : `<span class="text-[10px] bg-red-950/90 text-red-400 border border-red-500/60 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1.5 shadow-sm shadow-red-950/50"><span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span> ${m.minuto || 'LIVE'}</span>`;
-
-                html += `
-                    <div class="flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700/70 hover:border-emerald-500/40 transition-all flex-shrink-0 shadow-md">
-                        <span class="text-xs font-bold text-slate-200">${m.local || ''}</span>
-                        <span class="text-xs font-black text-white bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-700 font-mono tracking-wider">${m.goles_local ?? 0} - ${m.goles_visita ?? 0}</span>
-                        <span class="text-xs font-bold text-slate-200 mr-1">${m.visita || ''}</span>
-                        ${badgeEstado}
-                    </div>
-                `;
-            });
-            container.innerHTML = html;
         }
 
         function toggleCheckbox(event, nombrePartido) {
@@ -856,6 +781,22 @@
                                 <div class="font-bold text-emerald-200 text-[11px]">${item.parlay || 'N/A'}</div>
                             </div>
 
+                            <div class="mb-3 bg-slate-900 border border-amber-500/30 rounded-xl p-2.5 relative overflow-hidden">
+                                <div class="flex items-center gap-1.5 mb-2 border-b border-slate-800 pb-1.5">
+                                    <i class="fa-solid fa-crown text-amber-400 text-[10px]"></i>
+                                    <span class="text-[10px] font-black text-amber-400 uppercase tracking-wider">Métricas VIP del Partido</span>
+                                </div>
+                                <div class="${usuarioActual.esVip ? '' : 'vip-blur'} space-y-1.5 text-[10px]">
+                                    <div class="flex justify-between items-center"><span class="text-slate-400 font-bold"><i class="fa-solid fa-flag text-cyan-400 mr-1"></i> Córners/Fricción:</span> <span class="font-bold text-slate-200 text-right max-w-[130px]">${item.vip_corners || 'Procesando...'}</span></div>
+                                    <div class="flex justify-between items-center"><span class="text-slate-400 font-bold"><i class="fa-solid fa-money-bill-trend-up text-emerald-400 mr-1"></i> Smart Money:</span> <span class="font-bold text-slate-200 text-right max-w-[130px]">${item.vip_smart_money || 'Sin alertas'}</span></div>
+                                </div>
+                                ${!usuarioActual.esVip ? `
+                                <div class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-[2px]">
+                                    <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 text-[10px] font-black px-3 py-1.5 rounded-lg shadow-lg flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Desbloquear Pro</button>
+                                </div>
+                                ` : ''}
+                            </div>
+
                             <div id="voto-box-${cardId}" class="mb-3 bg-slate-950 rounded-xl p-2.5 border border-slate-800">
                                 <div class="text-[10px] text-slate-400 font-bold mb-1.5 flex justify-between"><span>¿Cuál es tu pronóstico?</span></div>
                                 <div class="grid grid-cols-3 gap-1.5">
@@ -925,7 +866,7 @@
                 chat.innerHTML += `<div class="flex justify-start"><div class="bg-slate-900 border border-slate-800 text-slate-200 p-4 rounded-2xl rounded-tl-sm max-w-[95%] text-[13.5px] font-medium leading-relaxed shadow-lg"><strong class="text-emerald-400 block mb-2 text-xs uppercase font-black"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</strong>${fmt}</div></div>`;
             } catch (e) {
                 document.getElementById(idLoad)?.remove();
-                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-slate-200 p-4 rounded-2xl text-xs">Error de conexión. Reintenta en unos breve.</div></div>`;
+                chat.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-slate-200 p-4 rounded-2xl text-xs">Error de conexión. Reintenta en breve.</div></div>`;
             }
             chat.scrollTop = chat.scrollHeight;
         }
