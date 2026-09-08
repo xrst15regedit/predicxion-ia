@@ -428,7 +428,7 @@
             appId: "1:436589068486:web:77c3d1c62f31b7082e17c7",
             measurementId: "G-CXHWTK9K8L"
         };
-        const MERCADOPAGO_PUBLIC_KEY = ""; 
+        const MERCADOPAGO_PUBLIC_KEY = "APP_USR-bb86d74c-be2a-4367-b9b8-8547ef6f355b"; 
 
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -458,6 +458,7 @@
             calcularBanca();
             cargarPronosticos();
             
+            // Intervalo optimizado a 5 segundos para actualización ultra rápida en vivo
             setInterval(async () => {
                 try {
                     const resp = await fetch(`${API_BASE}/obtener-vivos`);
@@ -466,7 +467,7 @@
                         renderizarLiveTicker(data.partidos_en_vivo);
                     }
                 } catch(e) {}
-            }, 10000);
+            }, 5000);
         }
 
         function notificar(texto) {
@@ -684,7 +685,6 @@
                     if (data.pronosticos_destacados && data.pronosticos_destacados.length > 0) {
                         renderizarTarjetas(data.pronosticos_destacados);
                     } else {
-                        // Respaldo de seguridad visual
                         container.innerHTML = `<div class="col-span-full text-center py-10 bg-slate-900/50 rounded-2xl border border-slate-800"><i class="fa-solid fa-calendar-xmark text-2xl text-slate-500 mb-2"></i><p class="text-xs text-slate-400">Consultando base de datos deportiva...</p></div>`;
                     }
                 }
