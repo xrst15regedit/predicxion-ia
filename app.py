@@ -49,6 +49,90 @@ CACHE_PARTIDOS_DATA = None
 CACHE_PARTIDOS_TIMESTAMP = 0
 CACHE_DURACION_SEGUNDOS = 300  # 5 minutos para actualización más fresca
 
+CACHE_VIVOS_DATA = []
+CACHE_VIVOS_TIMESTAMP = 0
+CACHE_VIVOS_TTL = 8  # 8 segundos de caché para actualizar goles al instante sin saturar la API
+
+def obtener_partidos_en_vivo_api():
+    """Consulta global y rápida de todos los encuentros en juego, goles y estado de descanso."""
+    global CACHE_VIVOS_DATA, CACHE_VIVOS_TIMESTAMP
+    ahora = time.time()
+    if CACHE_VIVOS_DATA and (ahora - CACHE_VIVOS_TIMESTAMP < CACHE_VIVOS_TTL):
+        return CACHE_VIVOS_DATA
+
+    headers = {"X-Auth-Token": api_key_futbol}
+    partidos_vivos = []
+    ahora_utc = datetime.utcnow()
+
+    try:
+        # Petición única directa que cubre todas las ligas autorizadas sin generar error 429
+        url_live = "https://api.football-data.org/v4/matches?status=LIVE"
+        resp = requests.get(url_live, headers=headers, timeout=3.5)
+
+        if resp.status_code != 200:
+            url_live = "https://api.football-data.org/v4/matches?status=IN_PLAY,PAUSED"
+            resp = requests.get(url_live, headers=headers, timeout=3.5)
+
+        if resp.status_code == 200:
+            matches_data = resp.json().get('matches', [])
+            for ml in matches_data:
+                st = ml.get('status')
+                if st not in ['LIVE', 'IN_PLAY', 'PAUSED']:
+                    continue
+
+                home = ml.get('homeTeam', {}).get('name', 'Local')
+                away = ml.get('awayTeam', {}).get('name', 'Visita')
+
+                # Lectura precisa del marcador en tiempo real (evita lecturas nulas o retrasadas)
+                score_obj = ml.get('score', {})
+                ft = score_obj.get('fullTime') or {}
+                rt = score_obj.get('regularTime') or {}
+                ht = score_obj.get('halfTime') or {}
+
+                h_goals = ft.get('home') if ft.get('home') is not None else (rt.get('home') if rt.get('home') is not None else ht.get('home', 0))
+                a_goals = ft.get('away') if ft.get('away') is not None else (rt.get('away') if rt.get('away') is not None else ht.get('away', 0))
+                h_goals = 0 if h_goals is None else h_goals
+                a_goals = 0 if a_goals is None else a_goals
+
+                # Detección estricta de Entretiempo/Descanso y Minutos en juego
+                if st == 'PAUSED':
+                    minuto_txt = "Descanso"
+                else:
+                    min_api = ml.get('minute')
+                    if min_api:
+                        minuto_txt = f"{min_api}''"
+                    else:
+                        try:
+                            kickoff = datetime.strptime(ml.get('utcDate', ''), '%Y-%m-%dT%H:%M:%SZ')
+                            diff = int((ahora_utc - kickoff).total_seconds() / 60)
+                            if diff <= 47:
+                                minuto_txt = f"{max(1, diff)}' (1T)"
+                            elif 48 <= diff <= 62:
+                                minuto_txt = "Descanso"
+                            else:
+                                minuto_txt = f"{max(46, diff - 15)}' (2T)"
+                        except Exception:
+                            minuto_txt = "En Vivo"
+
+                partidos_vivos.append({
+                    "id": ml.get('id'),
+                    "partido": f"{home} {h_goals} - {a_goals} {away}",
+                    "local": home,
+                    "visita": away,
+                    "goles_local": h_goals,
+                    "goles_visita": a_goals,
+                    "minuto": minuto_txt,
+                    "estado": "PAUSED" if st == 'PAUSED' else "LIVE",
+                    "competicion": ml.get('competition', {}).get('name', 'Fútbol')
+                })
+
+            CACHE_VIVOS_DATA = partidos_vivos
+            CACHE_VIVOS_TIMESTAMP = ahora
+    except Exception:
+        pass
+
+    return CACHE_VIVOS_DATA
+
 def buscar_noticias_tiempo_real(termino_busqueda):
     try:
         query_limpia = urllib.parse.quote(f"{termino_busqueda} futbol 2026 2027 fichajes bajas alineaciones")
@@ -216,19 +300,10 @@ def obtener_pronostico():
                             todos_los_partidos_plano.append(encuentro)
                     if partidos_liga:
                         partidos_por_competicion[comp_nombre] = partidos_liga
-
-                # 2. Consultar partidos en vivo REALES (Evitamos alucinaciones)
-                url_live = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=LIVE"
-                resp_live = requests.get(url_live, headers=headers_football, timeout=3)
-                if resp_live.status_code == 200:
-                    for ml in resp_live.json().get('matches', []):
-                        if ml.get('status') in ['LIVE', 'IN_PLAY', 'PAUSED']:
-                            partidos_en_vivo_reales.append({
-                                "partido": f"{ml['homeTeam']['name']} {ml.get('score',{}).get('fullTime',{}).get('home','?')} - {ml.get('score',{}).get('fullTime',{}).get('away','?')} {ml['awayTeam']['name']}",
-                                "minuto": f"{ml.get('minute','')}''"
-                            })
             except Exception:
                 continue
+
+        partidos_en_vivo_reales = obtener_partidos_en_vivo_api()
 
         # Seleccionar partidos a analizar
         partidos_analizar = []
@@ -324,6 +399,14 @@ def obtener_pronostico():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/obtener-vivos', methods=['GET'])
+def obtener_vivos():
+    try:
+        vivos = obtener_partidos_en_vivo_api()
+        return jsonify({"partidos_en_vivo": vivos}), 200
+    except Exception as e:
+        return jsonify({"partidos_en_vivo": []}), 200
 
 @app.route('/chat-ia', methods=['POST'])
 def chat_ia():
