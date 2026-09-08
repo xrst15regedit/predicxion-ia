@@ -51,10 +51,10 @@ CACHE_DURACION_SEGUNDOS = 300  # 5 minutos para actualización más fresca
 
 CACHE_VIVOS_DATA = []
 CACHE_VIVOS_TIMESTAMP = 0
-CACHE_VIVOS_TTL = 8  # 8 segundos de caché para actualizar goles al instante sin saturar la API
+CACHE_VIVOS_TTL = 3  # Caché optimizado de 3 segundos para reflejar goles y VAR al instante
 
 def obtener_partidos_en_vivo_api():
-    """Consulta global y rápida de todos los encuentros en juego, goles y estado de descanso."""
+    """Consulta global y rápida de todos los encuentros en juego, goles y estado de descanso con actualización inmediata."""
     global CACHE_VIVOS_DATA, CACHE_VIVOS_TIMESTAMP
     ahora = time.time()
     if CACHE_VIVOS_DATA and (ahora - CACHE_VIVOS_TIMESTAMP < CACHE_VIVOS_TTL):
@@ -65,42 +65,39 @@ def obtener_partidos_en_vivo_api():
     ahora_utc = datetime.utcnow()
 
     try:
-        # Petición única directa que cubre todas las ligas autorizadas sin generar error 429
-        url_live = "https://api.football-data.org/v4/matches?status=LIVE"
-        resp = requests.get(url_live, headers=headers, timeout=3.5)
-
-        if resp.status_code != 200:
-            url_live = "https://api.football-data.org/v4/matches?status=IN_PLAY,PAUSED"
-            resp = requests.get(url_live, headers=headers, timeout=3.5)
+        # Petición directa a los estados oficiales IN_PLAY y PAUSED de la API v4
+        url_live = "https://api.football-data.org/v4/matches?status=IN_PLAY,PAUSED"
+        resp = requests.get(url_live, headers=headers, timeout=4.0)
 
         if resp.status_code == 200:
             matches_data = resp.json().get('matches', [])
             for ml in matches_data:
                 st = ml.get('status')
-                if st not in ['LIVE', 'IN_PLAY', 'PAUSED']:
+                if st not in ['IN_PLAY', 'PAUSED']:
                     continue
 
                 home = ml.get('homeTeam', {}).get('name', 'Local')
                 away = ml.get('awayTeam', {}).get('name', 'Visita')
 
-                # Lectura precisa del marcador en tiempo real (evita lecturas nulas o retrasadas)
+                # Lectura precisa del marcador en tiempo real (soporta VAR y actualizaciones inmediatas)
                 score_obj = ml.get('score', {})
                 ft = score_obj.get('fullTime') or {}
                 rt = score_obj.get('regularTime') or {}
                 ht = score_obj.get('halfTime') or {}
 
-                h_goals = ft.get('home') if ft.get('home') is not None else (rt.get('home') if rt.get('home') is not None else ht.get('home', 0))
-                a_goals = ft.get('away') if ft.get('away') is not None else (rt.get('away') if rt.get('away') is not None else ht.get('away', 0))
-                h_goals = 0 if h_goals is None else h_goals
-                a_goals = 0 if a_goals is None else a_goals
+                h_goals = ft.get('home') if ft.get('home') is not None else (rt.get('home') if rt.get('home') is not None else (ht.get('home') if ht.get('home') is not None else 0))
+                a_goals = ft.get('away') if ft.get('away') is not None else (rt.get('away') if rt.get('away') is not None else (ht.get('away') if ht.get('away') is not None else 0))
+                
+                h_goals = int(h_goals) if h_goals is not None else 0
+                a_goals = int(a_goals) if a_goals is not None else 0
 
-                # Detección estricta de Entretiempo/Descanso y Minutos en juego
+                # Detección estricta de Entretiempo/Descanso y Minutos en juego independientes por partido
                 if st == 'PAUSED':
                     minuto_txt = "Descanso"
                 else:
                     min_api = ml.get('minute')
-                    if min_api:
-                        minuto_txt = f"{min_api}''"
+                    if min_api is not None:
+                        minuto_txt = f"{min_api}'"
                     else:
                         try:
                             kickoff = datetime.strptime(ml.get('utcDate', ''), '%Y-%m-%dT%H:%M:%SZ')
@@ -477,3 +474,4 @@ def webhook_pagos():
 if __name__ == '__main__':
     puerto = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=puerto, debug=False)
+```eof
