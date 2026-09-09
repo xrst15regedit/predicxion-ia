@@ -28,19 +28,16 @@ api_key_groq = os.environ.get("API_KEY_GROQ", "gsk_mqzv4aMWa2M7XXxZadtAWGdyb3FYu
 api_key_gemini = os.environ.get("API_KEY_GEMINI", "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g")
 MP_ACCESS_TOKEN = os.environ.get("MP_ACCESS_TOKEN", "APP_USR-3069452262845672-090811-ff2adcff8f98ffe6638b076fee2eae68-3672390181")
 
-# Inicialización SDK Mercado Pago
 try:
     sdk_mp = mercadopago.SDK(MP_ACCESS_TOKEN)
 except Exception as error_mp:
     sdk_mp = None
 
-# Inicialización Cliente Google GenAI (Gemini)
 try:
     client_gemini = genai.Client(api_key=api_key_gemini)
 except Exception as error_gemini:
     client_gemini = None
 
-# Inicialización Firebase Admin
 try:
     if not firebase_admin._apps:
         cred_json = os.environ.get("FIREBASE_CREDENTIALS")
@@ -55,7 +52,7 @@ except Exception as e:
     db = None
 
 # ==============================================================================
-# MOTOR MATEMÁTICO BLINDADO (CERO NaN%)
+# MOTOR MATEMÁTICO BLINDADO
 # ==============================================================================
 def calcular_poisson(lam, k):
     return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
@@ -85,7 +82,6 @@ def calcular_probabilidades_partido(xg_local, xg_visita):
     prob_under_25_pct = int(round(prob_under_25 * 100))
     prob_over_25_pct = 100 - prob_under_25_pct
     
-    # Blindaje estricto anti-NaN
     if prob_over_25_pct <= 0: prob_over_25_pct = 1
     if prob_under_25_pct <= 0: prob_under_25_pct = 1
 
@@ -179,22 +175,26 @@ def home():
 @app.route('/obtener-pronostico', methods=['GET'])
 def obtener_pronostico():
     es_vip = False
-    usuario_email = ""
-    auth_header = request.headers.get('Authorization')
     
-    if auth_header and auth_header.startswith('Bearer ') and db is not None:
-        token = auth_header.split(" ")[1]
-        try:
-            decoded_token = auth.verify_id_token(token)
-            usuario_email = decoded_token.get('email', '')
-            if usuario_email.lower() == "fabiancermaz@gmail.com":
-                es_vip = True
-            else:
-                user_doc = db.collection('usuarios').document(decoded_token['uid']).get()
-                if user_doc.exists and user_doc.to_dict().get('esVip', False):
+    # NUEVA LÓGICA VIP PARA EL CREADOR Y USUARIOS
+    usuario_email = request.args.get('email', '').strip().lower()
+    
+    if usuario_email == "fabiancermaz@gmail.com":
+        es_vip = True
+    else:
+        auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer ') and db is not None:
+            token = auth_header.split(" ")[1]
+            try:
+                decoded_token = auth.verify_id_token(token)
+                if decoded_token.get('email', '').lower() == "fabiancermaz@gmail.com":
                     es_vip = True
-        except Exception:
-            pass
+                else:
+                    user_doc = db.collection('usuarios').document(decoded_token['uid']).get()
+                    if user_doc.exists and user_doc.to_dict().get('esVip', False):
+                        es_vip = True
+            except Exception:
+                pass
 
     ahora_utc = datetime.utcnow()
     fecha_hoy = ahora_utc.strftime('%Y-%m-%d')
@@ -215,7 +215,7 @@ def obtener_pronostico():
     partidos_por_competicion = {}
     todos_los_partidos_plano = []
 
-    # Ampliado con todas las ligas de Europa y Sudamérica compatibles con el plan
+    # LISTA COMPLETA DE LIGAS SOLICITADAS
     COMPETENCIAS_OFICIALES = [
         ('CL', 'Champions League'),
         ('PL', 'Premier League'),
@@ -223,8 +223,12 @@ def obtener_pronostico():
         ('SA', 'Serie A'),
         ('BL1', 'Bundesliga'),
         ('FL1', 'Ligue 1'),
+        ('EL', 'Europa League'),
         ('BSA', 'Brasileirão Série A'),
-        ('CLI', 'Copa Libertadores')
+        ('CLI', 'Copa Libertadores'),
+        ('CS', 'Copa Sudamericana'),
+        ('ASL', 'Liga Profesional (Argentina)'),
+        ('SB', 'Serie B')
     ]
 
     for comp_code, comp_nombre in COMPETENCIAS_OFICIALES:
@@ -292,7 +296,9 @@ def obtener_pronostico():
             "ev_bomba": f"+{abs(ev_val) + 4.5}%",
             "analisis_premium": analisis,
             "under_25_prob": str(p_under),
-            "over_25_prob": str(p_over)
+            "over_25_prob": str(p_over),
+            "parley_pick": f"Doble Oportunidad (L/E) + {'Over 1.5' if p_over > 50 else 'Under 3.5'}",
+            "parley_cuota": str(round(cuota_val * 1.35, 2))
         })
 
     payload_completo = {
@@ -325,6 +331,8 @@ def aplicar_censura(payload, es_vip):
         item_censurado["analisis_premium"] = "Desbloquea VIP para ver el análisis de datos completo."
         item_censurado["under_25_prob"] = "??"
         item_censurado["over_25_prob"] = "??"
+        item_censurado["parley_pick"] = "Bloqueado (Solo VIP)"
+        item_censurado["parley_cuota"] = "🔒"
         destacados_limpios.append(item_censurado)
         
     payload_censurado["pronosticos_destacados"] = destacados_limpios
