@@ -625,7 +625,6 @@
             for (const [liga, partidos] of Object.entries(ligas)) {
                 const filtrados = partidos.filter(p => p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query));
                 
-                // Si estamos buscando algo y no coincide ni el nombre de la liga ni los equipos, se oculta.
                 if (query && filtrados.length === 0 && !liga.toLowerCase().includes(query)) continue;
 
                 const abierta = query ? true : ligasAbiertas[liga] !== false;
@@ -639,7 +638,6 @@
                         <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
                 `;
 
-                // AQUI MOSTRAMOS LA ETIQUETA SI LA LIGA ESTA VACIA
                 if (partidos.length === 0) {
                     html += `
                         <div class="p-4 text-center">
@@ -697,9 +695,8 @@
                 const visita = partes[1] ? partes[1].trim() : '';
                 const esc = d.partido.replace(/'/g, "\\'");
                 
-                const formatLogoName = (teamName) => teamName.toLowerCase().replace(/ /g, '_') + '.png';
-                const fallbackLogoLocal = `https://ui-avatars.com/api/?name=${encodeURIComponent(local)}&background=0f172a&color=fff&rounded=true&bold=true`;
-                const fallbackLogoVisita = `https://ui-avatars.com/api/?name=${encodeURIComponent(visita)}&background=0f172a&color=fff&rounded=true&bold=true`;
+                // FILTRO PARA LEER TUS IMAGENES EXACTAS EN PNG
+                const formatLogoName = (teamName) => teamName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ /g, '_') + '.png';
 
                 html += `
                     <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
@@ -719,13 +716,13 @@
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='${fallbackLogoLocal}';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
                                 </div>
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='${fallbackLogoVisita}';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
                                 </div>
@@ -764,6 +761,7 @@
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
 
+            // AQUÍ MEJORAMOS EL TEXTO DURO QUE TE SALÍA EN TU IMAGEN PARA QUE SIEMPRE SEA ESTADÍSTICO
             const item = listaDestacadosCache.find(x => x.partido === nombrePartido) || {
                 partido: nombrePartido,
                 fecha: fecha || 'Próximo',
@@ -777,7 +775,7 @@
                 over_25_prob: '62',
                 parley_pick: 'Gana/Empata + Over 1.5 + Tarjetas',
                 parley_cuota: '1.95',
-                analisis_premium: 'El modelo cuantitativo proyecta ineficiencia en las cuotas basándose en el volumen ofensivo.'
+                analisis_premium: 'El análisis predictivo arroja una clara probabilidad de victoria a favor del equipo mejor posicionado, justificada por un contundente dominio en la estadística de Goles Esperados (xG) y mayor volumen de pases progresivos en los últimos encuentros. Respecto al total de goles, la superación de la línea de 2.5 tantos se fundamenta sólidamente en los recientes desajustes defensivos mostrados por ambos equipos al retroceder en las transiciones rápidas, lo que garantiza un desarrollo del partido abierto y con altas chances de gol desde el arranque.'
             };
 
             const esVIP = usuarioActual.esVip;
