@@ -129,13 +129,12 @@ def buscar_noticias_tiempo_real(termino_busqueda):
     return ""
 
 def llamar_ia_redactora(partido, stats, contexto_noticias=""):
-    # FUNDAMENTO ESTADÍSTICO PROFUNDO EN CASO DE FALLA DE API
+    fav_name = stats['local'] if stats['l_1x2'] >= stats['v_1x2'] else stats['visita']
+    
     fallback_text = (
-        f"El análisis predictivo de Poisson arroja un sólido {stats['l_1x2']}% de probabilidad de victoria para {stats['local']} frente a un {stats['v_1x2']}% de {stats['visita']} (con {stats['e_1x2']}% de empate). "
-        f"Esta ineficiencia en las cuotas se fundamenta en un dominio estadístico del Goles Esperados (xG) a favor del favorito, producto de un mayor volumen de llegadas al área y eficacia en los últimos 5 encuentros disputados. "
-        f"Por otro lado, el mercado de goles refleja un {stats['over']}% de probabilidad para el Más de 2.5 goles. "
-        f"Esta alta tasa de efectividad se explica debido a las recientes debilidades defensivas de ambos conjuntos al momento de defender transiciones rápidas, "
-        f"lo que garantiza un escenario táctico muy abierto, con múltiples ocasiones claras de gol desde el primer tiempo."
+        f"<p><strong class='text-white font-black'>Radiografía del Partido:</strong> {stats['local']} y {stats['visita']} se enfrentan en un duelo con una tendencia muy definida. Analizando los datos históricos recientes y el volumen de llegadas al área, se observa un rendimiento marcadamente superior por parte del equipo favorito.</p>"
+        f"<p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> El motor matemático proyecta una ventaja estadística del {max(stats['l_1x2'], stats['v_1x2'])}% para {fav_name}. Esta diferencia se justifica por un dominio claro en el xG (Goles Esperados) y una notable ineficiencia del rival al defender en el último tercio del campo.</p>"
+        f"<p><strong class='text-white font-bold'>Proyección de Goles:</strong> El modelo calcula un {stats['over']}% de probabilidad para el Más de 2.5 goles. Las métricas apuntan a un partido muy abierto, donde los espacios defensivos y la eficacia en las transiciones rápidas serán clave para superar esta línea de goles.</p>"
     )
 
     prompt = (
@@ -145,17 +144,19 @@ def llamar_ia_redactora(partido, stats, contexto_noticias=""):
         f"- Probabilidad de victoria: {stats['local']} ({stats['l_1x2']}%) vs {stats['visita']} ({stats['v_1x2']}%). Empate: {stats['e_1x2']}%\n"
         f"- Proyección Goles: Más de 2.5 goles ({stats['over']}%), Menos de 2.5 goles ({stats['under']}%)\n"
         f"Noticias recientes del partido: {contexto_noticias}\n\n"
-        "INSTRUCCIÓN ESTRICTA: Redacta un análisis premium de EXACTAMENTE 5 líneas largas. "
-        "DEBES explicar detalladamente POR QUÉ el equipo favorito tiene más probabilidad de ganar, citando su nombre, mencionando estadísticas de dominio del balón, historial reciente o eficacia en ataque. "
-        "DEBES explicar detalladamente POR QUÉ se proyectan esa cantidad de goles, fundamentando en los espacios defensivos o el poder ofensivo de los clubes. "
-        "Usa los porcentajes brindados para dar una respuesta altamente estadística, segura y profesional. No des respuestas cortas ni genéricas."
+        "INSTRUCCIÓN ESTRICTA: Redacta el análisis usando EXACTAMENTE el siguiente formato HTML puro (NO uses markdown con comillas ```html):\n"
+        "<p><strong class='text-white font-black'>Radiografía del Partido:</strong> [Explica detalladamente cómo llegan ambos equipos, datos estadísticos de partidos anteriores y contexto táctico].</p>\n"
+        "<p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> [Explica por qué el equipo favorito tiene la ventaja citando su nombre exacto y su porcentaje de victoria. Fundamenta usando xG (Goles Esperados) y llegadas al área].</p>\n"
+        "<p><strong class='text-white font-black'>Proyección de Goles:</strong> [Explica por qué se proyectan los goles indicando el porcentaje exacto de Más de 2.5 o Menos de 2.5, detallando brechas defensivas o poderío ofensivo].</p>\n"
+        "Debes ser altamente estadístico, asertivo y seguro. No uses introducciones, genera únicamente el código HTML con las respuestas."
     )
     if client_gemini:
         try:
             config_search = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0.35)
             respuesta = client_gemini.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=config_search)
-            if respuesta and respuesta.text and len(respuesta.text) > 200: 
-                return respuesta.text.strip()
+            if respuesta and respuesta.text and len(respuesta.text) > 150:
+                texto_limpio = respuesta.text.replace('```html', '').replace('```', '').strip()
+                return texto_limpio
         except Exception:
             pass
     return fallback_text
@@ -209,8 +210,8 @@ def obtener_pronostico():
                 pass
 
     ahora_utc = datetime.utcnow()
-    # CAMBIO CLAVE: Nueva llave de caché para obligar a que traiga los fundamentos profundos de inmediato
-    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v4_fundamento_full"
+    # NUEVA LLAVE CACHÉ PARA APLICAR EL NUEVO DISEÑO INMEDIATAMENTE
+    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v5_analisis_pro"
     
     if db is not None:
         try:
@@ -243,12 +244,11 @@ def obtener_pronostico():
         ('SB', 'Serie B')
     ]
 
-    # TODAS LAS LIGAS EXISTEN SIEMPRE EN EL MENÚ, AUNQUE ESTÉN VACÍAS
     partidos_por_competicion = {comp_nombre: [] for _, comp_nombre in COMPETENCIAS_OFICIALES}
 
     for comp_code, comp_nombre in COMPETENCIAS_OFICIALES:
         try:
-            url_fd = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=SCHEDULED"
+            url_fd = f"[https://api.football-data.org/v4/competitions/](https://api.football-data.org/v4/competitions/){comp_code}/matches?status=SCHEDULED"
             resp = requests.get(url_fd, headers=headers_football, timeout=4)
             
             if resp.status_code == 200:
