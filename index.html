@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PredicXion IA - Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+    <link href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css)" rel="stylesheet">
+    <link href="[https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap](https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap)" rel="stylesheet">
     
-    <script src="https://sdk.mercadopago.com/js/v2"></script>
+    <script src="[https://sdk.mercadopago.com/js/v2](https://sdk.mercadopago.com/js/v2)"></script>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
+        import { initializeApp } from "[https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js](https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js)";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "[https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js](https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js)";
         window.firebaseInitializeApp = initializeApp;
         window.firebaseGetAuth = getAuth;
         window.firebaseSignInWithPopup = signInWithPopup;
@@ -117,7 +117,7 @@
         <!-- SIDEBAR IZQUIERDA -->
         <aside class="w-full lg:w-80 border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-85px)] overflow-hidden">
             <div class="p-3 border-b border-cardBorder/60">
-                <a href="https://t.me/predicxionia" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
+                <a href="[https://t.me/predicxionia](https://t.me/predicxionia)" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
                     <div class="flex items-center gap-3">
                         <i class="fa-brands fa-telegram text-white text-2xl group-hover:scale-110 transition-transform"></i>
                         <div class="text-left">
@@ -330,7 +330,7 @@
             }
         } catch(e) { console.log("MP inicializado."); }
 
-        const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
+        const API_BASE = window.location.protocol === 'file:' ? '[http://127.0.0.1:5000](http://127.0.0.1:5000)' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
         let planSeleccionadoMonto = 39.90;
         let planSeleccionadoTexto = 'Mensual Pro';
@@ -525,7 +525,7 @@
 
         async function procesarPagoVIP() {
             if (metodoSeleccionado === 'plin') {
-                window.open(`https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20${planSeleccionadoTexto}%20por%20Plin.%20Mi%20usuario%20es:%20${usuarioActual.nombre}`, '_blank');
+                window.open(`[https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20$](https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20$){planSeleccionadoTexto}%20por%20Plin.%20Mi%20usuario%20es:%20${usuarioActual.nombre}`, '_blank');
                 return;
             }
 
@@ -695,7 +695,6 @@
                 const visita = partes[1] ? partes[1].trim() : '';
                 const esc = d.partido.replace(/'/g, "\\'");
                 
-                // FILTRO PARA LEER TUS IMAGENES EXACTAS EN PNG
                 const formatLogoName = (teamName) => teamName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ /g, '_') + '.png';
 
                 html += `
@@ -716,13 +715,13 @@
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='[https://cdn-icons-png.flaticon.com/512/3177/3177198.png](https://cdn-icons-png.flaticon.com/512/3177/3177198.png)';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
                                 </div>
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='[https://cdn-icons-png.flaticon.com/512/3177/3177198.png](https://cdn-icons-png.flaticon.com/512/3177/3177198.png)';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
                                 </div>
@@ -761,7 +760,6 @@
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
 
-            // AQUÍ MEJORAMOS EL TEXTO DURO QUE TE SALÍA EN TU IMAGEN PARA QUE SIEMPRE SEA ESTADÍSTICO
             const item = listaDestacadosCache.find(x => x.partido === nombrePartido) || {
                 partido: nombrePartido,
                 fecha: fecha || 'Próximo',
@@ -775,7 +773,7 @@
                 over_25_prob: '62',
                 parley_pick: 'Gana/Empata + Over 1.5 + Tarjetas',
                 parley_cuota: '1.95',
-                analisis_premium: 'El análisis predictivo arroja una clara probabilidad de victoria a favor del equipo mejor posicionado, justificada por un contundente dominio en la estadística de Goles Esperados (xG) y mayor volumen de pases progresivos en los últimos encuentros. Respecto al total de goles, la superación de la línea de 2.5 tantos se fundamenta sólidamente en los recientes desajustes defensivos mostrados por ambos equipos al retroceder en las transiciones rápidas, lo que garantiza un desarrollo del partido abierto y con altas chances de gol desde el arranque.'
+                analisis_premium: "<p><strong class='text-white font-black'>Radiografía del Partido:</strong> El análisis predictivo arroja una clara probabilidad de victoria a favor del equipo mejor posicionado, justificada por un contundente dominio en la estadística de Goles Esperados (xG) y mayor volumen de pases progresivos en los últimos encuentros.</p><p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> El motor matemático proyecta un alto margen de ventaja debido a los recientes desajustes defensivos mostrados por el equipo rival al retroceder en las transiciones rápidas.</p><p><strong class='text-white font-black'>Proyección de Goles:</strong> Se garantiza un desarrollo del partido abierto y con altas chances de gol desde el arranque, validando la línea estadística propuesta.</p>"
             };
 
             const esVIP = usuarioActual.esVip;
@@ -794,6 +792,19 @@
 
                     <div class="p-6">
                         <h2 class="text-xl sm:text-2xl font-black text-white mb-6">${item.partido}</h2>
+
+                        <!-- NUEVO: PRONÓSTICO ESTADÍSTICO (ANÁLISIS DE IA) -->
+                        ${esVIP ? `
+                        <div class="bg-cardDark border border-cardBorder rounded-xl overflow-hidden mb-6 shadow-sm">
+                            <div class="bg-slate-800/40 px-4 py-3 border-b border-cardBorder flex items-center gap-2">
+                                <span class="text-sm">📊</span>
+                                <h3 class="text-xs font-black text-slate-200 uppercase tracking-wider">Pronóstico Estadístico: ${item.partido}</h3>
+                            </div>
+                            <div class="p-5 text-xs text-slate-300 leading-relaxed space-y-4">
+                                ${item.analisis_premium}
+                            </div>
+                        </div>
+                        ` : ''}
 
                         <!-- PICK VALOR -->
                         <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-4 relative">
@@ -926,10 +937,6 @@
                                         <div class="text-xl font-black text-white mb-2">${pOver}%</div>
                                         <div class="progress-track"><div class="progress-fill-green" style="width: ${pOver}%"></div></div>
                                     </div>
-                                </div>
-                                <div class="p-4 bg-cardDark rounded-xl border-l-2 border-accentGreen text-xs text-slate-300 leading-relaxed">
-                                    <strong class="text-accentGreen block text-[10px] uppercase font-black mb-1.5">Fundamento Cuantitativo:</strong>
-                                    ${item.analisis_premium}
                                 </div>
                             </div>
                         `}
