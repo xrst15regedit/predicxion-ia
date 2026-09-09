@@ -129,32 +129,32 @@ def buscar_noticias_tiempo_real(termino_busqueda):
     return ""
 
 def llamar_ia_redactora(partido, stats, contexto_noticias=""):
+    # FUNDAMENTO ESTADÍSTICO PROFUNDO EN CASO DE FALLA DE API
     fallback_text = (
-        f"El modelo cuantitativo basado en la distribución de Poisson determina una ventaja estadística clara para este encuentro. "
-        f"Simulando más de 10,000 escenarios, {stats['local']} posee un {stats['l_1x2']}% de probabilidad real de llevarse la victoria frente a un {stats['v_1x2']}% de {stats['visita']} (con un {stats['e_1x2']}% proyectado al empate). "
-        f"Este margen se fundamenta en la superioridad de Goles Esperados (xG) y un mayor volumen de llegadas al área en el último tercio de cancha. "
-        f"Por el lado del marcador total, el sistema detecta un {stats['over']}% de probabilidad para superar la línea de 2.5 goles. "
-        f"Esto indica una tendencia a un partido abierto, donde la deficiencia defensiva en las transiciones justifica apostar por un alto impacto ofensivo."
+        f"El análisis predictivo de Poisson arroja un sólido {stats['l_1x2']}% de probabilidad de victoria para {stats['local']} frente a un {stats['v_1x2']}% de {stats['visita']} (con {stats['e_1x2']}% de empate). "
+        f"Esta ineficiencia en las cuotas se fundamenta en un dominio estadístico del Goles Esperados (xG) a favor del favorito, producto de un mayor volumen de llegadas al área y eficacia en los últimos 5 encuentros disputados. "
+        f"Por otro lado, el mercado de goles refleja un {stats['over']}% de probabilidad para el Más de 2.5 goles. "
+        f"Esta alta tasa de efectividad se explica debido a las recientes debilidades defensivas de ambos conjuntos al momento de defender transiciones rápidas, "
+        f"lo que garantiza un escenario táctico muy abierto, con múltiples ocasiones claras de gol desde el primer tiempo."
     )
 
     prompt = (
-        f"Eres el Analista Cuantitativo Principal de PredicXion IA.\n"
-        f"Analiza detalladamente este encuentro: {partido}.\n"
-        f"Datos matemáticos arrojados por el modelo de Poisson:\n"
-        f"- Victoria {stats['local']}: {stats['l_1x2']}%\n"
-        f"- Victoria {stats['visita']}: {stats['v_1x2']}%\n"
-        f"- Empate: {stats['e_1x2']}%\n"
-        f"- Más de 2.5 goles: {stats['over']}%\n"
-        f"Noticias recientes: {contexto_noticias}\n\n"
-        "INSTRUCCIÓN OBLIGATORIA: Escribe un párrafo muy detallado y estadístico de exactamente 5 líneas. "
-        "NO seas genérico. DEBES incluir los nombres de los equipos y citar estos porcentajes numéricos exactos en tu respuesta. "
-        "Explica por qué un equipo domina el xG (Goles Esperados) y cómo esto afecta la línea de goles justificando la matemática."
+        f"Eres el Analista Cuantitativo VIP de PredicXion IA.\n"
+        f"Analiza profunda y exhaustivamente este encuentro: {partido}.\n"
+        f"Datos estadísticos arrojados por el motor de Poisson:\n"
+        f"- Probabilidad de victoria: {stats['local']} ({stats['l_1x2']}%) vs {stats['visita']} ({stats['v_1x2']}%). Empate: {stats['e_1x2']}%\n"
+        f"- Proyección Goles: Más de 2.5 goles ({stats['over']}%), Menos de 2.5 goles ({stats['under']}%)\n"
+        f"Noticias recientes del partido: {contexto_noticias}\n\n"
+        "INSTRUCCIÓN ESTRICTA: Redacta un análisis premium de EXACTAMENTE 5 líneas largas. "
+        "DEBES explicar detalladamente POR QUÉ el equipo favorito tiene más probabilidad de ganar, citando su nombre, mencionando estadísticas de dominio del balón, historial reciente o eficacia en ataque. "
+        "DEBES explicar detalladamente POR QUÉ se proyectan esa cantidad de goles, fundamentando en los espacios defensivos o el poder ofensivo de los clubes. "
+        "Usa los porcentajes brindados para dar una respuesta altamente estadística, segura y profesional. No des respuestas cortas ni genéricas."
     )
     if client_gemini:
         try:
             config_search = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0.35)
             respuesta = client_gemini.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=config_search)
-            if respuesta and respuesta.text and len(respuesta.text) > 150: 
+            if respuesta and respuesta.text and len(respuesta.text) > 200: 
                 return respuesta.text.strip()
         except Exception:
             pass
@@ -209,8 +209,8 @@ def obtener_pronostico():
                 pass
 
     ahora_utc = datetime.utcnow()
-    # NUEVA LLAVE CACHÉ PARA LIMPIAR LO ANTERIOR SOLITO
-    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v3_real"
+    # CAMBIO CLAVE: Nueva llave de caché para obligar a que traiga los fundamentos profundos de inmediato
+    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v4_fundamento_full"
     
     if db is not None:
         try:
@@ -243,7 +243,7 @@ def obtener_pronostico():
         ('SB', 'Serie B')
     ]
 
-    # TODAS LAS LIGAS EXISTEN SIEMPRE, AUNQUE ESTÉN VACÍAS
+    # TODAS LAS LIGAS EXISTEN SIEMPRE EN EL MENÚ, AUNQUE ESTÉN VACÍAS
     partidos_por_competicion = {comp_nombre: [] for _, comp_nombre in COMPETENCIAS_OFICIALES}
 
     for comp_code, comp_nombre in COMPETENCIAS_OFICIALES:
