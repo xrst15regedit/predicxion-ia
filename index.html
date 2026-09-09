@@ -623,8 +623,11 @@
             let id = 0;
 
             for (const [liga, partidos] of Object.entries(ligas)) {
-                const filtrados = partidos.filter(p => !query || p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query));
-                if (filtrados.length === 0) continue;
+                const filtrados = partidos.filter(p => p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query));
+                
+                // Si estamos buscando algo y no coincide ni el nombre de la liga ni los equipos, se oculta.
+                if (query && filtrados.length === 0 && !liga.toLowerCase().includes(query)) continue;
+
                 const abierta = query ? true : ligasAbiertas[liga] !== false;
 
                 html += `
@@ -636,25 +639,40 @@
                         <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
                 `;
 
-                filtrados.forEach(p => {
-                    const [local, visita] = p.partido.split(' vs ');
-                    const esc = p.partido.replace(/'/g, "\\'");
+                // AQUI MOSTRAMOS LA ETIQUETA SI LA LIGA ESTA VACIA
+                if (partidos.length === 0) {
                     html += `
-                        <div onclick="mostrarAnalisisDetallado('${esc}', '${p.fecha}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer flex justify-between items-center transition group">
-                            <div class="text-[11px] leading-tight">
-                                <div class="font-bold text-slate-200 group-hover:text-white">${local}</div>
-                                <div class="text-slate-400 font-medium">${visita}</div>
-                                <div class="text-[9px] text-accentGreen mt-0.5">${p.fecha}</div>
-                            </div>
-                            <span class="text-[9px] font-bold text-slate-400 group-hover:text-accentGreen transition">CONSULTAR →</span>
+                        <div class="p-4 text-center">
+                            <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest"><i class="fa-regular fa-calendar-xmark text-slate-600 mb-1 block text-lg"></i> Sin partidos programados</span>
                         </div>
                     `;
-                });
+                } else if (filtrados.length === 0) {
+                     html += `
+                        <div class="p-3 text-center">
+                            <span class="text-[10px] text-slate-500">No coincide con la búsqueda</span>
+                        </div>
+                    `;
+                } else {
+                    filtrados.forEach(p => {
+                        const [local, visita] = p.partido.split(' vs ');
+                        const esc = p.partido.replace(/'/g, "\\'");
+                        html += `
+                            <div onclick="mostrarAnalisisDetallado('${esc}', '${p.fecha}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer flex justify-between items-center transition group">
+                                <div class="text-[11px] leading-tight">
+                                    <div class="font-bold text-slate-200 group-hover:text-white">${local}</div>
+                                    <div class="text-slate-400 font-medium">${visita}</div>
+                                    <div class="text-[9px] text-accentGreen mt-0.5">${p.fecha}</div>
+                                </div>
+                                <span class="text-[9px] font-bold text-slate-400 group-hover:text-accentGreen transition">CONSULTAR →</span>
+                            </div>
+                        `;
+                    });
+                }
 
                 html += `</div></div>`;
                 id++;
             }
-            cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron partidos.</p>`;
+            cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron ligas.</p>`;
         }
 
         function toggleLiga(liga, id) {
@@ -680,7 +698,6 @@
                 const esc = d.partido.replace(/'/g, "\\'");
                 
                 const formatLogoName = (teamName) => teamName.toLowerCase().replace(/ /g, '_') + '.png';
-                // SISTEMA INTELIGENTE DE LOGOS: Si no encuentra tu PNG local, genera un logo con las letras del equipo.
                 const fallbackLogoLocal = `https://ui-avatars.com/api/?name=${encodeURIComponent(local)}&background=0f172a&color=fff&rounded=true&bold=true`;
                 const fallbackLogoVisita = `https://ui-avatars.com/api/?name=${encodeURIComponent(visita)}&background=0f172a&color=fff&rounded=true&bold=true`;
 
@@ -747,7 +764,6 @@
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
 
-            // AQUÍ SOLUCIONAMOS EL PARLEY BLOQUEADO COMO PLAN B SI FALLARA
             const item = listaDestacadosCache.find(x => x.partido === nombrePartido) || {
                 partido: nombrePartido,
                 fecha: fecha || 'Próximo',
