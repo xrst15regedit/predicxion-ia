@@ -8,7 +8,6 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- SDK MERCADO PAGO & FIREBASE AUTH -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
@@ -483,7 +482,7 @@
             actualizarInterfazUsuario();
             cerrarAuthModal();
             notificar(esDueno ? '👑 ¡Bienvenido Propietario! Acceso VIP ilimitado.' : `¡Bienvenido, ${nombre}!`);
-            cargarDatosCartelera(); // Recargar datos automáticamente tras login
+            cargarDatosCartelera(); 
         }
 
         async function cerrarSesion() {
@@ -597,7 +596,6 @@
 
         async function cargarDatosCartelera() {
             try {
-                // SE ENVIARÁ TU CORREO EN LA URL PARA AUTORIZARTE COMO DUEÑO
                 const emailParam = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
                 const res = await fetch(`${API_BASE}/obtener-pronostico${emailParam}`);
                 const data = await res.json();
@@ -682,6 +680,9 @@
                 const esc = d.partido.replace(/'/g, "\\'");
                 
                 const formatLogoName = (teamName) => teamName.toLowerCase().replace(/ /g, '_') + '.png';
+                // SISTEMA INTELIGENTE DE LOGOS: Si no encuentra tu PNG local, genera un logo con las letras del equipo.
+                const fallbackLogoLocal = `https://ui-avatars.com/api/?name=${encodeURIComponent(local)}&background=0f172a&color=fff&rounded=true&bold=true`;
+                const fallbackLogoVisita = `https://ui-avatars.com/api/?name=${encodeURIComponent(visita)}&background=0f172a&color=fff&rounded=true&bold=true`;
 
                 html += `
                     <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
@@ -701,13 +702,13 @@
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='${fallbackLogoLocal}';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
                                 </div>
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='${fallbackLogoVisita}';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
                                 </div>
@@ -746,20 +747,21 @@
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
 
+            // AQUÍ SOLUCIONAMOS EL PARLEY BLOQUEADO COMO PLAN B SI FALLARA
             const item = listaDestacadosCache.find(x => x.partido === nombrePartido) || {
                 partido: nombrePartido,
                 fecha: fecha || 'Próximo',
                 cuota_valor: '1.80',
-                pick_valor: 'Doble Oportunidad / Over Goles',
+                pick_valor: 'Doble Op. Local y Más Goles',
                 ev_valor: '+8.5%',
                 cuota_bomba: '3.25',
-                pick_bomba: 'Ambos Anotan & +2.5',
+                pick_bomba: 'Gana Local y Ambos Anotan',
                 ev_bomba: '+14.0%',
                 under_25_prob: '38',
                 over_25_prob: '62',
-                parley_pick: 'Bloqueado',
-                parley_cuota: '🔒',
-                analisis_premium: 'El modelo cuantitativo proyecta ineficiencia en las cuotas del mercado asiático basándose en el xG generado y las bajas recientes en la plantilla.'
+                parley_pick: 'Gana/Empata + Over 1.5 + Tarjetas',
+                parley_cuota: '1.95',
+                analisis_premium: 'El modelo cuantitativo proyecta ineficiencia en las cuotas basándose en el volumen ofensivo.'
             };
 
             const esVIP = usuarioActual.esVip;
@@ -860,14 +862,14 @@
                                 </div>
                                 <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
                                     <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota Total</span>
-                                    <span class="text-amber-400 font-black text-sm">≈${item.parley_cuota || '1.85'}</span>
+                                    <span class="text-amber-400 font-black text-sm">≈${item.parley_cuota}</span>
                                 </div>
                             </div>
                             ${esVIP ? `
                                 <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
                                     <div>
                                         <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Fórmula Estructurada:</span>
-                                        <span class="font-black text-white text-sm">${item.parley_pick || 'Doble Oportunidad + Over 1.5'}</span>
+                                        <span class="font-black text-white text-sm">${item.parley_pick}</span>
                                     </div>
                                     <span class="bg-blue-500/20 text-blue-400 text-[10px] font-black px-2.5 py-1 rounded border border-blue-500/30">Valor</span>
                                 </div>
@@ -911,8 +913,8 @@
                                         <div class="progress-track"><div class="progress-fill-green" style="width: ${pOver}%"></div></div>
                                     </div>
                                 </div>
-                                <div class="p-3.5 bg-cardDark rounded-xl border-l-2 border-accentGreen text-xs text-slate-300 leading-relaxed">
-                                    <strong class="text-accentGreen block text-[10px] uppercase font-black mb-1">Fundamento Cuantitativo:</strong>
+                                <div class="p-4 bg-cardDark rounded-xl border-l-2 border-accentGreen text-xs text-slate-300 leading-relaxed">
+                                    <strong class="text-accentGreen block text-[10px] uppercase font-black mb-1.5">Fundamento Cuantitativo:</strong>
                                     ${item.analisis_premium}
                                 </div>
                             </div>
