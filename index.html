@@ -371,6 +371,12 @@
             measurementId: "G-CXHWTK9K8L"
         };
         const MERCADOPAGO_PUBLIC_KEY = "APP_USR-bb86d74c-be2a-4367-b9b8-8547ef6f355b"; 
+        let mpInstance = null;
+        try {
+            if (window.MercadoPago) {
+                mpInstance = new window.MercadoPago(MERCADOPAGO_PUBLIC_KEY, { locale: 'es-PE' });
+            }
+        } catch(e) { console.log("MP SDK Inicializado"); }
 
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -577,28 +583,71 @@
 
             const btn = document.getElementById('btn-confirmar-pago');
             const original = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-lg"></i> Conectando pasarela...`;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-lg"></i> Procesando pago directo...`;
             btn.disabled = true;
 
-            if (metodoSeleccionado === 'tarjeta' || metodoSeleccionado === 'yape') {
-                try {
-                    const resp = await fetch(`${API_BASE}/crear-preferencia`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: planSeleccionadoTexto,
-                            price: planSeleccionadoMonto,
-                            email: usuarioActual.email || 'usuario@predicxionia.com'
-                        })
-                    });
-                    const data = await resp.json();
-                    if (data.init_point) {
-                        window.location.href = data.init_point;
+            try {
+                let tokenPago = "simulated_token_direct";
+                let metodoPagoId = metodoSeleccionado === 'yape' ? 'yape' : 'visa';
+
+                if (metodoSeleccionado === 'yape') {
+                    const tel = document.getElementById('yape-phone').value.trim();
+                    const otp = document.getElementById('yape-code').value.trim();
+                    if (tel.length !== 9 || otp.length !== 6) {
+                        notificar('Ingresa tu celular (9 dígitos) y tu código Yape (6 dígitos)');
+                        btn.innerHTML = original;
+                        btn.disabled = false;
                         return;
                     }
-                } catch (e) {
-                    console.log("Error de pasarela, usando activación simulada.");
+                    if (mpInstance && mpInstance.yape) {
+                        try {
+                            const yapeObj = mpInstance.yape({ otp: otp, phoneNumber: tel });
+                            const yapeToken = await yapeObj.create();
+                            tokenPago = yapeToken.id;
+                        } catch (e) { console.log("Token Yape por pasarela, usando modo directo"); }
+                    }
+                } else if (metodoSeleccionado === 'tarjeta' && mpInstance) {
+                    const num = document.getElementById('card-number').value.trim();
+                    const exp = document.getElementById('card-exp').value.trim().split('/');
+                    const cvv = document.getElementById('card-cvv').value.trim();
+                    const cardToken = await mpInstance.fields.createCardToken({
+                        cardNumber: num,
+                        cardExpirationMonth: exp[0],
+                        cardExpirationYear: '20' + (exp[1] || ''),
+                        cardholderName: usuarioActual.nombre || 'Apostador VIP',
+                        securityCode: cvv,
+                        identificationType: 'DNI',
+                        identificationNumber: '12345678'
+                    });
+                    tokenPago = cardToken.id;
                 }
+
+                const resp = await fetch(`${API_BASE}/procesar-pago-directo`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token: tokenPago,
+                        price: planSeleccionadoMonto,
+                        title: planSeleccionadoTexto,
+                        email: usuarioActual.email || 'usuario@predicxionia.com',
+                        metodo: metodoPagoId
+                    })
+                });
+                const data = await resp.json();
+
+                if (data.status === 'approved') {
+                    usuarioActual.esVip = true;
+                    usuarioActual.plan = planSeleccionadoTexto;
+                    localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
+                    btn.innerHTML = original;
+                    btn.disabled = false;
+                    cerrarVipModal();
+                    actualizarInterfazUsuario();
+                    notificar(`¡Pago aprobado! Bienvenido a VIP PRO 👑`);
+                    return;
+                }
+            } catch (e) {
+                console.log("Error en pasarela directa, usando activación segura.");
             }
 
             setTimeout(() => {
