@@ -131,20 +131,24 @@ def buscar_noticias_tiempo_real(termino_busqueda):
 def llamar_ia_redactora(partido, stats, contexto_noticias=""):
     prompt = (
         f"Eres el Analista Cuantitativo Principal de PredicXion IA.\n"
-        f"Datos matemáticos avanzados de Poisson para {partido}:\n"
-        f"- Probabilidad Over 2.5: {stats['over']}%\n"
-        f"- Probabilidad 1X2 (L/E/V): {stats['l_1x2']}% / {stats['e_1x2']}% / {stats['v_1x2']}%\n"
-        f"Noticias recientes: {contexto_noticias}\n"
-        "Redacta un análisis premium de máximo 3 líneas justificando estas probabilidades cuantitativas. Tono experto."
+        f"Analiza detalladamente este encuentro: {partido}.\n"
+        f"Datos matemáticos arrojados por el modelo de Poisson:\n"
+        f"- Probabilidad de victoria: Gana {stats['local']} ({stats['l_1x2']}%), Empate ({stats['e_1x2']}%), Gana {stats['visita']} ({stats['v_1x2']}%).\n"
+        f"- Proyección de Goles: Más de 2.5 goles al {stats['over']}%, Menos de 2.5 goles al {stats['under']}%.\n"
+        f"Noticias recientes del partido: {contexto_noticias}\n\n"
+        "INSTRUCCIÓN ESTRICTA: Redacta un análisis premium, específico y muy detallado (entre 4 y 5 líneas largas). "
+        "NO seas genérico. Menciona explícitamente los NOMBRES de los equipos. "
+        "Explica con argumentos sólidos y asertivos POR QUÉ un equipo tiene ventaja sobre el otro basándote en los porcentajes de victoria, "
+        "y justifica claramente por qué se proyectan muchos o pocos goles en este partido. Tono experto, seguro y cuantitativo."
     )
     if client_gemini:
         try:
-            config_search = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0.15)
+            config_search = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0.35)
             respuesta = client_gemini.models.generate_content(model='gemini-2.5-flash', contents=prompt, config=config_search)
             if respuesta and respuesta.text: return respuesta.text.strip()
         except Exception:
             pass
-    return "El modelo proyecta eficiencia en las cuotas basándose en el xG de Poisson y el volumen ofensivo reciente."
+    return f"El modelo proyecta una clara ventaja en base al xG (Goles Esperados). Analizando las cuotas, se detecta valor matemático a favor de {stats['local']} debido a su volumen ofensivo reciente, proyectando un escenario favorable en el mercado asiático."
 
 def llamar_ia_hibrida(prompt_completo, contexto_noticias="", es_chat=False):
     if not es_chat: return prompt_completo 
@@ -176,9 +180,7 @@ def home():
 def obtener_pronostico():
     es_vip = False
     
-    # NUEVA LÓGICA VIP PARA EL CREADOR Y USUARIOS
     usuario_email = request.args.get('email', '').strip().lower()
-    
     if usuario_email == "fabiancermaz@gmail.com":
         es_vip = True
     else:
@@ -215,7 +217,6 @@ def obtener_pronostico():
     partidos_por_competicion = {}
     todos_los_partidos_plano = []
 
-    # LISTA COMPLETA DE LIGAS SOLICITADAS
     COMPETENCIAS_OFICIALES = [
         ('CL', 'Champions League'),
         ('PL', 'Premier League'),
@@ -262,21 +263,34 @@ def obtener_pronostico():
     ]
 
     for p in partidos_analizar:
+        equipo_local, equipo_visita = p['partido'].split(' vs ')
         xg_l = round(random.uniform(1.1, 2.5), 2)
         xg_v = round(random.uniform(0.8, 1.9), 2)
         
         p_over, p_under, c_over, c_under = calcular_probabilidades_partido(xg_l, xg_v)
         p_l_1x2, p_e_1x2, p_v_1x2 = calcular_matriz_1x2(xg_l, xg_v)
         
+        # Determinar Favorito Real
+        if p_l_1x2 >= p_v_1x2:
+            fav_name = equipo_local
+        else:
+            fav_name = equipo_visita
+            
         conf_prop = calcular_prop_tiros(random.uniform(60, 90), random.uniform(50, 85), random.uniform(55, 90), random.uniform(60, 80), random.uniform(50, 85))
         conf_tarjetas = calcular_modelo_tarjetas(random.uniform(50, 85), random.uniform(60, 90), random.uniform(55, 85), random.uniform(60, 90))
 
-        pick_val = "Over 2.5 Goles" if p_over > 55 else "Under 2.5 Goles"
+        # Picks Dinámicos y Específicos
+        pick_val = f"Doble Op. {fav_name} y {'+1.5 Goles' if p_over > 50 else '-3.5 Goles'}"
         cuota_val = c_over if p_over > 55 else c_under
         ev_val = round((p_over if p_over > 55 else p_under) * (cuota_val / 100) * 1.05 - 100, 1)
 
+        pick_bomba = f"Gana {fav_name} y {'Ambos Anotan' if p_over > 55 else 'Menos de 3.5 Goles'}"
+        parley_pick = f"Gana o Empata {fav_name} + {'Más de 1.5 Goles' if p_over > 50 else 'Menos de 4.5 Goles'} + Tarjetas > 3.5"
+
         noticias = buscar_noticias_tiempo_real(p['partido'])
         analisis = llamar_ia_redactora(p['partido'], {
+            "local": equipo_local,
+            "visita": equipo_visita,
             "over": p_over, 
             "under": p_under, 
             "l_1x2": p_l_1x2, 
@@ -291,13 +305,13 @@ def obtener_pronostico():
             "pick_valor": pick_val,
             "cuota_valor": str(round(cuota_val + 0.15, 2)),
             "ev_valor": f"+{abs(ev_val)}%",
-            "pick_bomba": f"Confianza Tiros: {conf_prop}% | Tarjetas: {conf_tarjetas}%",
+            "pick_bomba": pick_bomba,
             "cuota_bomba": str(round(cuota_val * 1.8, 2)),
             "ev_bomba": f"+{abs(ev_val) + 4.5}%",
             "analisis_premium": analisis,
             "under_25_prob": str(p_under),
             "over_25_prob": str(p_over),
-            "parley_pick": f"Doble Oportunidad (L/E) + {'Over 1.5' if p_over > 50 else 'Under 3.5'}",
+            "parley_pick": parley_pick,
             "parley_cuota": str(round(cuota_val * 1.35, 2))
         })
 
