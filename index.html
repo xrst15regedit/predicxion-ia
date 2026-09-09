@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PredicXion IA - Dashboard</title>
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
-    <link href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css)" rel="stylesheet">
-    <link href="[https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap](https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap)" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <script src="[https://sdk.mercadopago.com/js/v2](https://sdk.mercadopago.com/js/v2)"></script>
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
     <script type="module">
-        import { initializeApp } from "[https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js](https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js)";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "[https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js](https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js)";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
         window.firebaseInitializeApp = initializeApp;
         window.firebaseGetAuth = getAuth;
         window.firebaseSignInWithPopup = signInWithPopup;
@@ -117,7 +117,7 @@
         <!-- SIDEBAR IZQUIERDA -->
         <aside class="w-full lg:w-80 border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-85px)] overflow-hidden">
             <div class="p-3 border-b border-cardBorder/60">
-                <a href="[https://t.me/predicxionia](https://t.me/predicxionia)" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
+                <a href="https://t.me/predicxionia" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
                     <div class="flex items-center gap-3">
                         <i class="fa-brands fa-telegram text-white text-2xl group-hover:scale-110 transition-transform"></i>
                         <div class="text-left">
@@ -330,7 +330,7 @@
             }
         } catch(e) { console.log("MP inicializado."); }
 
-        const API_BASE = window.location.protocol === 'file:' ? '[http://127.0.0.1:5000](http://127.0.0.1:5000)' : '';
+        const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
         let planSeleccionadoMonto = 39.90;
         let planSeleccionadoTexto = 'Mensual Pro';
@@ -525,7 +525,7 @@
 
         async function procesarPagoVIP() {
             if (metodoSeleccionado === 'plin') {
-                window.open(`[https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20$](https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20$){planSeleccionadoTexto}%20por%20Plin.%20Mi%20usuario%20es:%20${usuarioActual.nombre}`, '_blank');
+                window.open(`https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20${planSeleccionadoTexto}%20por%20Plin.%20Mi%20usuario%20es:%20${usuarioActual.nombre}`, '_blank');
                 return;
             }
 
@@ -715,13 +715,13 @@
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='[https://cdn-icons-png.flaticon.com/512/3177/3177198.png](https://cdn-icons-png.flaticon.com/512/3177/3177198.png)';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
                                 </div>
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='[https://cdn-icons-png.flaticon.com/512/3177/3177198.png](https://cdn-icons-png.flaticon.com/512/3177/3177198.png)';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
                                 </div>
