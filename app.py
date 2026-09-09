@@ -17,6 +17,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Llaves maestras del sistema
 api_key_futbol = os.environ.get("API_KEY_FUTBOL", "755809cd5c834eb68eaff1f0adc9f5b9")
 api_key_groq = os.environ.get("API_KEY_GROQ", "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")
 api_key_gemini = os.environ.get("API_KEY_GEMINI", "AQ.Ab8RN6JTibLAdImfDygsgXyz_j0K_ukrjAEeMxLpDN7D14B6Og")
@@ -39,17 +40,18 @@ except Exception as error_gemini:
     print(f"⚠️ Aviso Gemini: {error_gemini}")
     client_gemini = None
 
+# Variables de caché para rendimiento
 MODELOS_GROQ_CACHE = []
 CACHE_TIMESTAMP = 0
 CACHE_CALENDARIO_RAW = None
 CACHE_CALENDARIO_TIMESTAMP = 0
 CACHE_PARTIDOS_DATA = None
 CACHE_PARTIDOS_TIMESTAMP = 0
-CACHE_DURACION_SEGUNDOS = 300
+CACHE_DURACION_SEGUNDOS = 300  # 5 minutos para actualización más fresca
 
 CACHE_VIVOS_DATA = []
 CACHE_VIVOS_TIMESTAMP = 0
-CACHE_VIVOS_TTL = 3
+CACHE_VIVOS_TTL = 3  # Caché optimizado de 3 segundos para reflejar goles y VAR al instante
 
 def obtener_partidos_en_vivo_api():
     """Consulta global y rápida de todos los encuentros en juego, goles y estado de descanso con actualización inmediata."""
@@ -411,40 +413,46 @@ def chat_ia():
     except Exception:
         return jsonify({"error": "Saturación temporal del motor. Reintenta en un momento."}), 500
 
-@app.route('/crear-preferencia', methods=['POST'])
-def crear_preferencia():
+@app.route('/procesar-pago-directo', methods=['POST'])
+def procesar_pago_directo():
     if not sdk_mp:
         return jsonify({"error": "Servicio de pagos no inicializado."}), 500
     try:
         data = request.get_json() or {}
-        plan_nombre = data.get("title", "Pase VIP PredicXion IA")
+        token = data.get("token")
         precio = float(data.get("price", 39.90))
         email_cliente = data.get("email", "usuario@predicxionia.com")
-        url_base = request.host_url.rstrip('/')
+        plan_nombre = data.get("title", "Pase VIP Mensual Pro")
+        metodo = data.get("metodo", "yape")
 
-        preference_data = {
-            "items": [{
-                "title": plan_nombre,
-                "description": f"Suscripción exclusiva - {plan_nombre}",
-                "quantity": 1,
-                "unit_price": precio,
-                "currency_id": "PEN"
-            }],
-            "payer": {"email": email_cliente},
-            "back_urls": {
-                "success": f"{url_base}/?status=approved",
-                "failure": f"{url_base}/?status=failed",
-                "pending": f"{url_base}/?status=pending"
-            },
-            "auto_return": "approved",
-            "notification_url": f"{url_base}/webhook-pagos"
+        payment_data = {
+            "token": token,
+            "transaction_amount": precio,
+            "description": plan_nombre,
+            "installments": 1,
+            "payment_method_id": metodo,
+            "payer": {
+                "email": email_cliente
+            }
         }
-        resultado = sdk_mp.preference().create(preference_data)
-        preferencia = resultado.get("response", {})
-        return jsonify({
-            "init_point": preferencia.get("init_point"),
-            "sandbox_init_point": preferencia.get("sandbox_init_point")
-        }), 200
+
+        payment_response = sdk_mp.payment().create(payment_data)
+        resp_dict = payment_response.get("response", {})
+
+        if resp_dict.get("status") == "approved":
+            return jsonify({
+                "status": "approved",
+                "payment_id": resp_dict.get("id"),
+                "mensaje": "¡Pago aprobado con éxito!"
+            }), 200
+        else:
+            detalle = resp_dict.get("status_detail", "cc_rejected_other_reason")
+            return jsonify({
+                "status": "rejected",
+                "detail": detalle,
+                "mensaje": "Pago no aprobado. Verifica los datos o tu código Yape."
+            }), 400
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
