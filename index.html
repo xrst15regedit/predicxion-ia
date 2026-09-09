@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pronostic.io - PredicXion IA Dashboard</title>
+    <title>PredicXion IA - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -77,12 +77,12 @@
         <i class="fa-solid fa-circle-check text-base"></i> <span id="toast-text">Notificación del sistema</span>
     </div>
 
-    <!-- ENCABEZADO SUPERIOR TIPO PRONOSTIC.IO -->
+    <!-- ENCABEZADO SUPERIOR -->
     <header class="w-full border-b border-cardBorder bg-baseDark/95 backdrop-blur-md px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40">
         <div class="flex flex-col">
             <div class="flex items-center gap-2.5">
                 <span class="font-outfit font-black text-2xl tracking-tight text-white flex items-center gap-2">
-                    Pronostic<span class="text-accentGreen">.io</span>
+                    PredicXion<span class="text-accentGreen"> IA</span>
                     <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
                 </span>
             </div>
@@ -112,13 +112,11 @@
         </div>
     </header>
 
-    <!-- CUERPO PRINCIPAL (SIDEBAR + WORKSPACE) -->
+    <!-- CUERPO PRINCIPAL -->
     <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
-        <!-- SIDEBAR IZQUIERDA: PARTIDOS DISPONIBLES -->
+        <!-- SIDEBAR IZQUIERDA -->
         <aside class="w-full lg:w-80 border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-85px)] overflow-hidden">
-            
-            <!-- ENLACE TELEGRAM -->
             <div class="p-3 border-b border-cardBorder/60">
                 <a href="https://t.me/predicxionia" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
                     <div class="flex items-center gap-3">
@@ -132,7 +130,6 @@
                 </a>
             </div>
 
-            <!-- BUSCADOR Y TÍTULO -->
             <div class="px-4 py-3 border-b border-cardBorder flex items-center justify-between">
                 <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-200">
                     <i class="fa-regular fa-calendar-days text-accentGreen"></i> Partidos Disponibles
@@ -148,7 +145,6 @@
                 </div>
             </div>
 
-            <!-- LISTA DE PARTIDOS AGRUPADOS POR LIGA -->
             <div id="sidebar-matches" class="flex-1 overflow-y-auto p-2.5 space-y-2">
                 <div class="text-center py-10 text-xs text-slate-500">
                     <i class="fa-solid fa-spinner fa-spin text-accentGreen text-xl mb-2"></i><br>Cargando partidos disponibles...
@@ -156,13 +152,9 @@
             </div>
         </aside>
 
-        <!-- ÁREA CENTRAL DE ANÁLISIS, CHAT Y PRONÓSTICOS -->
+        <!-- ÁREA CENTRAL -->
         <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-85px)] overflow-y-auto relative">
-            
-            <!-- CONTENEDOR DE TRABAJO DINÁMICO (VISTA DE BIENVENIDA O TARJETA DE ANÁLISIS) -->
             <div id="main-workspace" class="flex-1 p-4 sm:p-6 overflow-y-auto">
-                
-                <!-- PANTALLA DE BIENVENIDA INICIAL (IDÉNTICA A PRONOSTIC.IO) -->
                 <div id="welcome-view" class="h-full min-h-[300px] flex flex-col justify-center items-center text-center max-w-xl mx-auto py-10">
                     <div class="w-16 h-16 rounded-2xl bg-cardDark border border-cardBorder flex items-center justify-center text-cyan-400 text-3xl shadow-xl shadow-cyan-500/10 mb-4">
                         <i class="fa-solid fa-bolt"></i>
@@ -171,14 +163,11 @@
                     <p class="text-xs text-slate-400 mt-2 leading-relaxed">Selecciona un partido del menú lateral, toca uno de los pronósticos destacados o haz cualquier pregunta táctica para iniciar el análisis cuantitativo.</p>
                 </div>
 
-                <!-- CONTENEDOR PARA TARJETA DE DETALLE DE PARTIDO SELECCIONADO -->
                 <div id="match-detail-view" class="hidden max-w-4xl mx-auto"></div>
-
-                <!-- HISTORIAL DEL CHAT CONVERSACIONAL -->
                 <div id="chat-messages-container" class="hidden max-w-4xl mx-auto space-y-4 pt-4"></div>
             </div>
 
-            <!-- SECCIÓN: PRONÓSTICOS DESTACADOS (CARRUSEL INFERIOR PRONOSTIC.IO) -->
+            <!-- CARRUSEL INFERIOR -->
             <div class="border-t border-cardBorder bg-baseDark/95 p-4 flex-shrink-0">
                 <div class="flex items-center justify-between mb-3 px-1">
                     <div class="flex items-center gap-2">
@@ -191,7 +180,6 @@
                     </button>
                 </div>
 
-                <!-- CARRUSEL CON FLECHAS Y TARJETAS ESTILO PRONOSTIC.IO -->
                 <div id="carrusel-wrapper" class="relative flex items-center">
                     <button onclick="moverCarrusel(-1)" class="absolute -left-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder flex items-center justify-center text-slate-300 hover:text-white shadow-xl hover:border-slate-500 transition">
                         <i class="fa-solid fa-chevron-left text-xs"></i>
@@ -207,7 +195,6 @@
                 </div>
             </div>
 
-            <!-- BARRA DE ENTRADA INFERIOR -->
             <div class="p-3 sm:p-4 bg-baseDark border-t border-cardBorder flex-shrink-0">
                 <form onsubmit="enviarMensajeChat(event)" class="relative flex items-center max-w-4xl mx-auto">
                     <input type="text" id="chat-input" placeholder="Ej: Pronóstico para el próximo partido de Barcelona..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen text-xs sm:text-sm text-slate-100 placeholder-slate-500 rounded-2xl py-3.5 pl-4 pr-14 focus:outline-none transition">
@@ -219,34 +206,29 @@
         </main>
     </div>
 
-    <!-- MODAL DE INICIO DE SESIÓN / REGISTRO COMPLETO -->
+    <!-- MODAL AUTH -->
     <div id="modal-auth" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#1a202c] border border-slate-700/50 w-full max-w-[420px] rounded-2xl p-7 shadow-2xl relative">
             <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white text-lg transition"><i class="fa-solid fa-xmark"></i></button>
-            
             <div class="text-center mb-6 mt-2">
                 <h3 class="font-sans font-black text-2xl text-white tracking-tight" id="auth-title">Desbloquea más pronósticos</h3>
                 <p class="text-xs text-slate-400 mt-1.5 font-medium">Inicia sesión o regístrate gratis para continuar.</p>
             </div>
-
             <div class="bg-cardDark rounded-xl p-1.5 flex items-center mb-6 border border-cardBorder">
                 <button id="tab-login" onclick="setAuthMode(false)" class="flex-1 bg-accentBlue text-white font-bold text-sm py-2.5 rounded-lg transition shadow-md">Ya tengo cuenta</button>
                 <button id="tab-register" onclick="setAuthMode(true)" class="flex-1 text-slate-400 hover:text-white font-bold text-sm py-2.5 rounded-lg transition">Crear tu usuario</button>
             </div>
-
             <div class="space-y-3 mb-6">
                 <button onclick="iniciarSesionGoogle()" class="w-full bg-white hover:bg-slate-100 text-slate-900 text-sm font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-3 transition shadow-sm">
                     <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
                     Continuar con Google
                 </button>
             </div>
-
             <div class="flex items-center gap-3 mb-5">
                 <div class="h-px bg-slate-700 flex-1"></div>
                 <span class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">O INGRESA CON TU EMAIL</span>
                 <div class="h-px bg-slate-700 flex-1"></div>
             </div>
-
             <form id="auth-form" onsubmit="procesarAuthForm(event)" class="space-y-4">
                 <div id="campo-usuario" class="hidden">
                     <input type="text" id="auth-user" placeholder="Nombre de usuario" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
@@ -265,7 +247,7 @@
         </div>
     </div>
 
-    <!-- MODAL VIP CON PASARELA MERCADO PAGO, YAPE Y PLIN -->
+    <!-- MODAL VIP -->
     <div id="modal-vip" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
         <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-5 sm:p-7 shadow-2xl relative my-auto">
             <button onclick="cerrarVipModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
@@ -276,7 +258,6 @@
                 <p class="text-xs sm:text-sm text-slate-400 mt-1.5">Rentabilidad matemática real, modelos xG y valor esperado en cada partido.</p>
             </div>
 
-            <!-- SELECCIÓN DE PLANES -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
                 <div onclick="seleccionarPlan(14.90, 'Pase Semanal')" id="plan-card-14" class="plan-card cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-slate-600">
                     <span class="text-[10px] font-black text-slate-400 uppercase block mb-1">Semanal</span>
@@ -293,7 +274,6 @@
                 </div>
             </div>
 
-            <!-- MÉTODOS DE PAGO LOCALES -->
             <div class="border-t border-cardBorder pt-5">
                 <div class="grid grid-cols-3 gap-2 mb-4">
                     <button onclick="seleccionarMetodo('yape')" id="tab-yape" class="metodo-tab bg-purple-950/60 border-2 border-purple-500 text-white font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-2"><i class="fa-solid fa-bolt text-purple-400"></i> Yape (1 Clic)</button>
@@ -332,7 +312,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT DE LOGICA Y OPERACIONES -->
+    <!-- LOGICA -->
     <script>
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
@@ -503,6 +483,7 @@
             actualizarInterfazUsuario();
             cerrarAuthModal();
             notificar(esDueno ? '👑 ¡Bienvenido Propietario! Acceso VIP ilimitado.' : `¡Bienvenido, ${nombre}!`);
+            cargarDatosCartelera(); // Recargar datos automáticamente tras login
         }
 
         async function cerrarSesion() {
@@ -596,6 +577,7 @@
                     btn.innerHTML = original; btn.disabled = false;
                     cerrarVipModal();
                     actualizarInterfazUsuario();
+                    cargarDatosCartelera();
                     notificar(`¡Pago aprobado! Membresía VIP activa.`);
                     return;
                 }
@@ -608,13 +590,16 @@
                 btn.innerHTML = original; btn.disabled = false;
                 cerrarVipModal();
                 actualizarInterfazUsuario();
+                cargarDatosCartelera();
                 notificar(`¡Felicidades! Se activó tu ${planSeleccionadoTexto} 👑`);
             }, 1500);
         }
 
         async function cargarDatosCartelera() {
             try {
-                const res = await fetch(`${API_BASE}/obtener-pronostico`);
+                // SE ENVIARÁ TU CORREO EN LA URL PARA AUTORIZARTE COMO DUEÑO
+                const emailParam = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
+                const res = await fetch(`${API_BASE}/obtener-pronostico${emailParam}`);
                 const data = await res.json();
                 
                 if (data.todos_los_partidos) {
@@ -696,13 +681,11 @@
                 const visita = partes[1] ? partes[1].trim() : '';
                 const esc = d.partido.replace(/'/g, "\\'");
                 
-                const initLocal = local.substring(0, 2).toUpperCase();
-                const initVisita = visita.substring(0, 2).toUpperCase();
+                const formatLogoName = (teamName) => teamName.toLowerCase().replace(/ /g, '_') + '.png';
 
                 html += `
                     <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
                         <div>
-                            <!-- PÍLDORAS DE ESTADO -->
                             <div class="flex items-center gap-1.5 mb-3 flex-wrap">
                                 <span class="bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
                                     <i class="fa-solid fa-star text-[8px]"></i> FAVORITO
@@ -715,24 +698,22 @@
                                 </span>
                             </div>
 
-                            <!-- ENCUENTRO CON ESCUDOS / INICIALES -->
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2.5">
-                                    <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center text-[10px] font-black text-slate-300">
-                                        ${initLocal}
+                                    <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
+                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
                                 </div>
                                 <div class="flex items-center gap-2.5">
-                                    <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center text-[10px] font-black text-slate-400">
-                                        ${initVisita}
+                                    <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
+                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- PIE DE TARJETA -->
                         <div class="flex items-center justify-between mt-4 pt-3 border-t border-[#1e293b] text-[10px]">
                             <span class="text-[#00d084] font-bold tracking-tight">${d.fecha}</span>
                             <button onclick="mostrarAnalisisDetallado('${esc}', '${d.fecha}')" class="text-slate-400 hover:text-white font-black flex items-center gap-1 group-hover:text-[#00d084] transition">
@@ -776,6 +757,8 @@
                 ev_bomba: '+14.0%',
                 under_25_prob: '38',
                 over_25_prob: '62',
+                parley_pick: 'Bloqueado',
+                parley_cuota: '🔒',
                 analisis_premium: 'El modelo cuantitativo proyecta ineficiencia en las cuotas del mercado asiático basándose en el xG generado y las bajas recientes en la plantilla.'
             };
 
@@ -832,7 +815,7 @@
                         </div>
 
                         <!-- PICK BOMBA -->
-                        <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-6 relative">
+                        <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-4 relative">
                             <div class="flex justify-between items-center mb-3">
                                 <div class="flex items-center gap-2">
                                     <div class="w-7 h-7 rounded-full bg-purple-500/15 flex items-center justify-center text-purple-400 text-xs">
@@ -866,7 +849,42 @@
                             `}
                         </div>
 
-                        <!-- DESGLOSE MATEMÁTICO O CANDADO VIP -->
+                        <!-- NUEVO: PARLEY CUANTITATIVA -->
+                        <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-6 relative">
+                            <div class="flex justify-between items-center mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400 text-xs">
+                                        <i class="fa-solid fa-layer-group"></i>
+                                    </div>
+                                    <span class="text-xs font-black text-white uppercase tracking-wider">Parley Segura (Combinada)</span>
+                                </div>
+                                <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
+                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota Total</span>
+                                    <span class="text-amber-400 font-black text-sm">≈${item.parley_cuota || '1.85'}</span>
+                                </div>
+                            </div>
+                            ${esVIP ? `
+                                <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
+                                    <div>
+                                        <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Fórmula Estructurada:</span>
+                                        <span class="font-black text-white text-sm">${item.parley_pick || 'Doble Oportunidad + Over 1.5'}</span>
+                                    </div>
+                                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-black px-2.5 py-1 rounded border border-blue-500/30">Valor</span>
+                                </div>
+                            ` : `
+                                <div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark">
+                                    <div class="vip-blur flex justify-between items-center">
+                                        <span class="font-bold text-white text-sm">Parley Oculta</span>
+                                        <span class="text-blue-400 text-xs font-black">Combinada</span>
+                                    </div>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span>
+                                    </div>
+                                </div>
+                            `}
+                        </div>
+
+                        <!-- DESGLOSE MATEMÁTICO -->
                         ${!esVIP ? `
                             <div class="bg-baseDark border border-cardBorder rounded-2xl p-8 text-center relative overflow-hidden">
                                 <div class="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-400 text-xl">
