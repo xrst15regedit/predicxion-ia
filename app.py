@@ -55,18 +55,15 @@ except Exception as e:
     db = None
 
 # ==============================================================================
-# MOTOR MATEMÁTICO AVANZADO (PROPSBR: POISSON, PROMEDIOS PONDERADOS Y TARJETAS)
+# MOTOR MATEMÁTICO BLINDADO (CERO NaN%)
 # ==============================================================================
 def calcular_poisson(lam, k):
-    """Calcula la probabilidad exacta de anotar k goles dado el promedio esperado lambda[cite: 3]."""
     return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
 
 def calcular_matriz_1x2(xg_local, xg_visita):
-    """Calcula la matriz de probabilidades de Victoria, Empate y Derrota usando Poisson[cite: 3]."""
     prob_local = 0.0
     prob_empate = 0.0
     prob_visitante = 0.0
-    
     for g_l in range(6):
         for g_v in range(6):
             p = calcular_poisson(xg_local, g_l) * calcular_poisson(xg_visita, g_v)
@@ -76,7 +73,6 @@ def calcular_matriz_1x2(xg_local, xg_visita):
                 prob_empate += p
             else:
                 prob_visitante += p
-                
     return round(prob_local * 100, 1), round(prob_empate * 100, 1), round(prob_visitante * 100, 1)
 
 def calcular_probabilidades_partido(xg_local, xg_visita):
@@ -89,25 +85,20 @@ def calcular_probabilidades_partido(xg_local, xg_visita):
     prob_under_25_pct = int(round(prob_under_25 * 100))
     prob_over_25_pct = 100 - prob_under_25_pct
     
-    cuota_justa_over = round(100 / max(prob_over_25_pct, 1), 2)
-    cuota_justa_under = round(100 / max(prob_under_25_pct, 1), 2)
+    # Blindaje estricto anti-NaN
+    if prob_over_25_pct <= 0: prob_over_25_pct = 1
+    if prob_under_25_pct <= 0: prob_under_25_pct = 1
+
+    cuota_justa_over = round(100 / prob_over_25_pct, 2)
+    cuota_justa_under = round(100 / prob_under_25_pct, 2)
     
     return prob_over_25_pct, prob_under_25_pct, cuota_justa_over, cuota_justa_under
 
 def calcular_prop_tiros(p_l5, p_temp, p_rival, p_sede, p_h2h):
-    """
-    Calcula el puntaje de confianza (0-100%) para Player Props (ej. Tiros al Arco) 
-    mediante Promedio Ponderado[cite: 3]:
-    Puntaje = (P_{L5} \cdot 0.35) + (P_{Temp} \cdot 0.20) + (P_{Rival} \cdot 0.25) + (P_{Sede} \cdot 0.10) + (P_{H2H} \cdot 0.10)
-    """
     puntaje = (p_l5 * 0.35) + (p_temp * 0.20) + (p_rival * 0.25) + (p_sede * 0.10) + (p_h2h * 0.10)
     return round(puntaje, 1)
 
 def calcular_modelo_tarjetas(p_l5, p_arbitro, p_duelo, p_contexto):
-    """
-    Calcula el nivel de confianza para Faltas y Tarjetas[cite: 3]:
-    Confianza = (P_{L5} \cdot 0.30) + (P_{Arbitro} \cdot 0.25) + (P_{Duelo} \cdot 0.25) + (P_{Contexto} \cdot 0.20)
-    """
     confianza = (p_l5 * 0.30) + (p_arbitro * 0.25) + (p_duelo * 0.25) + (p_contexto * 0.20)
     return round(confianza, 1)
 
@@ -144,13 +135,11 @@ def buscar_noticias_tiempo_real(termino_busqueda):
 def llamar_ia_redactora(partido, stats, contexto_noticias=""):
     prompt = (
         f"Eres el Analista Cuantitativo Principal de PredicXion IA.\n"
-        f"Datos matemáticos avanzados de Poisson y Promedio Ponderado para {partido}:\n"
+        f"Datos matemáticos avanzados de Poisson para {partido}:\n"
         f"- Probabilidad Over 2.5: {stats['over']}%\n"
         f"- Probabilidad 1X2 (L/E/V): {stats['l_1x2']}% / {stats['e_1x2']}% / {stats['v_1x2']}%\n"
-        f"- Confianza Prop Tiros / Tarjetas: {stats['prop_conf']}%\n"
         f"Noticias recientes: {contexto_noticias}\n"
-        "Redacta un análisis premium de máximo 3 líneas justificando estas probabilidades cuantitativas. "
-        "NO inventes números, cíñete a los proporcionados. Tono experto."
+        "Redacta un análisis premium de máximo 3 líneas justificando estas probabilidades cuantitativas. Tono experto."
     )
     if client_gemini:
         try:
@@ -159,7 +148,7 @@ def llamar_ia_redactora(partido, stats, contexto_noticias=""):
             if respuesta and respuesta.text: return respuesta.text.strip()
         except Exception:
             pass
-    return "El modelo proyecta eficiencia en las cuotas basándose en el xG de Poisson, volumen ofensivo y el factor arbitral ponderado."
+    return "El modelo proyecta eficiencia en las cuotas basándose en el xG de Poisson y el volumen ofensivo reciente."
 
 def llamar_ia_hibrida(prompt_completo, contexto_noticias="", es_chat=False):
     if not es_chat: return prompt_completo 
@@ -193,7 +182,6 @@ def obtener_pronostico():
     usuario_email = ""
     auth_header = request.headers.get('Authorization')
     
-    # 1. VERIFICAR SEGURIDAD (TOKEN FIREBASE)
     if auth_header and auth_header.startswith('Bearer ') and db is not None:
         token = auth_header.split(" ")[1]
         try:
@@ -208,7 +196,6 @@ def obtener_pronostico():
         except Exception:
             pass
 
-    # 2. CONSULTAR CACHÉ EN FIRESTORE
     ahora_utc = datetime.utcnow()
     fecha_hoy = ahora_utc.strftime('%Y-%m-%d')
     if db is not None:
@@ -220,7 +207,6 @@ def obtener_pronostico():
         except Exception:
             pass
 
-    # 3. SI NO HAY CACHÉ, CALCULAR DATOS REALES CON LIGAS 100% GRATUITAS
     ahora_peru = ahora_utc - timedelta(hours=5)
     ahora_utc_str = ahora_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
     limite_futuro_str = (ahora_utc + timedelta(days=3)).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -229,13 +215,16 @@ def obtener_pronostico():
     partidos_por_competicion = {}
     todos_los_partidos_plano = []
 
+    # Ampliado con todas las ligas de Europa y Sudamérica compatibles con el plan
     COMPETENCIAS_OFICIALES = [
         ('CL', 'Champions League'),
         ('PL', 'Premier League'),
         ('PD', 'LaLiga'),
         ('SA', 'Serie A'),
         ('BL1', 'Bundesliga'),
-        ('FL1', 'Ligue 1')
+        ('FL1', 'Ligue 1'),
+        ('BSA', 'Brasileirão Série A'),
+        ('CLI', 'Copa Libertadores')
     ]
 
     for comp_code, comp_nombre in COMPETENCIAS_OFICIALES:
@@ -259,11 +248,11 @@ def obtener_pronostico():
                         todos_los_partidos_plano.append(encuentro)
                 if partidos_liga:
                     partidos_por_competicion[comp_nombre] = partidos_liga
-        except Exception as e:
+        except Exception:
             continue
 
     resultados_destacados = []
-    partidos_analizar = todos_los_partidos_plano[:5] if todos_los_partidos_plano else [
+    partidos_analizar = todos_los_partidos_plano[:6] if todos_los_partidos_plano else [
         {"id": "seg_1", "partido": "Real Madrid vs Barcelona", "competicion": "LaLiga", "fecha": "Hoy 14:00"},
         {"id": "seg_2", "partido": "Manchester City vs Arsenal", "competicion": "Premier League", "fecha": "Mañana 16:00"}
     ]
@@ -272,11 +261,9 @@ def obtener_pronostico():
         xg_l = round(random.uniform(1.1, 2.5), 2)
         xg_v = round(random.uniform(0.8, 1.9), 2)
         
-        # Aplicación de Modelos Matemáticos Avanzados de PropsBR
         p_over, p_under, c_over, c_under = calcular_probabilidades_partido(xg_l, xg_v)
         p_l_1x2, p_e_1x2, p_v_1x2 = calcular_matriz_1x2(xg_l, xg_v)
         
-        # Promedio ponderado para props y tarjetas simulado a partir de variables estadísticas
         conf_prop = calcular_prop_tiros(random.uniform(60, 90), random.uniform(50, 85), random.uniform(55, 90), random.uniform(60, 80), random.uniform(50, 85))
         conf_tarjetas = calcular_modelo_tarjetas(random.uniform(50, 85), random.uniform(60, 90), random.uniform(55, 85), random.uniform(60, 90))
 
@@ -290,8 +277,7 @@ def obtener_pronostico():
             "under": p_under, 
             "l_1x2": p_l_1x2, 
             "e_1x2": p_e_1x2, 
-            "v_1x2": p_v_1x2,
-            "prop_conf": conf_prop
+            "v_1x2": p_v_1x2
         }, noticias)
 
         resultados_destacados.append({
