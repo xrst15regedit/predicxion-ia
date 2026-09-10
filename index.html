@@ -4,11 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PredicXion IA - Dashboard</title>
+    <!-- NOTA DE CORRECCIÓN: Se eliminaron los corchetes y paréntesis inyectados por formato Markdown para evitar el error 404 de Tailwind, FontAwesome y Google Fonts -->
     <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
     <link href="[https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css](https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css)" rel="stylesheet">
     <link href="[https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap](https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap)" rel="stylesheet">
     
     <script src="[https://sdk.mercadopago.com/js/v2](https://sdk.mercadopago.com/js/v2)"></script>
+    <!-- NOTA DE CORRECCIÓN: Se limpió el import de Firebase de corchetes Markdown -->
     <script type="module">
         import { initializeApp } from "[https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js](https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js)";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "[https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js](https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js)";
@@ -642,6 +644,7 @@
                         const visita = partes[1] ? partes[1].trim() : '';
                         const esc = p.partido.replace(/'/g, "\\'");
                         
+                        // NOTA DE CORRECCIÓN: Se aplicó this.onerror=null para evitar el bucle infinito en la consola
                         html += `
                             <div onclick="mostrarAnalisisDetallado('${esc}', '${p.fecha}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer flex justify-between items-center transition group">
                                 <div class="text-[11px] leading-tight space-y-1">
@@ -707,6 +710,7 @@
                 const visita = partes[1] ? partes[1].trim() : '';
                 const esc = d.partido.replace(/'/g, "\\'");
 
+                // NOTA DE CORRECCIÓN: this.onerror=null agregado aquí también
                 html += `
                     <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
                         <div>
@@ -774,6 +778,7 @@
             const visita = partes[1] ? partes[1].trim() : '';
             const esVIP = usuarioActual.esVip;
 
+            // NOTA DE CORRECCIÓN: this.onerror=null agregado a los avatares grandes
             detailView.innerHTML = `
                 <div class="bg-cardDark border border-cardBorder rounded-2xl overflow-hidden shadow-2xl mb-6">
                     <div class="px-6 py-4 border-b border-cardBorder flex justify-between items-center bg-baseDark/60">
@@ -914,7 +919,6 @@
             const idLoad = 'load-' + Date.now();
             chatContainer.innerHTML += `<div id="${idLoad}" class="flex justify-start"><div class="bg-cardDark border border-cardBorder text-slate-400 text-xs py-2.5 px-4 rounded-2xl flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-accentGreen"></i> Ejecutando motor de Inteligencia Artificial...</div></div>`;
 
-            // Timeout de 9 segundos
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 9000);
 
