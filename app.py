@@ -372,7 +372,48 @@ def aplicar_censura(payload, es_vip):
         
         payload_censurado["pronosticos_destacados"] = destacados_limpios
     return jsonify(payload_censurado)
+    
+@app.route('/')
+def home():
+    if os.path.exists(os.path.join(BASE_DIR, 'index.html')):
+        return send_from_directory(BASE_DIR, 'index.html')
+    return jsonify({"estado": "operativo", "servicio": "PredicXion IA Backend"}), 200
 
+@app.route('/chat-ia', methods=['POST'])
+def chat_ia():
+    try:
+        body = request.get_json() or {}
+        mensaje = body.get('mensaje', '')
+        if not mensaje: return jsonify({"error": "Mensaje vacío"}), 400
+        noticias = buscar_noticias_tiempo_real(mensaje)
+        resp = llamar_ia_hibrida(mensaje, contexto_noticias=noticias, es_chat=True)
+        return jsonify({"respuesta": resp})
+    except Exception:
+        return jsonify({"error": "Saturación del motor. Reintenta."}), 500
+
+@app.route('/procesar-pago-directo', methods=['POST'])
+def procesar_pago_directo():
+    if not sdk_mp: return jsonify({"error": "Pagos no configurados"}), 500
+    try:
+        data = request.get_json() or {}
+        payment_response = sdk_mp.payment().create({
+            "token": data.get("token"),
+            "transaction_amount": float(data.get("price", 39.90)),
+            "description": data.get("title", "Pase VIP"),
+            "installments": 1,
+            "payment_method_id": data.get("metodo", "yape"),
+            "payer": {"email": data.get("email", "admin@predicxionia.com")}
+        })
+        resp_dict = payment_response.get("response", {})
+        if resp_dict.get("status") == "approved":
+            uid = data.get("uid")
+            if uid and db is not None:
+                db.collection('usuarios').document(uid).set({"esVip": True}, merge=True)
+            return jsonify({"status": "approved"}), 200
+        return jsonify({"status": "rejected", "detail": resp_dict.get("status_detail")}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+        
 if __name__ == '__main__':
     puerto = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=puerto, debug=False)
