@@ -341,6 +341,12 @@
         let listaDestacadosCache = [];
         let authInstance = null;
 
+        // FILTRO SÚPER SEGURO PARA EL NOMBRE DE LAS IMÁGENES
+        const formatLogoName = (teamName) => {
+            if (!teamName) return 'default.png';
+            return teamName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_') + '.png';
+        };
+
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (window.firebaseInitializeApp && FIREBASE_CONFIG.apiKey) {
@@ -654,14 +660,22 @@
                     filtrados.forEach(p => {
                         const [local, visita] = p.partido.split(' vs ');
                         const esc = p.partido.replace(/'/g, "\\'");
+                        
+                        // IMÁGENES AGREGADAS AL TERCER COMPONENTE (MENÚ LATERAL)
                         html += `
                             <div onclick="mostrarAnalisisDetallado('${esc}', '${p.fecha}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer flex justify-between items-center transition group">
-                                <div class="text-[11px] leading-tight">
-                                    <div class="font-bold text-slate-200 group-hover:text-white">${local}</div>
-                                    <div class="text-slate-400 font-medium">${visita}</div>
-                                    <div class="text-[9px] text-accentGreen mt-0.5">${p.fecha}</div>
+                                <div class="text-[11px] leading-tight space-y-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <img src="/static/logos/${formatLogoName(local)}" class="w-3.5 h-3.5 object-contain" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';">
+                                        <div class="font-bold text-slate-200 group-hover:text-white">${local}</div>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <img src="/static/logos/${formatLogoName(visita)}" class="w-3.5 h-3.5 object-contain" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';">
+                                        <div class="text-slate-400 font-medium">${visita}</div>
+                                    </div>
+                                    <div class="text-[9px] text-accentGreen mt-1 pl-5">${p.fecha}</div>
                                 </div>
-                                <span class="text-[9px] font-bold text-slate-400 group-hover:text-accentGreen transition">CONSULTAR →</span>
+                                <span class="text-[9px] font-bold text-slate-400 group-hover:text-accentGreen transition"><i class="fa-solid fa-chevron-right"></i></span>
                             </div>
                         `;
                     });
@@ -694,9 +708,6 @@
                 const local = partes[0] ? partes[0].trim() : d.partido;
                 const visita = partes[1] ? partes[1].trim() : '';
                 const esc = d.partido.replace(/'/g, "\\'");
-                
-                // FILTRO PARA LEER TUS IMAGENES EXACTAS EN PNG
-                const formatLogoName = (teamName) => teamName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ /g, '_') + '.png';
 
                 html += `
                     <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
@@ -741,19 +752,6 @@
             cont.innerHTML = html || `<p class="text-xs text-slate-500 py-4">No hay pronósticos destacados.</p>`;
         }
 
-        function moverCarrusel(dir) {
-            document.getElementById('carousel-cards').scrollBy({ left: dir * 290, behavior: 'smooth' });
-        }
-
-        function toggleCarrusel() {
-            const c = document.getElementById('carrusel-wrapper');
-            const btn = document.getElementById('btn-toggle-carrusel');
-            c.classList.toggle('hidden');
-            btn.innerHTML = c.classList.contains('hidden') 
-                ? 'Mostrar <i class="fa-solid fa-chevron-down text-[9px]"></i>' 
-                : 'Ocultar <i class="fa-solid fa-chevron-up text-[9px]"></i>';
-        }
-
         function mostrarAnalisisDetallado(nombrePartido, fecha) {
             document.getElementById('welcome-view').classList.add('hidden');
             document.getElementById('chat-messages-container').classList.add('hidden');
@@ -761,7 +759,6 @@
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
 
-            // AQUÍ MEJORAMOS EL TEXTO DURO QUE TE SALÍA EN TU IMAGEN PARA QUE SIEMPRE SEA ESTADÍSTICO
             const item = listaDestacadosCache.find(x => x.partido === nombrePartido) || {
                 partido: nombrePartido,
                 fecha: fecha || 'Próximo',
@@ -775,8 +772,12 @@
                 over_25_prob: '62',
                 parley_pick: 'Gana/Empata + Over 1.5 + Tarjetas',
                 parley_cuota: '1.95',
-                analisis_premium: 'El análisis predictivo arroja una clara probabilidad de victoria a favor del equipo mejor posicionado, justificada por un contundente dominio en la estadística de Goles Esperados (xG) y mayor volumen de pases progresivos en los últimos encuentros. Respecto al total de goles, la superación de la línea de 2.5 tantos se fundamenta sólidamente en los recientes desajustes defensivos mostrados por ambos equipos al retroceder en las transiciones rápidas, lo que garantiza un desarrollo del partido abierto y con altas chances de gol desde el arranque.'
+                analisis_premium: "<p><strong class='text-white font-black'>Radiografía del Partido:</strong> Análisis en vivo no disponible temporalmente por saturación de red.</p>"
             };
+
+            const partes = item.partido.split(' vs ');
+            const local = partes[0] ? partes[0].trim() : item.partido;
+            const visita = partes[1] ? partes[1].trim() : '';
 
             const esVIP = usuarioActual.esVip;
             const pUnder = parseInt(item.under_25_prob || "35");
@@ -792,8 +793,34 @@
                         <span class="text-xs text-slate-400 font-medium">${item.fecha}</span>
                     </div>
 
-                    <div class="p-6">
-                        <h2 class="text-xl sm:text-2xl font-black text-white mb-6">${item.partido}</h2>
+                    <!-- CABECERA DEL PARTIDO CON IMÁGENES GRANDES -->
+                    <div class="px-6 py-8 flex items-center justify-between bg-gradient-to-b from-slate-800/40 to-transparent border-b border-cardBorder mb-6">
+                        <div class="flex flex-col items-center gap-3 w-[40%] text-center">
+                            <img src="/static/logos/${formatLogoName(local)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';">
+                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${local}</h2>
+                        </div>
+                        
+                        <div class="text-slate-600 font-black text-lg px-2">VS</div>
+                        
+                        <div class="flex flex-col items-center gap-3 w-[40%] text-center">
+                            <img src="/static/logos/${formatLogoName(visita)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3177/3177198.png';">
+                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${visita}</h2>
+                        </div>
+                    </div>
+
+                    <div class="px-6 pb-6">
+                        <!-- NUEVO: PRONÓSTICO ESTADÍSTICO DINÁMICO -->
+                        ${esVIP ? `
+                        <div class="bg-baseDark border border-cardBorder rounded-xl overflow-hidden mb-6 shadow-sm">
+                            <div class="bg-slate-800/40 px-4 py-3 border-b border-cardBorder flex items-center gap-2">
+                                <span class="text-sm">📊</span>
+                                <h3 class="text-xs font-black text-slate-200 uppercase tracking-wider">Pronóstico Estadístico</h3>
+                            </div>
+                            <div class="p-5 text-xs text-slate-300 leading-relaxed space-y-4">
+                                ${item.analisis_premium}
+                            </div>
+                        </div>
+                        ` : ''}
 
                         <!-- PICK VALOR -->
                         <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-4 relative">
@@ -926,10 +953,6 @@
                                         <div class="text-xl font-black text-white mb-2">${pOver}%</div>
                                         <div class="progress-track"><div class="progress-fill-green" style="width: ${pOver}%"></div></div>
                                     </div>
-                                </div>
-                                <div class="p-4 bg-cardDark rounded-xl border-l-2 border-accentGreen text-xs text-slate-300 leading-relaxed">
-                                    <strong class="text-accentGreen block text-[10px] uppercase font-black mb-1.5">Fundamento Cuantitativo:</strong>
-                                    ${item.analisis_premium}
                                 </div>
                             </div>
                         `}
