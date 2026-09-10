@@ -90,7 +90,6 @@ def calcular_probabilidades_partido(xg_local, xg_visita):
     
     return prob_over_25_pct, prob_under_25_pct, cuota_justa_over, cuota_justa_under
 
-# NUEVO: Generador de contexto único para evitar duplicación de información
 def obtener_estadisticas_dinamicas(local, visita, competicion):
     hash_l = sum(ord(c) for c in local)
     hash_v = sum(ord(c) for c in visita)
@@ -104,7 +103,7 @@ def obtener_estadisticas_dinamicas(local, visita, competicion):
     goles_v_f = (hash_v % 12) + 7
     goles_v_c = (hash_v % 10) + 5
     
-    bajas_l = "Sin bajas importantes" if hash_l % 2 == 0 else f"1 titular clave descartado por lesión"
+    bajas_l = "Sin bajas importantes" if hash_l % 2 == 0 else "1 titular clave descartado"
     bajas_v = "Plantel estelar disponible" if hash_v % 2 == 0 else "Dudas en el bloque defensivo"
     
     h2h_l = hash_l % 4
@@ -112,22 +111,10 @@ def obtener_estadisticas_dinamicas(local, visita, competicion):
     h2h_e = (hash_l + hash_v) % 3
     
     return {
-        "local": {
-            "forma": forma_l,
-            "goles_favor": goles_l_f,
-            "goles_contra": goles_l_c,
-            "bajas": bajas_l,
-            "historial_local": f"Fuerte en casa ({h2h_l+2}V - 1E)"
-        },
-        "visita": {
-            "forma": forma_v,
-            "goles_favor": goles_v_f,
-            "goles_contra": goles_v_c,
-            "bajas": bajas_v,
-            "historial_visita": f"Irregular de visita ({h2h_v+1}V - 2D)"
-        },
+        "local": {"forma": forma_l, "goles_favor": goles_l_f, "goles_contra": goles_l_c, "bajas": bajas_l, "historial_local": f"Fuerte en casa ({h2h_l+2}V - 1E)"},
+        "visita": {"forma": forma_v, "goles_favor": goles_v_f, "goles_contra": goles_v_c, "bajas": bajas_v, "historial_visita": f"Irregular de visita ({h2h_v+1}V - 2D)"},
         "h2h": f"Últimos 5 cruces: {h2h_l} victorias para {local}, {h2h_v} para {visita} y {h2h_e} empates",
-        "contexto": f"Encuentro de alta tensión en {competicion}, donde los puntos son vitales para la clasificación."
+        "contexto": f"Encuentro de alta tensión en {competicion}, donde los puntos son vitales."
     }
 
 def formatear_fecha_relativa(fecha_str, ahora_peru):
@@ -147,34 +134,44 @@ def formatear_fecha_relativa(fecha_str, ahora_peru):
     except Exception:
         return fecha_str
 
+def buscar_noticias_tiempo_real(termino_busqueda):
+    try:
+        query = urllib.parse.quote(f"{termino_busqueda} futbol")
+        url_rss = f"https://news.google.com/rss/search?q={query}&hl=es-419&gl=PE&ceid=PE:es-419"
+        resp = requests.get(url_rss, timeout=3)
+        if resp.status_code == 200:
+            root = ET.fromstring(resp.content)
+            titulares = [item.find('title').text.strip() for item in root.findall('.//item')[:2] if item.find('title') is not None]
+            return " | ".join(titulares)
+    except Exception:
+        pass
+    return ""
+
 def llamar_ia_redactora(partido, stats, contexto_noticias=""):
     ctx = stats.get('dinamico', {})
     l_data = ctx.get('local', {})
     v_data = ctx.get('visita', {})
-    
     fav_name = stats['local'] if stats['l_1x2'] >= stats['v_1x2'] else stats['visita']
     
-    # Fallback ultra-dinámico: Nunca más se repetirá el texto si la IA falla
     fallback_text = (
-        f"<p><strong class='text-white font-black'>Radiografía del Partido:</strong> {stats['local']} llega a este encuentro tras registrar una forma de {l_data.get('forma')} y habiendo anotado {l_data.get('goles_favor')} goles recientes. Destaca por ser {l_data.get('historial_local')}. Por el lado visitante, {stats['visita']} arrastra un rendimiento de {v_data.get('forma')} y reporta: {v_data.get('bajas')}. {ctx.get('contexto')}</p>"
-        f"<p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> Evaluando el historial directo ({ctx.get('h2h')}), el modelo matemático de Poisson encuentra un claro valor del {max(stats['l_1x2'], stats['v_1x2'])}% a favor de {fav_name}. Esta ventaja se cimienta en su superioridad en la generación de Goles Esperados (xG) y el control en el mediocampo.</p>"
-        f"<p><strong class='text-white font-bold'>Proyección de Goles:</strong> La línea cuantitativa arroja un {stats['over']}% de probabilidad para el Más de 2.5 goles. Sabiendo que {stats['local']} concede una media de {l_data.get('goles_contra')} goles y {stats['visita']} permite {v_data.get('goles_contra')}, el escenario táctico es propicio para múltiples anotaciones.</p>"
+        f"<p><strong class='text-white font-black'>Radiografía del Partido:</strong> {stats['local']} llega con un historial de forma de {l_data.get('forma')} y habiendo anotado {l_data.get('goles_favor')} goles recientes. Destaca por ser {l_data.get('historial_local')}. Por el lado visitante, {stats['visita']} arrastra un rendimiento de {v_data.get('forma')}. {ctx.get('contexto')}</p>"
+        f"<p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> Evaluando el historial directo ({ctx.get('h2h')}), el modelo de Poisson encuentra un valor del {max(stats['l_1x2'], stats['v_1x2'])}% a favor de {fav_name}. Esta ventaja se cimienta en su superioridad en el xG.</p>"
+        f"<p><strong class='text-white font-bold'>Proyección de Goles y Corners:</strong> La línea cuantitativa arroja un {stats['over']}% de probabilidad para el Más de 2.5 goles. Sabiendo que {stats['local']} concede una media de {l_data.get('goles_contra')} goles, el escenario es propicio para múltiples anotaciones y una alta generación de corners.</p>"
     )
 
     prompt = (
         f"Eres el Analista Cuantitativo VIP de PredicXion IA.\n"
-        f"Redacta un análisis ÚNICO, específico y detallado para el partido {partido}.\n"
-        f"USA ESTOS DATOS ESTADÍSTICOS OBLIGATORIAMENTE PARA JUSTIFICAR TU ANÁLISIS:\n"
+        f"Redacta un análisis ÚNICO y estadístico para {partido}.\n"
+        f"DATOS A UTILIZAR:\n"
         f"- {stats['local']}: Forma {l_data.get('forma')}, Goles a Favor: {l_data.get('goles_favor')}. Bajas: {l_data.get('bajas')}. Historial: {l_data.get('historial_local')}.\n"
         f"- {stats['visita']}: Forma {v_data.get('forma')}, Goles a Favor: {v_data.get('goles_favor')}. Bajas: {v_data.get('bajas')}. Historial: {v_data.get('historial_visita')}.\n"
-        f"- H2H (Historial directo): {ctx.get('h2h')}.\n"
-        f"- Contexto: {ctx.get('contexto')}.\n"
         f"- Probabilidades Poisson: Victoria {stats['local']} {stats['l_1x2']}%. Victoria {stats['visita']} {stats['v_1x2']}%. Empate {stats['e_1x2']}%.\n"
         f"- Proyección Goles: Más de 2.5 al {stats['over']}%. Menos de 2.5 al {stats['under']}%.\n"
-        "INSTRUCCIÓN ESTRICTA: Redacta el análisis usando EXACTAMENTE el siguiente formato HTML puro sin usar markdown:\n"
-        "<p><strong class='text-white font-black'>Radiografía del Partido:</strong> [Narra cómo llegan ambos equipos usando sus datos de forma, goles y bajas provistos arriba].</p>\n"
-        "<p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> [Explica quién ganará justificando con el porcentaje de victoria, el H2H y su dominio del xG].</p>\n"
-        "<p><strong class='text-white font-black'>Proyección de Goles:</strong> [Justifica el porcentaje de Más/Menos 2.5 goles basándote en los goles recibidos].</p>"
+        f"- Corners proyectados: {stats.get('corners_total')} totales.\n"
+        "INSTRUCCIÓN ESTRICTA: Redacta el análisis usando EXACTAMENTE este formato HTML puro:\n"
+        "<p><strong class='text-white font-black'>Radiografía del Partido:</strong> [Narra con datos cómo llegan ambos equipos].</p>\n"
+        "<p><strong class='text-white font-black'>Análisis de Probabilidades:</strong> [Justifica quién ganará y el 1X2].</p>\n"
+        "<p><strong class='text-white font-black'>Proyección de Goles y Corners:</strong> [Justifica los goles y nombra los corners totales].</p>"
     )
     if client_gemini:
         try:
@@ -186,10 +183,35 @@ def llamar_ia_redactora(partido, stats, contexto_noticias=""):
             pass
     return fallback_text
 
+def llamar_ia_hibrida(prompt_completo, contexto_noticias="", es_chat=False):
+    if not es_chat: return prompt_completo 
+    prompt_sistema = (
+        "Eres el Asistente Cuantitativo VIP de PredicXion IA.\n"
+        "1. BÚSQUEDA WEB: Investiga noticias reales y alineaciones.\n"
+        "2. CERO HUMO: No inventes estadísticas, responde directo al punto.\n"
+        "3. FORMATO: Emplea negritas y estructuración limpia."
+    )
+    if client_gemini:
+        try:
+            config_search = types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())], temperature=0.35)
+            respuesta = client_gemini.models.generate_content(model='gemini-2.5-flash', contents=f"{prompt_sistema}\n\nNoticias: {contexto_noticias}\n\nConsulta: {prompt_completo}", config=config_search)
+            if respuesta and respuesta.text: return respuesta.text.strip()
+        except Exception:
+            pass
+    return "Servicio con alta demanda o consulta compleja. Reintenta en unos instantes."
+
+# ==============================================================================
+# RUTAS DE LA APLICACIÓN FLASK
+# ==============================================================================
+@app.route('/')
+def home():
+    if os.path.exists(os.path.join(BASE_DIR, 'index.html')):
+        return send_from_directory(BASE_DIR, 'index.html')
+    return jsonify({"estado": "operativo", "servicio": "PredicXion IA Backend"}), 200
+
 @app.route('/obtener-pronostico', methods=['GET'])
 def obtener_pronostico():
     es_vip = False
-    
     usuario_email = request.args.get('email', '').strip().lower()
     if usuario_email == "fabiancermaz@gmail.com":
         es_vip = True
@@ -209,15 +231,13 @@ def obtener_pronostico():
                 pass
 
     ahora_utc = datetime.utcnow()
-    # NUEVA LLAVE CACHÉ PARA ACTUALIZAR ARQUITECTURA DINÁMICA
-    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v8_arquitectura_dinamica"
+    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v11_fix_completo"
     
     if db is not None:
         try:
             cache_doc = db.collection('pronosticos_cache').document(fecha_hoy_cache).get()
             if cache_doc.exists:
-                datos_cacheados = cache_doc.to_dict()
-                return aplicar_censura(datos_cacheados, es_vip)
+                return aplicar_censura(cache_doc.to_dict(), es_vip)
         except Exception:
             pass
 
@@ -229,18 +249,11 @@ def obtener_pronostico():
     todos_los_partidos_plano = []
 
     COMPETENCIAS_OFICIALES = [
-        ('CL', 'Champions League'),
-        ('PL', 'Premier League'),
-        ('PD', 'LaLiga'),
-        ('SA', 'Serie A'),
-        ('BL1', 'Bundesliga'),
-        ('FL1', 'Ligue 1'),
-        ('EL', 'Europa League'),
-        ('BSA', 'Brasileirão Série A'),
-        ('CLI', 'Copa Libertadores'),
-        ('CS', 'Copa Sudamericana'),
-        ('ASL', 'Liga Profesional (Argentina)'),
-        ('SB', 'Serie B')
+        ('CL', 'Champions League'), ('PL', 'Premier League'), ('PD', 'LaLiga'),
+        ('SA', 'Serie A'), ('BL1', 'Bundesliga'), ('FL1', 'Ligue 1'),
+        ('EL', 'Europa League'), ('BSA', 'Brasileirão Série A'),
+        ('CLI', 'Copa Libertadores'), ('CS', 'Copa Sudamericana'),
+        ('ASL', 'Liga Profesional (Argentina)'), ('SB', 'Serie B')
     ]
 
     partidos_por_competicion = {comp_nombre: [] for _, comp_nombre in COMPETENCIAS_OFICIALES}
@@ -249,17 +262,59 @@ def obtener_pronostico():
         try:
             url_fd = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=SCHEDULED"
             resp = requests.get(url_fd, headers=headers_football, timeout=4)
-            
             if resp.status_code == 200:
                 for m in resp.json().get('matches', []):
                     f_partido = m.get('utcDate', '')
                     if ahora_utc_str <= f_partido <= limite_futuro_str:
-                        fecha_formateada = formatear_fecha_relativa(f_partido, ahora_peru)
+                        local = m['homeTeam']['name']
+                        visita = m['awayTeam']['name']
+                        
+                        xg_l = round(random.uniform(1.0, 2.7), 2)
+                        xg_v = round(random.uniform(0.7, 2.1), 2)
+                        
+                        p_over, p_under, c_over, c_under = calcular_probabilidades_partido(xg_l, xg_v)
+                        p_l_1x2, p_e_1x2, p_v_1x2 = calcular_matriz_1x2(xg_l, xg_v)
+                        
+                        fav_name = local if p_l_1x2 >= p_v_1x2 else visita
+                        
+                        corners_l = round((xg_l * 2.5) + 3, 1)
+                        corners_v = round((xg_v * 2.5) + 2, 1)
+                        total_corners = round(corners_l + corners_v, 1)
+                        tarjetas_totales = round(random.uniform(3.5, 6.5), 1)
+
+                        contexto_rico = obtener_estadisticas_dinamicas(local, visita, comp_nombre)
+
+                        pick_val = f"Doble Op. {fav_name} y {'+1.5 Goles' if p_over > 50 else '-3.5 Goles'}"
+                        cuota_val = c_over if p_over > 55 else c_under
+                        ev_val = round((p_over if p_over > 55 else p_under) * (cuota_val / 100) * 1.05 - 100, 1)
+
+                        pick_bomba = f"Gana {fav_name} y {'Ambos Anotan' if p_over > 55 else 'Menos de 3.5 Goles'}"
+                        parley_pick = f"Gana o Empata {fav_name} + Más de {math.floor(total_corners - 1.5)} Corners + Tarjetas > 3.5"
+
+                        analisis = llamar_ia_redactora(f"{local} vs {visita}", {
+                            "local": local, "visita": visita,
+                            "over": p_over, "under": p_under,
+                            "l_1x2": p_l_1x2, "e_1x2": p_e_1x2, "v_1x2": p_v_1x2,
+                            "corners_total": total_corners,
+                            "dinamico": contexto_rico
+                        })
+
                         encuentro = {
                             "id": m.get('id'),
-                            "partido": f"{m['homeTeam']['name']} vs {m['awayTeam']['name']}",
+                            "partido": f"{local} vs {visita}",
                             "competicion": comp_nombre,
-                            "fecha": fecha_formateada
+                            "fecha": formatear_fecha_relativa(f_partido, ahora_peru),
+                            "pick_valor": pick_val,
+                            "cuota_valor": str(round(cuota_val + 0.15, 2)),
+                            "ev_valor": f"+{abs(ev_val)}%",
+                            "pick_bomba": pick_bomba,
+                            "cuota_bomba": str(round(cuota_val * 1.8, 2)),
+                            "ev_bomba": f"+{abs(ev_val) + 4.5}%",
+                            "analisis_premium": analisis,
+                            "under_25_prob": str(p_under),
+                            "over_25_prob": str(p_over),
+                            "parley_pick": parley_pick,
+                            "parley_cuota": str(round(cuota_val * 1.35, 2))
                         }
                         partidos_por_competicion[comp_nombre].append(encuentro)
                         todos_los_partidos_plano.append(encuentro)
@@ -269,72 +324,13 @@ def obtener_pronostico():
     if not todos_los_partidos_plano:
         partidos_analizar = [
             {"id": "fix_1", "partido": "SE Palmeiras vs LDU de Quito", "competicion": "Copa Libertadores", "fecha": "Hoy 17:00"},
-            {"id": "fix_2", "partido": "Real Madrid vs FC Barcelona", "competicion": "LaLiga", "fecha": "Sábado 14:00"},
-            {"id": "fix_3", "partido": "Manchester City vs Arsenal FC", "competicion": "Premier League", "fecha": "Domingo 11:30"},
-            {"id": "fix_4", "partido": "FC Bayern München vs Borussia Dortmund", "competicion": "Bundesliga", "fecha": "Sábado 11:30"}
+            {"id": "fix_2", "partido": "Real Madrid vs FC Barcelona", "competicion": "LaLiga", "fecha": "Sábado 14:00"}
         ]
         for fix in partidos_analizar:
             if fix["competicion"] in partidos_por_competicion:
                 partidos_por_competicion[fix["competicion"]].append(fix)
-    else:
-        partidos_analizar = todos_los_partidos_plano[:8]
 
-    resultados_destacados = []
-
-    for p in partidos_analizar:
-        try:
-            equipo_local, equipo_visita = p['partido'].split(' vs ')
-        except Exception:
-            equipo_local, equipo_visita = "Local", "Visita"
-
-        xg_l = round(random.uniform(1.1, 2.5), 2)
-        xg_v = round(random.uniform(0.8, 1.9), 2)
-        
-        p_over, p_under, c_over, c_under = calcular_probabilidades_partido(xg_l, xg_v)
-        p_l_1x2, p_e_1x2, p_v_1x2 = calcular_matriz_1x2(xg_l, xg_v)
-        
-        if p_l_1x2 >= p_v_1x2:
-            fav_name = equipo_local
-        else:
-            fav_name = equipo_visita
-            
-        # Generamos el contexto enriquecido
-        contexto_rico = obtener_estadisticas_dinamicas(equipo_local, equipo_visita, p['competicion'])
-
-        pick_val = f"Doble Op. {fav_name} y {'+1.5 Goles' if p_over > 50 else '-3.5 Goles'}"
-        cuota_val = c_over if p_over > 55 else c_under
-        ev_val = round((p_over if p_over > 55 else p_under) * (cuota_val / 100) * 1.05 - 100, 1)
-
-        pick_bomba = f"Gana {fav_name} y {'Ambos Anotan' if p_over > 55 else 'Menos de 3.5 Goles'}"
-        parley_pick = f"Gana o Empata {fav_name} + {'Más de 1.5 Goles' if p_over > 50 else 'Menos de 4.5 Goles'} + Tarjetas > 3.5"
-
-        analisis = llamar_ia_redactora(p['partido'], {
-            "local": equipo_local,
-            "visita": equipo_visita,
-            "over": p_over, 
-            "under": p_under, 
-            "l_1x2": p_l_1x2, 
-            "e_1x2": p_e_1x2, 
-            "v_1x2": p_v_1x2,
-            "dinamico": contexto_rico
-        })
-
-        resultados_destacados.append({
-            "partido": p['partido'],
-            "competicion": p['competicion'],
-            "fecha": p['fecha'],
-            "pick_valor": pick_val,
-            "cuota_valor": str(round(cuota_val + 0.15, 2)),
-            "ev_valor": f"+{abs(ev_val)}%",
-            "pick_bomba": pick_bomba,
-            "cuota_bomba": str(round(cuota_val * 1.8, 2)),
-            "ev_bomba": f"+{abs(ev_val) + 4.5}%",
-            "analisis_premium": analisis,
-            "under_25_prob": str(p_under),
-            "over_25_prob": str(p_over),
-            "parley_pick": parley_pick,
-            "parley_cuota": str(round(cuota_val * 1.35, 2))
-        })
+    resultados_destacados = todos_los_partidos_plano[:8] if todos_los_partidos_plano else []
 
     payload_completo = {
         "todos_los_partidos": partidos_por_competicion,
@@ -351,8 +347,7 @@ def obtener_pronostico():
     return aplicar_censura(payload_completo, es_vip)
 
 def aplicar_censura(payload, es_vip):
-    if es_vip:
-        return jsonify(payload)
+    if es_vip: return jsonify(payload)
     
     payload_censurado = payload.copy()
     destacados_limpios = []
@@ -363,21 +358,23 @@ def aplicar_censura(payload, es_vip):
         item_censurado["ev_valor"] = "🔒"
         item_censurado["pick_bomba"] = "Bloqueado (Solo VIP)"
         item_censurado["ev_bomba"] = "🔒"
-        item_censurado["analisis_premium"] = "Desbloquea VIP para ver el análisis de datos cuantitativos profundo."
+        item_censurado["analisis_premium"] = "Desbloquea VIP para ver el análisis de datos completo."
         item_censurado["under_25_prob"] = "??"
         item_censurado["over_25_prob"] = "??"
         item_censurado["parley_pick"] = "Bloqueado (Solo VIP)"
         item_censurado["parley_cuota"] = "🔒"
         destacados_limpios.append(item_censurado)
         
-        payload_censurado["pronosticos_destacados"] = destacados_limpios
-    return jsonify(payload_censurado)
+    payload_censurado["pronosticos_destacados"] = destacados_limpios
     
-@app.route('/')
-def home():
-    if os.path.exists(os.path.join(BASE_DIR, 'index.html')):
-        return send_from_directory(BASE_DIR, 'index.html')
-    return jsonify({"estado": "operativo", "servicio": "PredicXion IA Backend"}), 200
+    for liga, partidos in payload_censurado.get("todos_los_partidos", {}).items():
+        for partido in partidos:
+            partido["pick_valor"] = "Bloqueado (VIP)"
+            partido["pick_bomba"] = "Bloqueado (VIP)"
+            partido["parley_pick"] = "Bloqueado (VIP)"
+            partido["analisis_premium"] = "Desbloquea VIP para ver el análisis."
+            
+    return jsonify(payload_censurado)
 
 @app.route('/chat-ia', methods=['POST'])
 def chat_ia():
@@ -413,7 +410,7 @@ def procesar_pago_directo():
         return jsonify({"status": "rejected", "detail": resp_dict.get("status_detail")}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-        
+
 if __name__ == '__main__':
     puerto = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=puerto, debug=False)
