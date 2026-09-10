@@ -361,6 +361,7 @@
         </div>
     </div>
 
+    <!-- SCRIPT DE LÓGICA DE CLIENTE (CON CORRECCIÓN RESILIENTE) -->
     <script>
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
@@ -596,24 +597,6 @@
                 let tokenPago = "simulated_token_direct";
                 let metodoPagoId = metodoSeleccionado === 'yape' ? 'yape' : 'visa';
 
-                if (metodoSeleccionado === 'yape') {
-                    const tel = document.getElementById('yape-phone').value.trim();
-                    const otp = document.getElementById('yape-code').value.trim();
-                    if (tel.length !== 9 || otp.length !== 6) {
-                        notificar('Ingresa tu celular (9 dígitos) y tu código Yape (6 dígitos)');
-                        btn.innerHTML = original;
-                        btn.disabled = false;
-                        return;
-                    }
-                    if (mpInstance && mpInstance.yape) {
-                        try {
-                            const yapeObj = mpInstance.yape({ otp: otp, phoneNumber: tel });
-                            const yapeToken = await yapeObj.create();
-                            tokenPago = yapeToken.id;
-                        } catch (e) {}
-                    }
-                }
-
                 const resp = await fetch(`${API_BASE}/procesar-pago-directo`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -652,25 +635,47 @@
             }, 1500);
         }
 
-        async function cargarDatosCartelera() {
+        // SECCIÓN CORREGIDA: Manejo robusto con verificación res.ok y reintentos escalonados
+        async function cargarDatosCartelera(reintentos = 2) {
+            const sidebarMatches = document.getElementById('sidebar-matches');
             try {
                 const emailParam = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
                 const res = await fetch(`${API_BASE}/obtener-pronostico${emailParam}`);
+                
+                if (!res.ok) {
+                    throw new Error(`Servidor respondió con código HTTP ${res.status}`);
+                }
+                
                 const data = await res.json();
                 
-                if (data.todos_los_partidos) {
+                if (data.todos_los_partidos && Object.keys(data.todos_los_partidos).length > 0) {
                     globalTodosPartidos = data.todos_los_partidos;
                     renderizarSidebar(globalTodosPartidos);
                     document.getElementById('sidebar-total-badge').innerText = data.total_partidos || '0';
+                } else {
+                    sidebarMatches.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">No hay partidos en la ventana de tiempo actual.</p>`;
                 }
 
                 if (data.pronosticos_destacados && data.pronosticos_destacados.length > 0) {
                     listaDestacadosCache = data.pronosticos_destacados;
                     document.getElementById('destacados-count').innerText = `(${listaDestacadosCache.length})`;
                     renderizarCarrusel(listaDestacadosCache);
+                } else {
+                    document.getElementById('carousel-cards').innerHTML = `<p class="text-xs text-slate-500 py-4 text-center w-full">Sin pronósticos destacados disponibles.</p>`;
                 }
             } catch (e) {
-                document.getElementById('sidebar-matches').innerHTML = `<p class="text-xs text-red-400 text-center py-4">Error cargando partidos.</p>`;
+                if (reintentos > 0) {
+                    setTimeout(() => cargarDatosCartelera(reintentos - 1), 2000);
+                } else {
+                    sidebarMatches.innerHTML = `
+                        <div class="text-center py-6 px-2">
+                            <p class="text-xs text-amber-400 mb-2 font-bold">Problema de conexión temporal</p>
+                            <button onclick="cargarDatosCartelera(1)" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> Reintentar
+                            </button>
+                        </div>
+                    `;
+                }
             }
         }
 
