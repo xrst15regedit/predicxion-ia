@@ -85,11 +85,9 @@ def calcular_probabilidades_partido(xg_local, xg_visita):
     return prob_over_25_pct, prob_under_25_pct, cuota_justa_over, cuota_justa_under
 
 def generar_estadisticas_rigurosas(local, visita):
-    # Semilla matemática basada en los equipos para garantizar datos únicos pero consistentes
     semilla = sum(ord(c) for c in local) * sum(ord(c) for c in visita)
     random.seed(semilla)
     
-    # Análisis de últimos 15 partidos
     promedio_goles_l = round(random.uniform(1.1, 2.6), 2)
     promedio_goles_v = round(random.uniform(0.8, 2.2), 2)
     
@@ -111,7 +109,7 @@ def generar_estadisticas_rigurosas(local, visita):
     prob_primero_l = round((xg_l / (xg_l + xg_v + 0.1)) * 100)
     prob_primero_v = 100 - prob_primero_l
     
-    random.seed() # Reiniciamos la semilla para no afectar al resto del sistema
+    random.seed()
     
     return {
         "xg_l": xg_l, "xg_v": xg_v,
@@ -127,14 +125,12 @@ def generar_picks_dinamicos(fav_name, p_over, p_under, p_l_1x2, p_v_1x2, total_c
     picks_valor = []
     picks_bomba = []
     
-    # Lógica condicional rigurosa para Pick de Valor
     if p_over >= 62: picks_valor.append(f"Más de 2.5 Goles en el partido")
     elif p_under >= 60: picks_valor.append(f"Menos de 2.5 Goles en el partido")
     elif max(p_l_1x2, p_v_1x2) > 55: picks_valor.append(f"Gana {fav_name} (Apuesta sin empate)")
     elif total_corners > 10.5: picks_valor.append(f"Más de {math.floor(total_corners - 1)} Corners en total")
     else: picks_valor.append(f"Doble Oportunidad {fav_name} y Más de 1.5 Goles")
     
-    # Lógica condicional rigurosa para Pick Bomba
     if max(p_l_1x2, p_v_1x2) > 50 and p_over > 58: picks_bomba.append(f"Gana {fav_name} y Ambos Equipos Anotan")
     elif max(p_l_1x2, p_v_1x2) > 65: picks_bomba.append(f"Gana {fav_name} con Hándicap Asiático -1.5")
     elif p_under > 65: picks_bomba.append(f"Empate o {fav_name} y Menos de 1.5 Goles")
@@ -239,8 +235,7 @@ def obtener_pronostico():
                 pass
 
     ahora_utc = datetime.utcnow()
-    # Cache con nueva llave para forzar actualización de las matemáticas
-    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v13_stats_reales"
+    fecha_hoy_cache = ahora_utc.strftime('%Y-%m-%d') + "_v14_clean_urls"
     
     if db is not None:
         try:
@@ -252,7 +247,6 @@ def obtener_pronostico():
 
     ahora_peru = ahora_utc - timedelta(hours=5)
     ahora_utc_str = ahora_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-    # RANGO EXTENDIDO A 10 DÍAS PARA ASEGURAR TODOS LOS PARTIDOS SIN INVENTAR NADA
     limite_futuro_str = (ahora_utc + timedelta(days=10)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
     headers_football = {"X-Auth-Token": api_key_futbol}
@@ -279,15 +273,11 @@ def obtener_pronostico():
                         local = m['homeTeam']['name']
                         visita = m['awayTeam']['name']
                         
-                        # Generación Matemática Rigurosa y Única por partido
                         stats_r = generar_estadisticas_rigurosas(local, visita)
-                        
                         p_over, p_under, c_over, c_under = calcular_probabilidades_partido(stats_r["xg_l"], stats_r["xg_v"])
                         p_l_1x2, p_e_1x2, p_v_1x2 = calcular_matriz_1x2(stats_r["xg_l"], stats_r["xg_v"])
                         
                         fav_name = local if p_l_1x2 >= p_v_1x2 else visita
-                        
-                        # Picks variables basados en la matemática del partido
                         pick_val, pick_bomba = generar_picks_dinamicos(fav_name, p_over, p_under, p_l_1x2, p_v_1x2, stats_r["total_corners"], stats_r["total_tarjetas"])
                         
                         ev_val = round((p_over if p_over > 55 else p_under) * (c_over / 100) * 1.05 - 100, 1)
@@ -324,7 +314,6 @@ def obtener_pronostico():
         except Exception:
             continue
 
-    # NO HAY PARTIDOS FALSOS. Si la lista está vacía, se queda vacía.
     resultados_destacados = todos_los_partidos_plano[:8] if todos_los_partidos_plano else []
 
     payload_completo = {
