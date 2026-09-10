@@ -370,7 +370,7 @@ def aplicar_censura(payload, es_vip):
         item_censurado["parley_cuota"] = "🔒"
         destacados_limpios.append(item_censurado)
         
-    payload_censurado["pronosticos_destacados"] = destacados_limpios
+        payload_censurado["pronosticos_destacados"] = destacados_limpios
     return jsonify(payload_censurado)
 
 if __name__ == '__main__':
