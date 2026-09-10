@@ -4,11 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PredicXion IA - Dashboard</title>
+    
+    <link rel="icon" href="data:,">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <script src="https://sdk.mercadopago.com/js/v2"></script>
+    
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
@@ -149,6 +153,58 @@
 
         <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-85px)] overflow-y-auto relative">
             <div id="main-workspace" class="flex-1 p-4 sm:p-6 overflow-y-auto">
+                
+                <div id="multiregion-telemetry-panel" class="max-w-4xl mx-auto mb-6 bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-2xl">
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></span>
+                            <span class="text-xs font-black uppercase tracking-wider text-slate-200">Red Global de Inteligencia Deportiva (CRDT Sync Activo)</span>
+                        </div>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-cyan-500/30">Auto-Scheduler 02:30 AM</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5" id="topology-nodes-container">
+                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block">STATION-AMER-01</span>
+                            <span class="text-xs font-black text-white">UTC-5 (Lima/NY)</span>
+                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
+                        </div>
+                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block">STATION-EURO-01</span>
+                            <span class="text-xs font-black text-white">UTC+0 (Londres)</span>
+                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
+                        </div>
+                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block">STATION-EAST-01</span>
+                            <span class="text-xs font-black text-white">UTC+3 (Estambul)</span>
+                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
+                        </div>
+                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block">STATION-APAC-01</span>
+                            <span class="text-xs font-black text-white">UTC+8 (Tokio)</span>
+                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-baseDark rounded-xl p-4 border border-cardBorder">
+                        <h4 class="text-xs font-black text-slate-300 uppercase tracking-tight mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-microchip text-accentGreen"></i> Evaluación de las 10 Dimensiones Analíticas
+                        </h4>
+                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center" id="ten-dimensions-grid">
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">1. Forma Exp.</span><span class="text-xs font-black text-white">1.84</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">2. Adaptación</span><span class="text-xs font-black text-accentGreen">0.96 (Alt: OK)</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">3. xG Lambda</span><span class="text-xs font-black text-white">1.94</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">4. Def. 15min</span><span class="text-xs font-black text-amber-400">Peligro 75-90'</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">5. Estilo Comp.</span><span class="text-xs font-black text-white">78%</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">6. Bajas Clave</span><span class="text-xs font-black text-red-400">-0.12 Dp</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">7. Contexto</span><span class="text-xs font-black text-white">Urgencia 1.1x</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">8. Rival Tier</span><span class="text-xs font-black text-white">Top 15%</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">9. Fatiga/Km</span><span class="text-xs font-black text-white">340 km</span></div>
+                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">10. H2H Bayes</span><span class="text-xs font-black text-accentGreen">+0.04</span></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="welcome-view" class="h-full min-h-[300px] flex flex-col justify-center items-center text-center max-w-xl mx-auto py-10">
                     <div class="w-16 h-16 rounded-2xl bg-cardDark border border-cardBorder flex items-center justify-center text-cyan-400 text-3xl shadow-xl shadow-cyan-500/10 mb-4">
                         <i class="fa-solid fa-bolt"></i>
@@ -305,7 +361,6 @@
         </div>
     </div>
 
-    <!-- LOGICA -->
     <script>
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
@@ -322,7 +377,7 @@
             if (window.MercadoPago) {
                 mpInstance = new window.MercadoPago(MERCADOPAGO_PUBLIC_KEY, { locale: 'es-PE' });
             }
-        } catch(e) { console.log("MP inicializado."); }
+        } catch(e) {}
 
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -340,7 +395,9 @@
             return teamName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_') + '.png';
         };
 
-        const fallbackImg = "https://ui-avatars.com/api/?background=0f172a&color=fff&rounded=true&bold=true&name=";
+        const generateFallbackImg = (teamName) => {
+            return `https://ui-avatars.com/api/?background=0f172a&color=fff&rounded=true&bold=true&name=${encodeURIComponent(teamName)}`;
+        };
 
         document.addEventListener('DOMContentLoaded', () => {
             try {
@@ -348,7 +405,7 @@
                     const app = window.firebaseInitializeApp(FIREBASE_CONFIG);
                     authInstance = window.firebaseGetAuth(app);
                 }
-            } catch (e) { console.log("Firebase activo."); }
+            } catch (e) {}
 
             const saved = localStorage.getItem('predicxion_user');
             if (saved) {
@@ -662,11 +719,11 @@
                             <div onclick="mostrarAnalisisDetallado('${esc}', '${p.fecha}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer flex justify-between items-center transition group">
                                 <div class="text-[11px] leading-tight space-y-1">
                                     <div class="flex items-center gap-1.5">
-                                        <img src="/static/logos/${formatLogoName(local)}" class="w-3.5 h-3.5 object-contain" onerror="this.onerror=null; this.src='${fallbackImg}${encodeURIComponent(local)}';">
+                                        <img src="/static/logos/${formatLogoName(local)}" class="w-3.5 h-3.5 object-contain" onerror="this.onerror=null; this.src='${generateFallbackImg(local)}';">
                                         <div class="font-bold text-slate-200 group-hover:text-white">${local}</div>
                                     </div>
                                     <div class="flex items-center gap-1.5">
-                                        <img src="/static/logos/${formatLogoName(visita)}" class="w-3.5 h-3.5 object-contain" onerror="this.onerror=null; this.src='${fallbackImg}${encodeURIComponent(visita)}';">
+                                        <img src="/static/logos/${formatLogoName(visita)}" class="w-3.5 h-3.5 object-contain" onerror="this.onerror=null; this.src='${generateFallbackImg(visita)}';">
                                         <div class="text-slate-400 font-medium">${visita}</div>
                                     </div>
                                     <div class="text-[9px] text-accentGreen mt-1 pl-5">${p.fecha}</div>
@@ -741,13 +798,13 @@
                             <div class="space-y-2">
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='${fallbackImg}${encodeURIComponent(local)}';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='${generateFallbackImg(local)}';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
                                 </div>
                                 <div class="flex items-center gap-2.5">
                                     <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='${fallbackImg}${encodeURIComponent(visita)}';" class="w-full h-full object-contain p-0.5">
+                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='${generateFallbackImg(visita)}';" class="w-full h-full object-contain p-0.5">
                                     </div>
                                     <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
                                 </div>
@@ -790,7 +847,6 @@
             const visita = partes[1] ? partes[1].trim() : '';
             const esVIP = usuarioActual.esVip;
 
-            // SOLUCIÓN A CONSOLA: Se aplicó "this.onerror=null" para evitar el bucle infinito si la imagen fallback falla.
             detailView.innerHTML = `
                 <div class="bg-cardDark border border-cardBorder rounded-2xl overflow-hidden shadow-2xl mb-6">
                     <div class="px-6 py-4 border-b border-cardBorder flex justify-between items-center bg-baseDark/60">
@@ -803,14 +859,12 @@
 
                     <div class="px-6 py-8 flex items-center justify-between bg-gradient-to-b from-slate-800/40 to-transparent border-b border-cardBorder mb-6">
                         <div class="flex flex-col items-center gap-3 w-[40%] text-center">
-                            <img src="/static/logos/${formatLogoName(local)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${fallbackImg}${encodeURIComponent(local)}';">
+                            <img src="/static/logos/${formatLogoName(local)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${generateFallbackImg(local)}';">
                             <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${local}</h2>
                         </div>
-                        
                         <div class="text-slate-600 font-black text-lg px-2">VS</div>
-                        
                         <div class="flex flex-col items-center gap-3 w-[40%] text-center">
-                            <img src="/static/logos/${formatLogoName(visita)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${fallbackImg}${encodeURIComponent(visita)}';">
+                            <img src="/static/logos/${formatLogoName(visita)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${generateFallbackImg(visita)}';">
                             <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${visita}</h2>
                         </div>
                     </div>
@@ -831,9 +885,7 @@
                         <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-4 relative">
                             <div class="flex justify-between items-center mb-3">
                                 <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-accentGreen/15 flex items-center justify-center text-accentGreen text-xs">
-                                        <i class="fa-solid fa-bullseye"></i>
-                                    </div>
+                                    <div class="w-7 h-7 rounded-full bg-accentGreen/15 flex items-center justify-center text-accentGreen text-xs"><i class="fa-solid fa-bullseye"></i></div>
                                     <span class="text-xs font-black text-white uppercase tracking-wider">Pick de Valor Pro</span>
                                 </div>
                                 <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
@@ -843,31 +895,16 @@
                             </div>
                             ${esVIP ? `
                                 <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div>
-                                        <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span>
-                                        <span class="font-black text-white text-sm">${item.pick_valor}</span>
-                                    </div>
+                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span><span class="font-black text-white text-sm">${item.pick_valor}</span></div>
                                     <span class="bg-accentGreen/20 text-accentGreen text-[10px] font-black px-2.5 py-1 rounded border border-accentGreen/30">EV: ${item.ev_valor}</span>
                                 </div>
-                            ` : `
-                                <div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark">
-                                    <div class="vip-blur flex justify-between items-center">
-                                        <span class="font-bold text-white text-sm">Pick Oculto por Membresía</span>
-                                        <span class="text-accentGreen text-xs font-black">EV: +8.5%</span>
-                                    </div>
-                                    <div class="absolute inset-0 flex items-center justify-center">
-                                        <span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span>
-                                    </div>
-                                </div>
-                            `}
+                            ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Pick Oculto por Membresía</span><span class="text-accentGreen text-xs font-black">EV: +8.5%</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
                         </div>
 
                         <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-4 relative">
                             <div class="flex justify-between items-center mb-3">
                                 <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-purple-500/15 flex items-center justify-center text-purple-400 text-xs">
-                                        <i class="fa-solid fa-bomb"></i>
-                                    </div>
+                                    <div class="w-7 h-7 rounded-full bg-purple-500/15 flex items-center justify-center text-purple-400 text-xs"><i class="fa-solid fa-bomb"></i></div>
                                     <span class="text-xs font-black text-white uppercase tracking-wider">Pick Bomba Pro</span>
                                 </div>
                                 <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
@@ -877,31 +914,16 @@
                             </div>
                             ${esVIP ? `
                                 <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div>
-                                        <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span>
-                                        <span class="font-black text-white text-sm">${item.pick_bomba}</span>
-                                    </div>
+                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span><span class="font-black text-white text-sm">${item.pick_bomba}</span></div>
                                     <span class="bg-purple-500/20 text-purple-400 text-[10px] font-black px-2.5 py-1 rounded border border-purple-500/30">EV: ${item.ev_bomba}</span>
                                 </div>
-                            ` : `
-                                <div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark">
-                                    <div class="vip-blur flex justify-between items-center">
-                                        <span class="font-bold text-white text-sm">Pick Bomba Oculto</span>
-                                        <span class="text-purple-400 text-xs font-black">EV: +14%</span>
-                                    </div>
-                                    <div class="absolute inset-0 flex items-center justify-center">
-                                        <span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span>
-                                    </div>
-                                </div>
-                            `}
+                            ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Pick Bomba Oculto</span><span class="text-purple-400 text-xs font-black">EV: +14%</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
                         </div>
 
                         <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-6 relative">
                             <div class="flex justify-between items-center mb-3">
                                 <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400 text-xs">
-                                        <i class="fa-solid fa-layer-group"></i>
-                                    </div>
+                                    <div class="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400 text-xs"><i class="fa-solid fa-layer-group"></i></div>
                                     <span class="text-xs font-black text-white uppercase tracking-wider">Parley Segura (Combinada)</span>
                                 </div>
                                 <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
@@ -911,32 +933,17 @@
                             </div>
                             ${esVIP ? `
                                 <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div>
-                                        <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Fórmula Estructurada:</span>
-                                        <span class="font-black text-white text-sm">${item.parley_pick}</span>
-                                    </div>
+                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Fórmula Estructurada:</span><span class="font-black text-white text-sm">${item.parley_pick}</span></div>
                                     <span class="bg-blue-500/20 text-blue-400 text-[10px] font-black px-2.5 py-1 rounded border border-blue-500/30">Valor</span>
                                 </div>
-                            ` : `
-                                <div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark">
-                                    <div class="vip-blur flex justify-between items-center">
-                                        <span class="font-bold text-white text-sm">Parley Oculta</span>
-                                        <span class="text-blue-400 text-xs font-black">Combinada</span>
-                                    </div>
-                                    <div class="absolute inset-0 flex items-center justify-center">
-                                        <span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span>
-                                    </div>
-                                </div>
-                            `}
+                            ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Parley Oculta</span><span class="text-blue-400 text-xs font-black">Combinada</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
                         </div>
 
                         ${!esVIP ? `
                             <div class="bg-baseDark border border-cardBorder rounded-2xl p-8 text-center relative overflow-hidden">
-                                <div class="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-400 text-xl">
-                                    <i class="fa-solid fa-lock"></i>
-                                </div>
+                                <div class="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-400 text-xl"><i class="fa-solid fa-lock"></i></div>
                                 <h3 class="text-lg font-black text-white">Análisis premium</h3>
-                                <p class="text-xs text-slate-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">Desbloquea el análisis completo, líneas completas de goles Over/Under, proyecciones de corners, 1X2, modelo xG y los fundamentos matemáticos de este partido.</p>
+                                <p class="text-xs text-slate-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">Desbloquea el análisis completo, proyecciones de corners, 1X2, modelo xG y los fundamentos matemáticos de este partido.</p>
                                 <button onclick="abrirVipModal()" class="bg-accentGreen hover:bg-accentHover text-slate-950 font-black text-xs px-6 py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20">Desbloquear ahora</button>
                             </div>
                         ` : `
@@ -971,30 +978,19 @@
 
             document.getElementById('welcome-view').classList.add('hidden');
             document.getElementById('match-detail-view').classList.add('hidden');
-            
             const chatContainer = document.getElementById('chat-messages-container');
             chatContainer.classList.remove('hidden');
 
-            chatContainer.innerHTML += `
-                <div class="flex justify-end">
-                    <div class="bg-accentBlue text-white text-xs font-bold py-3 px-4 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">${msg}</div>
-                </div>
-            `;
+            chatContainer.innerHTML += `<div class="flex justify-end"><div class="bg-accentBlue text-white text-xs font-bold py-3 px-4 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">${msg}</div></div>`;
             input.value = '';
 
             const idLoad = 'load-' + Date.now();
-            chatContainer.innerHTML += `
-                <div id="${idLoad}" class="flex justify-start">
-                    <div class="bg-cardDark border border-cardBorder text-slate-400 text-xs py-2.5 px-4 rounded-2xl flex items-center gap-2">
-                        <i class="fa-solid fa-circle-notch fa-spin text-accentGreen"></i> Consultando modelo cuantitativo...
-                    </div>
-                </div>
-            `;
+            chatContainer.innerHTML += `<div id="${idLoad}" class="flex justify-start"><div class="bg-cardDark border border-cardBorder text-slate-400 text-xs py-2.5 px-4 rounded-2xl flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-accentGreen"></i> Ejecutando motor de Inteligencia Artificial...</div></div>`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 9000);
 
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 9000);
-
                 const res = await fetch(`${API_BASE}/chat-ia`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1009,18 +1005,9 @@
                 const data = await res.json();
                 document.getElementById(idLoad)?.remove();
 
-                const formatted = (data.respuesta || "")
-                    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-accentGreen font-bold">$1</strong>')
-                    .replace(/\n/g, '<br>');
-
-                chatContainer.innerHTML += `
-                    <div class="flex justify-start">
-                        <div class="bg-cardDark border border-cardBorder text-slate-200 text-xs p-4 rounded-2xl rounded-tl-sm max-w-[95%] leading-relaxed shadow-lg">
-                            <span class="text-accentGreen font-black block text-[10px] uppercase tracking-wider mb-1.5"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</span>
-                            ${formatted}
-                        </div>
-                    </div>
-                `;
+                const formatted = (data.respuesta || "").replace(/\*\*(.*?)\*\*/g, '<strong class="text-accentGreen font-bold">$1</strong>').replace(/\n/g, '<br>');
+                chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-cardDark border border-cardBorder text-slate-200 text-xs p-4 rounded-2xl rounded-tl-sm max-w-[95%] leading-relaxed shadow-lg"><span class="text-accentGreen font-black block text-[10px] uppercase tracking-wider mb-1.5"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</span>${formatted}</div></div>`;
+                
                 chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
 
             } catch (err) {
