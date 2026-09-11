@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PredicXion IA - Dashboard</title>
+    <title>PredicXion IA - Dashboard Institucional</title>
     
     <link rel="icon" href="data:,">
     
@@ -87,11 +87,16 @@
                     <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
                 </span>
             </div>
-            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Inteligencia Artificial Especializada en Análisis Deportivos</p>
-            <p class="text-[11px] text-accentGreen font-semibold hidden md:block">Nuestra fórmula del éxito: Estadísticas y cuotas en vivo + modelos predictivos propios + Inteligencia artificial.</p>
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Arquitectura Institucional de Inteligencia Deportiva</p>
+            <p class="text-[11px] text-accentGreen font-semibold hidden md:block">Mercado Real + Value Betting + Quarter Kelly + CLV Tracking.</p>
         </div>
 
         <div class="flex items-center gap-3">
+            <button onclick="alternarVistaAciertos()" id="btn-nav-aciertos" class="bg-cardDark hover:bg-slate-800 border border-cardBorder text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition">
+                <i class="fa-solid fa-chart-line text-accentGreen"></i>
+                <span id="nav-aciertos-text">Ver Aciertos</span>
+            </button>
+
             <button id="btn-abrir-vip" onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 flex items-center gap-2 transition transform hover:scale-[1.02]">
                 <i class="fa-solid fa-star"></i> <span id="nav-vip-text">Mejorar a Premium</span>
             </button>
@@ -122,7 +127,7 @@
                         <i class="fa-brands fa-telegram text-white text-2xl group-hover:scale-110 transition-transform"></i>
                         <div class="text-left">
                             <h4 class="text-xs font-black text-white uppercase tracking-tight">Comunidad VIP</h4>
-                            <p class="text-[10px] text-blue-100">Canal oficial de alertas gratis</p>
+                            <p class="text-[10px] text-blue-100">Alertas de Valor y Dropping Odds</p>
                         </div>
                     </div>
                     <i class="fa-solid fa-chevron-right text-blue-200 text-xs"></i>
@@ -137,7 +142,7 @@
             </div>
 
             <div class="p-3 border-b border-cardBorder/60 bg-cardDark/40">
-                <p class="text-[10px] text-slate-400 mb-2">Elige una liga y toca un partido para analizarlo</p>
+                <p class="text-[10px] text-slate-400 mb-2">Selecciona un partido para ver el análisis de valor</p>
                 <div class="relative">
                     <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-[11px]"></i>
@@ -154,6 +159,7 @@
         <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-85px)] overflow-y-auto relative">
             <div id="main-workspace" class="flex-1 p-4 sm:p-6 overflow-y-auto">
                 
+                <!-- TELEMETRÍA 10 DIMENSIONES -->
                 <div id="multiregion-telemetry-panel" class="max-w-4xl mx-auto mb-6 bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-2xl">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-4">
                         <div class="flex items-center gap-2">
@@ -205,18 +211,128 @@
                     </div>
                 </div>
 
+                <!-- DASHBOARD AUDITORÍA ACIERTOS (PRONOSTIC.IO STYLE) -->
+                <section id="view-aciertos" class="hidden max-w-5xl mx-auto space-y-6 pb-12">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-cardBorder pb-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-1 rounded-md bg-accentGreen/15 border border-accentGreen/30 text-accentGreen text-[10px] font-black uppercase tracking-wider">
+                                    Auditoría Verificada
+                                </span>
+                                <span class="text-xs text-slate-500 font-mono">100% Transparente</span>
+                            </div>
+                            <h2 class="text-xl sm:text-2xl font-black text-white mt-1.5 tracking-tight font-outfit">
+                                Registro de Acierto de Pronósticos
+                            </h2>
+                            <p class="text-xs text-slate-400 mt-0.5">
+                                Historial auditado de selecciones algorítmicas, cuotas recomendadas, CLV y resultados reales.
+                            </p>
+                        </div>
+                        <button onclick="alternarVistaAciertos()" class="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-arrow-left"></i> Volver a Cartelera en Vivo
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5 relative overflow-hidden">
+                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                                <span class="font-bold uppercase text-[10px] tracking-wider">Acierto Global</span>
+                                <i class="fa-solid fa-bullseye text-accentGreen"></i>
+                            </div>
+                            <div class="text-2xl sm:text-3xl font-black text-white font-outfit" id="stat-winrate">--%</div>
+                            <p class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-win-loss">0 Acertadas / 0 Falladas</p>
+                            <div class="absolute bottom-0 left-0 h-1 bg-accentGreen" id="bar-winrate" style="width: 0%"></div>
+                        </div>
+
+                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
+                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                                <span class="font-bold uppercase text-[10px] tracking-wider">Rendimiento (Yield)</span>
+                                <i class="fa-solid fa-arrow-trend-up text-cyan-400"></i>
+                            </div>
+                            <div class="text-2xl sm:text-3xl font-black text-cyan-400 font-outfit" id="stat-yield">--%</div>
+                            <p class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-units">0.00 Unidades Netas</p>
+                        </div>
+
+                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
+                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                                <span class="font-bold uppercase text-[10px] tracking-wider">Racha Actual</span>
+                                <i class="fa-solid fa-fire text-amber-400"></i>
+                            </div>
+                            <div class="text-2xl sm:text-3xl font-black text-white font-outfit" id="stat-streak">--</div>
+                            <p class="text-[10px] text-slate-500 mt-1 font-mono">Últimas selecciones oficiales</p>
+                        </div>
+
+                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
+                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
+                                <span class="font-bold uppercase text-[10px] tracking-wider">Cuota Promedio</span>
+                                <i class="fa-solid fa-scale-balanced text-purple-400"></i>
+                            </div>
+                            <div class="text-2xl sm:text-3xl font-black text-white font-outfit" id="stat-odds">--</div>
+                            <p class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-best-month">Mejor mes: --</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-baseDark border border-cardBorder rounded-2xl p-3 sm:p-4 flex flex-wrap gap-3 items-center justify-between">
+                        <div class="flex flex-wrap gap-2.5 items-center flex-1">
+                            <select id="filtro-acierto-liga" onchange="cargarDatosAciertos()" class="bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-accentGreen">
+                                <option value="">Todas las Ligas</option>
+                                <option value="Premier League">Premier League</option>
+                                <option value="LaLiga">LaLiga</option>
+                                <option value="Bundesliga">Bundesliga</option>
+                                <option value="Serie A">Serie A</option>
+                                <option value="Brasileirão Série A">Brasileirão</option>
+                            </select>
+
+                            <select id="filtro-acierto-mercado" onchange="cargarDatosAciertos()" class="bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-accentGreen">
+                                <option value="">Todos los Mercados</option>
+                                <option value="Goles">Líneas de Goles</option>
+                                <option value="1X2">Ganador (1X2 / Doble Op.)</option>
+                                <option value="Ambos Anotan">Ambos Equipos Anotan</option>
+                                <option value="Corners">Corners</option>
+                            </select>
+                        </div>
+                        <span class="text-xs text-slate-500 font-mono" id="contador-partidos-resueltos">0 pronósticos auditados</span>
+                    </div>
+
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl overflow-hidden shadow-xl">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-baseDark/90 text-[10px] text-slate-400 uppercase tracking-wider border-b border-cardBorder">
+                                    <tr>
+                                        <th class="py-3.5 px-4">Fecha & Liga</th>
+                                        <th class="py-3.5 px-4">Partido / Marcador Real</th>
+                                        <th class="py-3.5 px-4">Jugada IA (Pick)</th>
+                                        <th class="py-3.5 px-3 text-center">Cuota Entrada</th>
+                                        <th class="py-3.5 px-3 text-center">CLV Cierre</th>
+                                        <th class="py-3.5 px-4 text-center">Estado</th>
+                                        <th class="py-3.5 px-4 text-right">Resultado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla-aciertos-body" class="divide-y divide-cardBorder/40">
+                                    <tr>
+                                        <td colspan="7" class="text-center py-8 text-slate-500">
+                                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando historial de pronósticos...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
                 <div id="welcome-view" class="h-full min-h-[300px] flex flex-col justify-center items-center text-center max-w-xl mx-auto py-10">
                     <div class="w-16 h-16 rounded-2xl bg-cardDark border border-cardBorder flex items-center justify-center text-cyan-400 text-3xl shadow-xl shadow-cyan-500/10 mb-4">
                         <i class="fa-solid fa-bolt"></i>
                     </div>
-                    <h2 class="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">Bienvenido a la IA de Análisis deportivo. Prepara tu consulta.</h2>
-                    <p class="text-xs text-slate-400 mt-2 leading-relaxed">Selecciona un partido del menú lateral, toca uno de los pronósticos destacados o haz cualquier pregunta táctica para iniciar el análisis cuantitativo.</p>
+                    <h2 class="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">Bienvenido a la IA de Análisis cuantitativo.</h2>
+                    <p class="text-xs text-slate-400 mt-2 leading-relaxed">Selecciona un partido del menú lateral, toca uno de los pronósticos destacados o consulta al analista en vivo.</p>
                 </div>
 
                 <div id="match-detail-view" class="hidden max-w-4xl mx-auto"></div>
                 <div id="chat-messages-container" class="hidden max-w-4xl mx-auto space-y-4 pt-4"></div>
             </div>
 
+            <!-- CARRUSEL DE PRONÓSTICOS DESTACADOS -->
             <div class="border-t border-cardBorder bg-baseDark/95 p-4 flex-shrink-0">
                 <div class="flex items-center justify-between mb-3 px-1">
                     <div class="flex items-center gap-2">
@@ -255,7 +371,7 @@
         </main>
     </div>
 
-    <!-- MODAL AUTH -->
+    <!-- MODAL AUTH COMPLETO -->
     <div id="modal-auth" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#1a202c] border border-slate-700/50 w-full max-w-[420px] rounded-2xl p-7 shadow-2xl relative">
             <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white text-lg transition"><i class="fa-solid fa-xmark"></i></button>
@@ -288,15 +404,12 @@
                 <div>
                     <input type="password" id="auth-password" required placeholder="Contraseña (mínimo 6 caracteres)" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
-                <div class="text-right" id="forgot-password-link">
-                    <a href="#" class="text-accentBlue hover:text-blue-400 text-xs font-bold transition">¿Olvidaste tu contraseña?</a>
-                </div>
                 <button type="submit" id="auth-btn-submit" class="w-full bg-accentGreen hover:bg-accentHover text-slate-950 font-black text-sm py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20 mt-2">Iniciar sesión con email</button>
             </form>
         </div>
     </div>
 
-    <!-- MODAL VIP -->
+    <!-- MODAL VIP COMPLETO -->
     <div id="modal-vip" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
         <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-5 sm:p-7 shadow-2xl relative my-auto">
             <button onclick="cerrarVipModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
@@ -304,7 +417,7 @@
             <div class="text-center mb-6">
                 <span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">Membresía Exclusiva</span>
                 <h3 class="font-outfit font-black text-2xl sm:text-3xl text-white mt-2">Desbloquea el análisis completo</h3>
-                <p class="text-xs sm:text-sm text-slate-400 mt-1.5">Rentabilidad matemática real, modelos xG y valor esperado en cada partido.</p>
+                <p class="text-xs sm:text-sm text-slate-400 mt-1.5">Modelos xG, Quarter Kelly, Dropping Odds y Valor Esperado real.</p>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
@@ -361,7 +474,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT DE LÓGICA DE CLIENTE (CON CORRECCIÓN RESILIENTE) -->
+    <!-- CONTROLADOR JAVASCRIPT COMPLETO -->
     <script>
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
@@ -390,6 +503,7 @@
         const ligasAbiertas = {};
         let listaDestacadosCache = [];
         let authInstance = null;
+        let vistaAciertosActiva = false;
 
         const formatLogoName = (teamName) => {
             if (!teamName) return 'default.png';
@@ -473,14 +587,12 @@
                 tabLogin.className = 'flex-1 text-slate-400 hover:text-white font-bold text-sm py-2.5 rounded-lg transition';
                 document.getElementById('auth-btn-submit').innerText = 'Crear cuenta con email';
                 document.getElementById('campo-usuario').classList.remove('hidden');
-                document.getElementById('forgot-password-link').classList.add('hidden');
                 document.getElementById('auth-title').innerText = 'Crea tu usuario';
             } else {
                 tabLogin.className = 'flex-1 bg-accentBlue text-white font-bold text-sm py-2.5 rounded-lg transition shadow-md';
                 tabRegister.className = 'flex-1 text-slate-400 hover:text-white font-bold text-sm py-2.5 rounded-lg transition';
                 document.getElementById('auth-btn-submit').innerText = 'Iniciar sesión con email';
                 document.getElementById('campo-usuario').classList.add('hidden');
-                document.getElementById('forgot-password-link').classList.remove('hidden');
                 document.getElementById('auth-title').innerText = 'Desbloquea más pronósticos';
             }
         }
@@ -635,17 +747,13 @@
             }, 1500);
         }
 
-        // SECCIÓN CORREGIDA: Manejo robusto con verificación res.ok y reintentos escalonados
         async function cargarDatosCartelera(reintentos = 2) {
             const sidebarMatches = document.getElementById('sidebar-matches');
             try {
                 const emailParam = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
                 const res = await fetch(`${API_BASE}/obtener-pronostico${emailParam}`);
                 
-                if (!res.ok) {
-                    throw new Error(`Servidor respondió con código HTTP ${res.status}`);
-                }
-                
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 
                 if (data.todos_los_partidos && Object.keys(data.todos_los_partidos).length > 0) {
@@ -687,9 +795,7 @@
 
             for (const [liga, partidos] of Object.entries(ligas)) {
                 const filtrados = partidos.filter(p => p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query));
-                
                 if (query && filtrados.length === 0 && !liga.toLowerCase().includes(query)) continue;
-
                 const abierta = query ? true : ligasAbiertas[liga] !== false;
 
                 html += `
@@ -708,11 +814,7 @@
                         </div>
                     `;
                 } else if (filtrados.length === 0) {
-                     html += `
-                        <div class="p-3 text-center">
-                            <span class="text-[10px] text-slate-500">No coincide con la búsqueda</span>
-                        </div>
-                    `;
+                     html += `<div class="p-3 text-center"><span class="text-[10px] text-slate-500">No coincide con la búsqueda</span></div>`;
                 } else {
                     filtrados.forEach(p => {
                         const partes = p.partido.split(' vs ');
@@ -738,7 +840,6 @@
                         `;
                     });
                 }
-
                 html += `</div></div>`;
                 id++;
             }
@@ -761,18 +862,12 @@
             const wrapper = document.getElementById('carrusel-wrapper');
             const btn = document.getElementById('btn-toggle-carrusel');
             wrapper.classList.toggle('hidden');
-            if (wrapper.classList.contains('hidden')) {
-                btn.innerHTML = 'Mostrar <i class="fa-solid fa-chevron-down text-[9px]"></i>';
-            } else {
-                btn.innerHTML = 'Ocultar <i class="fa-solid fa-chevron-up text-[9px]"></i>';
-            }
+            btn.innerHTML = wrapper.classList.contains('hidden') ? 'Mostrar <i class="fa-solid fa-chevron-down text-[9px]"></i>' : 'Ocultar <i class="fa-solid fa-chevron-up text-[9px]"></i>';
         }
 
         function moverCarrusel(dir) {
             const container = document.getElementById('carousel-cards');
-            if(container) {
-                container.scrollBy({ left: dir * 290, behavior: 'smooth' });
-            }
+            if(container) container.scrollBy({ left: dir * 290, behavior: 'smooth' });
         }
 
         function renderizarCarrusel(destacados) {
@@ -786,18 +881,13 @@
                 const esc = d.partido.replace(/'/g, "\\'");
 
                 html += `
-                    <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
+                    <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all group">
                         <div>
                             <div class="flex items-center gap-1.5 mb-3 flex-wrap">
                                 <span class="bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <i class="fa-solid fa-star text-[8px]"></i> FAVORITO
+                                    <i class="fa-solid fa-star text-[8px]"></i> VALOR REAL
                                 </span>
-                                <span class="bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <i class="fa-solid fa-bullseye text-[8px]"></i> VALOR
-                                </span>
-                                <span class="bg-purple-950/80 text-purple-400 border border-purple-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <i class="fa-solid fa-bomb text-[8px]"></i> BOMBA
-                                </span>
+                                ${d.dropping_odds ? `<span class="bg-red-950/80 text-red-400 border border-red-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">📉 DROPPING</span>` : ''}
                             </div>
 
                             <div class="space-y-2">
@@ -831,6 +921,7 @@
         function mostrarAnalisisDetallado(nombrePartido, fecha) {
             document.getElementById('welcome-view').classList.add('hidden');
             document.getElementById('chat-messages-container').classList.add('hidden');
+            document.getElementById('view-aciertos').classList.add('hidden');
             
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
@@ -844,7 +935,8 @@
             const item = matchData || {
                 partido: nombrePartido, fecha: fecha || 'Próximo', cuota_valor: '1.80', pick_valor: 'Calculando...', ev_valor: '+0.0%',
                 cuota_bomba: '3.00', pick_bomba: 'Calculando...', ev_bomba: '+0.0%', under_25_prob: '50', over_25_prob: '50',
-                parley_pick: 'Calculando...', parley_cuota: '2.00', analisis_premium: "<p>Análisis en proceso...</p>"
+                parley_pick: 'Calculando...', parley_cuota: '2.00', analisis_premium: "<p>Análisis en proceso...</p>",
+                stake_kelly: '1.5% Bank', clv_target: '1.68'
             };
 
             const partes = item.partido.split(' vs ');
@@ -857,7 +949,7 @@
                     <div class="px-6 py-4 border-b border-cardBorder flex justify-between items-center bg-baseDark/60">
                         <div class="flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
-                            <span class="text-xs font-black uppercase tracking-wider text-slate-300">Análisis del Encuentro</span>
+                            <span class="text-xs font-black uppercase tracking-wider text-slate-300">Análisis Cuantitativo y de Mercado</span>
                         </div>
                         <span class="text-xs text-slate-400 font-medium">${item.fecha}</span>
                     </div>
@@ -877,9 +969,9 @@
                     <div class="px-6 pb-6">
                         ${esVIP ? `
                         <div class="bg-baseDark border border-cardBorder rounded-xl overflow-hidden mb-6 shadow-sm">
-                            <div class="bg-slate-800/40 px-4 py-3 border-b border-cardBorder flex items-center gap-2">
-                                <span class="text-sm">📊</span>
+                            <div class="bg-slate-800/40 px-4 py-3 border-b border-cardBorder flex items-center justify-between">
                                 <h3 class="text-xs font-black text-slate-200 uppercase tracking-wider">Pronóstico Estadístico y Corners</h3>
+                                <span class="text-[10px] text-cyan-400 font-mono font-bold">CLV Target: ${item.clv_target || '1.70'}</span>
                             </div>
                             <div class="p-5 text-xs text-slate-300 leading-relaxed space-y-4">
                                 ${item.analisis_premium}
@@ -894,13 +986,17 @@
                                     <span class="text-xs font-black text-white uppercase tracking-wider">Pick de Valor Pro</span>
                                 </div>
                                 <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
-                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota</span>
+                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota Real</span>
                                     <span class="text-amber-400 font-black text-sm">≈${item.cuota_valor}</span>
                                 </div>
                             </div>
                             ${esVIP ? `
                                 <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span><span class="font-black text-white text-sm">${item.pick_valor}</span></div>
+                                    <div>
+                                        <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span>
+                                        <span class="font-black text-white text-sm">${item.pick_valor}</span>
+                                        <span class="text-[10px] text-cyan-400 font-mono block mt-1">Gestión: ${item.stake_kelly || '1.5% Bank'}</span>
+                                    </div>
                                     <span class="bg-accentGreen/20 text-accentGreen text-[10px] font-black px-2.5 py-1 rounded border border-accentGreen/30">EV: ${item.ev_valor}</span>
                                 </div>
                             ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Pick Oculto por Membresía</span><span class="text-accentGreen text-xs font-black">EV: +8.5%</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
@@ -975,6 +1071,86 @@
             `;
         }
 
+        async function alternarVistaAciertos() {
+            vistaAciertosActiva = !vistaAciertosActiva;
+            const viewAciertos = document.getElementById('view-aciertos');
+            const welcomeView = document.getElementById('welcome-view');
+            const detailView = document.getElementById('match-detail-view');
+            const chatContainer = document.getElementById('chat-messages-container');
+            const navBtnText = document.getElementById('nav-aciertos-text');
+
+            if (vistaAciertosActiva) {
+                welcomeView.classList.add('hidden');
+                detailView.classList.add('hidden');
+                chatContainer.classList.add('hidden');
+                viewAciertos.classList.remove('hidden');
+                navBtnText.innerText = 'Ver Cartelera';
+                await cargarDatosAciertos();
+            } else {
+                viewAciertos.classList.add('hidden');
+                welcomeView.classList.remove('hidden');
+                navBtnText.innerText = 'Ver Aciertos';
+            }
+        }
+
+        async function cargarDatosAciertos() {
+            const tbody = document.getElementById('tabla-aciertos-body');
+            try {
+                const res = await fetch(`${API_BASE}/api/v2/aciertos`);
+                if (!res.ok) throw new Error("Fallo al consultar historial");
+                const data = await res.json();
+
+                const stats = data.metricas_globales;
+                document.getElementById('stat-winrate').innerText = `${stats.tasa_acierto_pct}%`;
+                document.getElementById('bar-winrate').style.width = `${stats.tasa_acierto_pct}%`;
+                document.getElementById('stat-win-loss').innerText = `${stats.acertados} Acertadas / ${stats.fallados} Falladas`;
+                document.getElementById('stat-yield').innerText = `${stats.yield_pct > 0 ? '+' : ''}${stats.yield_pct}%`;
+                document.getElementById('stat-units').innerText = `${stats.unidades_netas > 0 ? '+' : ''}${stats.unidades_netas}u`;
+                document.getElementById('stat-streak').innerText = stats.racha_actual;
+                document.getElementById('stat-odds').innerText = stats.cuota_promedio.toFixed(2);
+                document.getElementById('stat-best-month').innerText = `Mejor: ${stats.mejor_mes}`;
+                document.getElementById('contador-partidos-resueltos').innerText = `${data.registros.length} pronósticos auditados`;
+
+                let html = '';
+                data.registros.forEach(r => {
+                    const esWin = r.estado === "GANADA";
+                    const badge = esWin 
+                        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-accentGreen text-[10px] font-black"><i class="fa-solid fa-check"></i> ACERTADO</span>`
+                        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-950/80 border border-red-500/40 text-red-400 text-[10px] font-black"><i class="fa-solid fa-xmark"></i> FALLADO</span>`;
+
+                    html += `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="py-3 px-4">
+                                <div class="font-bold text-slate-200">${r.competicion}</div>
+                                <div class="text-[10px] text-slate-500">${r.fecha || 'Reciente'}</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <div class="font-black text-white">${r.partido}</div>
+                                <div class="text-[11px] text-cyan-400 font-mono font-bold mt-0.5">${r.marcador || 'Liquidado'}</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="text-[9px] font-bold text-slate-400 uppercase block">${r.mercado || 'Pick'}</span>
+                                <span class="font-black text-white text-xs">${r.direccion_pick}</span>
+                            </td>
+                            <td class="py-3 px-3 text-center font-mono font-bold text-amber-400">
+                                ${(parseFloat(r.cuota_entrada) || 1.80).toFixed(2)}
+                            </td>
+                            <td class="py-3 px-3 text-center font-mono text-[10px] text-cyan-300">
+                                ${(parseFloat(r.clv_target) || 1.70).toFixed(2)}
+                            </td>
+                            <td class="py-3 px-4 text-center">${badge}</td>
+                            <td class="py-3 px-4 text-right font-mono font-black ${esWin ? 'text-accentGreen' : 'text-red-400'}">
+                                ${r.roi_realizado > 0 ? '+' : ''}${r.roi_realizado}u
+                            </td>
+                        </tr>
+                    `;
+                });
+                tbody.innerHTML = html;
+            } catch(e) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-400">Error cargando auditoría de aciertos.</td></tr>`;
+            }
+        }
+
         async function enviarMensajeChat(e) {
             if (e) e.preventDefault();
             const input = document.getElementById('chat-input');
@@ -983,6 +1159,7 @@
 
             document.getElementById('welcome-view').classList.add('hidden');
             document.getElementById('match-detail-view').classList.add('hidden');
+            document.getElementById('view-aciertos').classList.add('hidden');
             const chatContainer = document.getElementById('chat-messages-container');
             chatContainer.classList.remove('hidden');
 
@@ -1002,26 +1179,17 @@
                     body: JSON.stringify({ mensaje: msg }),
                     signal: controller.signal
                 });
-                
                 clearTimeout(timeoutId);
-                
                 if (!res.ok) throw new Error("Error del servidor");
-                
                 const data = await res.json();
                 document.getElementById(idLoad)?.remove();
 
                 const formatted = (data.respuesta || "").replace(/\*\*(.*?)\*\*/g, '<strong class="text-accentGreen font-bold">$1</strong>').replace(/\n/g, '<br>');
                 chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-cardDark border border-cardBorder text-slate-200 text-xs p-4 rounded-2xl rounded-tl-sm max-w-[95%] leading-relaxed shadow-lg"><span class="text-accentGreen font-black block text-[10px] uppercase tracking-wider mb-1.5"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</span>${formatted}</div></div>`;
-                
                 chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-
             } catch (err) {
                 document.getElementById(idLoad)?.remove();
-                if (err.name === 'AbortError') {
-                    chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl"><i class="fa-solid fa-triangle-exclamation mr-1"></i> El servidor tardó demasiado en responder (Timeout). Intenta consultar de nuevo.</div></div>`;
-                } else {
-                    chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl"><i class="fa-solid fa-circle-xmark mr-1"></i> Motor temporalmente saturado. Reintenta en unos instantes.</div></div>`;
-                }
+                chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Error al conectar con el motor. Reintenta en unos instantes.</div></div>`;
             }
         }
     </script>
