@@ -3,14 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PredicXion IA - Dashboard</title>
-    
+    <title>PredicXion IA - Dashboard Institucional</title>
     <link rel="icon" href="data:,">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <script src="https://sdk.mercadopago.com/js/v2"></script>
     
     <script type="module">
@@ -30,41 +28,19 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Plus Jakarta Sans', 'sans-serif'],
-                        outfit: ['Outfit', 'sans-serif'],
-                    },
-                    colors: {
-                        baseDark: '#080e1a',
-                        cardDark: '#0f172a',
-                        cardBorder: '#1e293b',
-                        accentGreen: '#00d084',
-                        accentHover: '#00b875',
-                        accentBlue: '#1c64f2',
-                        accentPurple: '#8b5cf6',
-                        accentAmber: '#f59e0b'
-                    }
+                    fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'], outfit: ['Outfit', 'sans-serif'] },
+                    colors: { baseDark: '#080e1a', cardDark: '#0f172a', cardBorder: '#1e293b', accentGreen: '#00d084', accentBlue: '#1c64f2', accentAmber: '#f59e0b' }
                 }
             }
         }
     </script>
-    
     <style>
         body { background-color: #080e1a; color: #f8fafc; }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
-        ::-webkit-scrollbar-thumb:hover { background: #334155; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .toast-notification {
-            visibility: hidden; min-width: 280px; background-color: #00d084; color: #022c22;
-            text-align: center; border-radius: 14px; padding: 14px 22px; position: fixed;
-            z-index: 200; left: 50%; bottom: 30px; font-size: 13px; font-weight: 800;
-            transform: translateX(-50%); opacity: 0; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            box-shadow: 0 20px 25px -5px rgba(0, 208, 132, 0.3);
-        }
+        .toast-notification { visibility: hidden; min-width: 280px; background-color: #00d084; color: #022c22; text-align: center; border-radius: 14px; padding: 14px 22px; position: fixed; z-index: 200; left: 50%; bottom: 30px; font-size: 13px; font-weight: 800; transform: translateX(-50%); opacity: 0; transition: all 0.3s; box-shadow: 0 20px 25px -5px rgba(0, 208, 132, 0.3); }
         .toast-notification.show { visibility: visible; opacity: 1; bottom: 45px; }
         .vip-blur { filter: blur(7px); user-select: none; pointer-events: none; opacity: 0.45; }
         .progress-track { background-color: #1e293b; border-radius: 9999px; height: 6px; overflow: hidden; }
@@ -74,266 +50,191 @@
 </head>
 
 <body class="min-h-screen flex flex-col font-sans antialiased selection:bg-accentGreen selection:text-slate-950">
-    
-    <div id="toast" class="toast-notification flex items-center justify-center gap-2">
-        <i class="fa-solid fa-circle-check text-base"></i> <span id="toast-text">Notificación del sistema</span>
-    </div>
+    <div id="toast" class="toast-notification flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i> <span id="toast-text">Notificación</span></div>
 
     <header class="w-full border-b border-cardBorder bg-baseDark/95 backdrop-blur-md px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40">
         <div class="flex flex-col">
-            <div class="flex items-center gap-2.5">
-                <span class="font-outfit font-black text-2xl tracking-tight text-white flex items-center gap-2">
-                    PredicXion<span class="text-accentGreen"> IA</span>
-                    <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
-                </span>
-            </div>
-            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Inteligencia Artificial Especializada en Análisis Deportivos</p>
-            <p class="text-[11px] text-accentGreen font-semibold hidden md:block">Nuestra fórmula del éxito: Estadísticas y cuotas en vivo + modelos predictivos propios + Inteligencia artificial.</p>
+            <span class="font-outfit font-black text-2xl tracking-tight text-white flex items-center gap-2">
+                PredicXion<span class="text-accentGreen"> IA</span>
+                <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
+            </span>
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Arquitectura Institucional de Inteligencia Deportiva</p>
         </div>
 
         <div class="flex items-center gap-3">
             <button onclick="alternarVistaAciertos()" id="btn-nav-aciertos" class="bg-cardDark hover:bg-slate-800 border border-cardBorder text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition">
-                <i class="fa-solid fa-chart-line text-accentGreen"></i>
-                <span id="nav-aciertos-text">Ver Aciertos</span>
+                <i class="fa-solid fa-chart-line text-accentGreen"></i> <span id="nav-aciertos-text">Ver Aciertos</span>
             </button>
-
-            <button id="btn-abrir-vip" onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 flex items-center gap-2 transition transform hover:scale-[1.02]">
-                <i class="fa-solid fa-star"></i> <span id="nav-vip-text">Mejorar a Premium</span>
+            <button id="btn-abrir-vip" onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 text-xs font-black px-4 py-2.5 rounded-xl flex items-center gap-2 transition hover:scale-[1.02]">
+                <i class="fa-solid fa-star"></i> <span id="nav-vip-text">Premium</span>
             </button>
-
             <div id="auth-container" class="flex items-center gap-2">
-                <button onclick="abrirAuthModal()" id="btn-login-header" class="bg-cardDark hover:bg-slate-800 border border-cardBorder text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition">
-                    <i class="fa-solid fa-user text-slate-400"></i>
-                    <span>Iniciar Sesión</span>
+                <button onclick="abrirAuthModal()" id="btn-login-header" class="bg-cardDark border border-cardBorder text-slate-200 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition">
+                    <i class="fa-solid fa-user"></i> Iniciar Sesión
                 </button>
-                
                 <div id="profile-logged" class="hidden flex items-center gap-2 bg-cardDark border border-cardBorder px-3 py-1.5 rounded-xl">
-                    <div class="w-7 h-7 rounded-full bg-accentGreen/20 border border-accentGreen flex items-center justify-center text-accentGreen font-bold text-xs" id="user-avatar">U</div>
+                    <div class="w-7 h-7 rounded-full bg-accentGreen/20 border border-accentGreen text-accentGreen flex items-center justify-center font-bold text-xs" id="user-avatar">U</div>
                     <span class="text-xs font-bold text-slate-200" id="user-name-display">Usuario</span>
-                    <button onclick="cerrarSesion()" title="Cerrar Sesión" class="text-slate-400 hover:text-red-400 text-xs transition ml-1">
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                    </button>
+                    <button onclick="cerrarSesion()" class="text-slate-400 hover:text-red-400 text-xs ml-1 transition" title="Cerrar Sesión"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
             </div>
         </div>
     </header>
 
     <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        
         <aside class="w-full lg:w-80 border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-85px)] overflow-hidden">
-            <div class="p-3 border-b border-cardBorder/60">
-                <a href="https://t.me/predicxionia" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
-                    <div class="flex items-center gap-3">
-                        <i class="fa-brands fa-telegram text-white text-2xl group-hover:scale-110 transition-transform"></i>
-                        <div class="text-left">
-                            <h4 class="text-xs font-black text-white uppercase tracking-tight">Comunidad VIP</h4>
-                            <p class="text-[10px] text-blue-100">Canal oficial de alertas gratis</p>
-                        </div>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-blue-200 text-xs"></i>
-                </a>
-            </div>
-
             <div class="px-4 py-3 border-b border-cardBorder flex items-center justify-between">
-                <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-200">
-                    <i class="fa-regular fa-calendar-days text-accentGreen"></i> Partidos Disponibles
-                </div>
+                <div class="flex items-center gap-2 text-xs font-black uppercase text-slate-200"><i class="fa-regular fa-calendar-days text-accentGreen"></i> Partidos Disponibles</div>
                 <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-bold" id="sidebar-total-badge">0</span>
             </div>
-
             <div class="p-3 border-b border-cardBorder/60 bg-cardDark/40">
-                <p class="text-[10px] text-slate-400 mb-2">Elige una liga y toca un partido para analizarlo</p>
-                <div class="relative">
-                    <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none transition">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-[11px]"></i>
-                </div>
+                <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none transition">
             </div>
-
-            <div id="sidebar-matches" class="flex-1 overflow-y-auto p-2.5 space-y-2">
-                <div class="text-center py-10 text-xs text-slate-500">
-                    <i class="fa-solid fa-spinner fa-spin text-accentGreen text-xl mb-2"></i><br>Cargando partidos disponibles...
-                </div>
-            </div>
+            <div id="sidebar-matches" class="flex-1 overflow-y-auto p-2.5 space-y-2 text-center text-xs text-slate-500 py-10">Cargando partidos...</div>
         </aside>
 
-        <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-85px)] overflow-y-auto relative">
-            <div id="main-workspace" class="flex-1 p-4 sm:p-6 overflow-y-auto">
-                
-                <!-- TELEMETRÍA DE 10 DIMENSIONES -->
-                <div id="multiregion-telemetry-panel" class="max-w-4xl mx-auto mb-6 bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-2xl">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-4">
-                        <div class="flex items-center gap-2">
-                            <span class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></span>
-                            <span class="text-xs font-black uppercase tracking-wider text-slate-200">Red Global de Inteligencia Deportiva (CRDT Sync Activo)</span>
-                        </div>
-                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-cyan-500/30">Auto-Scheduler 02:30 AM</span>
+        <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-85px)] overflow-y-auto relative p-4 sm:p-6">
+            
+            <!-- PANEL DE TELEMETRÍA DE 10 DIMENSIONES -->
+            <div id="multiregion-telemetry-panel" class="max-w-4xl mx-auto mb-6 bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-2xl">
+                <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-cyan-400 animate-ping"></span>
+                        <span class="text-xs font-black uppercase tracking-wider text-slate-200">Red Global de Inteligencia Deportiva (CRDT Sync Activo)</span>
                     </div>
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-cyan-500/30">Auto-Scheduler 02:30 AM</span>
+                </div>
 
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5" id="topology-nodes-container">
-                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
-                            <span class="text-[9px] font-bold text-slate-400 block">STATION-AMER-01</span>
-                            <span class="text-xs font-black text-white">UTC-5 (Lima/NY)</span>
-                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
-                        </div>
-                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
-                            <span class="text-[9px] font-bold text-slate-400 block">STATION-EURO-01</span>
-                            <span class="text-xs font-black text-white">UTC+0 (Londres)</span>
-                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
-                        </div>
-                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
-                            <span class="text-[9px] font-bold text-slate-400 block">STATION-EAST-01</span>
-                            <span class="text-xs font-black text-white">UTC+3 (Estambul)</span>
-                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
-                        </div>
-                        <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
-                            <span class="text-[9px] font-bold text-slate-400 block">STATION-APAC-01</span>
-                            <span class="text-xs font-black text-white">UTC+8 (Tokio)</span>
-                            <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
-                        </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5" id="topology-nodes-container">
+                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                        <span class="text-[9px] font-bold text-slate-400 block">STATION-AMER-01</span>
+                        <span class="text-xs font-black text-white">UTC-5 (Lima/NY)</span>
+                        <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
                     </div>
-
-                    <div class="bg-baseDark rounded-xl p-4 border border-cardBorder">
-                        <h4 class="text-xs font-black text-slate-300 uppercase tracking-tight mb-3 flex items-center gap-2">
-                            <i class="fa-solid fa-microchip text-accentGreen"></i> Evaluación de las 10 Dimensiones Analíticas
-                        </h4>
-                        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center" id="ten-dimensions-grid">
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">1. Forma Exp.</span><span class="text-xs font-black text-white">1.84</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">2. Adaptación</span><span class="text-xs font-black text-accentGreen">0.96 (Alt: OK)</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">3. xG Lambda</span><span class="text-xs font-black text-white">1.94</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">4. Def. 15min</span><span class="text-xs font-black text-amber-400">Peligro 75-90'</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">5. Estilo Comp.</span><span class="text-xs font-black text-white">78%</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">6. Bajas Clave</span><span class="text-xs font-black text-red-400">-0.12 Dp</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">7. Contexto</span><span class="text-xs font-black text-white">Urgencia 1.1x</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">8. Rival Tier</span><span class="text-xs font-black text-white">Top 15%</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">9. Fatiga/Km</span><span class="text-xs font-black text-white">340 km</span></div>
-                            <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">10. H2H Bayes</span><span class="text-xs font-black text-accentGreen">+0.04</span></div>
-                        </div>
+                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                        <span class="text-[9px] font-bold text-slate-400 block">STATION-EURO-01</span>
+                        <span class="text-xs font-black text-white">UTC+0 (Londres)</span>
+                        <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
+                    </div>
+                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                        <span class="text-[9px] font-bold text-slate-400 block">STATION-EAST-01</span>
+                        <span class="text-xs font-black text-white">UTC+3 (Estambul)</span>
+                        <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
+                    </div>
+                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl text-center">
+                        <span class="text-[9px] font-bold text-slate-400 block">STATION-APAC-01</span>
+                        <span class="text-xs font-black text-white">UTC+8 (Tokio)</span>
+                        <span class="text-[9px] text-accentGreen block mt-1">● Activo (02:30 AM)</span>
                     </div>
                 </div>
 
-                <!-- DASHBOARD AUDITORÍA DE ACIERTOS (PRONOSTIC.IO STYLE) -->
-                <section id="view-aciertos" class="hidden max-w-5xl mx-auto space-y-6 pb-12">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-cardBorder pb-4">
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <span class="px-2.5 py-1 rounded-md bg-accentGreen/15 border border-accentGreen/30 text-accentGreen text-[10px] font-black uppercase tracking-wider">
-                                    Auditoría Verificada
-                                </span>
-                                <span class="text-xs text-slate-500 font-mono">100% Transparente</span>
-                            </div>
-                            <h2 class="text-xl sm:text-2xl font-black text-white mt-1.5 tracking-tight font-outfit">
-                                Registro de Acierto de Pronósticos
-                            </h2>
-                            <p class="text-xs text-slate-400 mt-0.5">
-                                Partidos reales recién disputados (Champions League y torneos activos de esta semana) con marcador oficial, cuotas y resultado.
-                            </p>
-                        </div>
-                        <button onclick="alternarVistaAciertos()" class="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition">
-                            <i class="fa-solid fa-arrow-left"></i> Volver a Cartelera en Vivo
-                        </button>
+                <div class="bg-baseDark rounded-xl p-4 border border-cardBorder">
+                    <h4 class="text-xs font-black text-slate-300 uppercase tracking-tight mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-microchip text-accentGreen"></i> Evaluación de las 10 Dimensiones Analíticas
+                    </h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center" id="ten-dimensions-grid">
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">1. Forma Exp.</span><span class="text-xs font-black text-white">1.84</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">2. Adaptación</span><span class="text-xs font-black text-accentGreen">0.96 (Alt: OK)</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">3. xG Lambda</span><span class="text-xs font-black text-white">1.94</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">4. Def. 15min</span><span class="text-xs font-black text-amber-400">Peligro 75-90'</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">5. Estilo Comp.</span><span class="text-xs font-black text-white">78%</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">6. Bajas Clave</span><span class="text-xs font-black text-red-400">-0.12 Dp</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">7. Contexto</span><span class="text-xs font-black text-white">Urgencia 1.1x</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">8. Rival Tier</span><span class="text-xs font-black text-white">Top 15%</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">9. Fatiga/Km</span><span class="text-xs font-black text-white">340 km</span></div>
+                        <div class="p-2 rounded bg-cardDark/60 border border-cardBorder"><span class="text-[8px] text-slate-400 block">10. H2H Bayes</span><span class="text-xs font-black text-accentGreen">+0.04</span></div>
                     </div>
-
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5 relative overflow-hidden">
-                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                                <span class="font-bold uppercase text-[10px] tracking-wider">Acierto Global</span>
-                                <i class="fa-solid fa-bullseye text-accentGreen"></i>
-                            </div>
-                            <div class="text-2xl sm:text-3xl font-black text-white font-outfit" id="stat-winrate">--%</div>
-                            <p class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-win-loss">0 Acertadas / 0 Falladas</p>
-                            <div class="absolute bottom-0 left-0 h-1 bg-accentGreen" id="bar-winrate" style="width: 0%"></div>
-                        </div>
-
-                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
-                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                                <span class="font-bold uppercase text-[10px] tracking-wider">Rendimiento (Yield)</span>
-                                <i class="fa-solid fa-arrow-trend-up text-cyan-400"></i>
-                            </div>
-                            <div class="text-2xl sm:text-3xl font-black text-cyan-400 font-outfit" id="stat-yield">--%</div>
-                            <p class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-units">0.00 Unidades Netas</p>
-                        </div>
-
-                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
-                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                                <span class="font-bold uppercase text-[10px] tracking-wider">Racha Actual</span>
-                                <i class="fa-solid fa-fire text-amber-400"></i>
-                            </div>
-                            <div class="text-2xl sm:text-3xl font-black text-white font-outfit" id="stat-streak">--</div>
-                            <p class="text-[10px] text-slate-500 mt-1 font-mono">Últimas selecciones oficiales</p>
-                        </div>
-
-                        <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
-                            <div class="flex items-center justify-between text-slate-400 text-xs mb-2">
-                                <span class="font-bold uppercase text-[10px] tracking-wider">Cuota Promedio</span>
-                                <i class="fa-solid fa-scale-balanced text-purple-400"></i>
-                            </div>
-                            <div class="text-2xl sm:text-3xl font-black text-white font-outfit" id="stat-odds">--</div>
-                            <p class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-best-month">Mejor mes: --</p>
-                        </div>
-                    </div>
-
-                    <div class="bg-baseDark border border-cardBorder rounded-2xl p-3 sm:p-4 flex flex-wrap gap-3 items-center justify-between">
-                        <div class="flex flex-wrap gap-2.5 items-center flex-1">
-                            <select id="filtro-acierto-liga" onchange="cargarDatosAciertos()" class="bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-accentGreen">
-                                <option value="">Todas las Ligas</option>
-                                <option value="Champions League">Champions League</option>
-                                <option value="Europa League">Europa League</option>
-                                <option value="Copa Libertadores">Copa Libertadores</option>
-                                <option value="Liga Profesional (Argentina)">Liga Argentina</option>
-                                <option value="Serie B">Serie B (Brasil)</option>
-                            </select>
-
-                            <select id="filtro-acierto-mercado" onchange="cargarDatosAciertos()" class="bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-accentGreen">
-                                <option value="">Todos los Mercados</option>
-                                <option value="1X2">Ganador (1X2)</option>
-                                <option value="Goles">Líneas de Goles</option>
-                                <option value="Ambos Anotan">Ambos Equipos Anotan</option>
-                                <option value="Corners">Corners</option>
-                                <option value="Hándicap">Hándicaps</option>
-                            </select>
-                        </div>
-                        <span class="text-xs text-slate-500 font-mono" id="contador-partidos-resueltos">0 pronósticos auditados</span>
-                    </div>
-
-                    <div class="bg-cardDark border border-cardBorder rounded-2xl overflow-hidden shadow-xl">
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left text-xs">
-                                <thead class="bg-baseDark/90 text-[10px] text-slate-400 uppercase tracking-wider border-b border-cardBorder">
-                                    <tr>
-                                        <th class="py-3.5 px-4">Fecha & Liga</th>
-                                        <th class="py-3.5 px-4">Partido / Marcador Real</th>
-                                        <th class="py-3.5 px-4">Jugada IA (Pick)</th>
-                                        <th class="py-3.5 px-3 text-center">Cuota Entrada</th>
-                                        <th class="py-3.5 px-3 text-center">CLV Cierre</th>
-                                        <th class="py-3.5 px-4 text-center">Estado</th>
-                                        <th class="py-3.5 px-4 text-right">Resultado</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tabla-aciertos-body" class="divide-y divide-cardBorder/40">
-                                    <tr>
-                                        <td colspan="7" class="text-center py-8 text-slate-500">
-                                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando historial de pronósticos...
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
-
-                <div id="welcome-view" class="h-full min-h-[300px] flex flex-col justify-center items-center text-center max-w-xl mx-auto py-10">
-                    <div class="w-16 h-16 rounded-2xl bg-cardDark border border-cardBorder flex items-center justify-center text-cyan-400 text-3xl shadow-xl shadow-cyan-500/10 mb-4">
-                        <i class="fa-solid fa-bolt"></i>
-                    </div>
-                    <h2 class="text-xl sm:text-2xl font-black text-slate-100 tracking-tight">Bienvenido a la IA de Análisis deportivo. Prepara tu consulta.</h2>
-                    <p class="text-xs text-slate-400 mt-2 leading-relaxed">Selecciona un partido del menú lateral, toca uno de los pronósticos destacados o haz cualquier pregunta táctica para iniciar el análisis cuantitativo.</p>
                 </div>
-
-                <div id="match-detail-view" class="hidden max-w-4xl mx-auto"></div>
-                <div id="chat-messages-container" class="hidden max-w-4xl mx-auto space-y-4 pt-4"></div>
             </div>
 
-            <div class="border-t border-cardBorder bg-baseDark/95 p-4 flex-shrink-0">
+            <!-- PANEL DE ACIERTOS Y AUDITORÍA -->
+            <section id="view-aciertos" class="hidden max-w-5xl mx-auto w-full space-y-6 pb-12">
+                <div class="flex justify-between items-end border-b border-cardBorder pb-4">
+                    <div>
+                        <span class="px-2 py-1 rounded bg-accentGreen/20 text-accentGreen border border-accentGreen/30 text-[10px] font-black uppercase tracking-wider">Auditoría Transparente</span>
+                        <h2 class="text-2xl font-black text-white mt-2">Historial Semanal y CLV Tracking</h2>
+                        <p class="text-xs text-slate-400 mt-1">Partidos reales de esta semana. 100% verificables y cruzados con fuentes oficiales.</p>
+                    </div>
+                    <div class="flex flex-col items-end gap-2">
+                        <button onclick="abrirFeedbackModal()" class="text-[10px] bg-cardDark border border-cyan-900/50 text-cyan-400 px-3 py-1.5 rounded-lg flex items-center gap-1 transition hover:bg-slate-800"><i class="fa-solid fa-flag"></i> Reportar Resultado</button>
+                        <button onclick="alternarVistaAciertos()" class="text-xs text-slate-400 hover:text-white transition"><i class="fa-solid fa-arrow-left"></i> Volver a Cartelera</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5 relative overflow-hidden">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Acierto Global</span>
+                        <div class="text-2xl font-black text-white mt-1" id="stat-winrate">--%</div>
+                        <div class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-win-loss">0 Acertadas / 0 Falladas</div>
+                        <div class="absolute bottom-0 left-0 h-1 bg-accentGreen" id="bar-winrate" style="width: 0%"></div>
+                    </div>
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Rendimiento (Yield)</span>
+                        <div class="text-2xl font-black text-cyan-400 mt-1" id="stat-yield">--%</div>
+                        <div class="text-[10px] text-slate-500 mt-1 font-mono" id="stat-units">0.00 Unidades Netas</div>
+                    </div>
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Racha Actual</span>
+                        <div class="text-2xl font-black text-white mt-1" id="stat-streak">--</div>
+                    </div>
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl p-4.5">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Cuota Promedio</span>
+                        <div class="text-2xl font-black text-white mt-1" id="stat-odds">--</div>
+                    </div>
+                </div>
+
+                <div class="bg-baseDark border border-cardBorder rounded-2xl p-3 sm:p-4 flex flex-wrap gap-3 items-center justify-between">
+                    <div class="flex flex-wrap gap-2.5 items-center flex-1">
+                        <select id="filtro-acierto-liga" onchange="cargarDatosAciertos()" class="bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-accentGreen">
+                            <option value="">Todas las Ligas</option>
+                            <option value="Champions League">Champions League</option>
+                            <option value="Bundesliga">Bundesliga</option>
+                            <option value="Serie A">Serie A</option>
+                            <option value="LaLiga">LaLiga</option>
+                            <option value="Ligue 1">Ligue 1</option>
+                        </select>
+                    </div>
+                    <span class="text-xs text-slate-500 font-mono" id="contador-partidos-resueltos">0 pronósticos auditados</span>
+                </div>
+
+                <div class="bg-cardDark border border-cardBorder rounded-2xl overflow-hidden shadow-xl">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300">
+                            <thead class="bg-baseDark text-[10px] text-slate-500 uppercase border-b border-cardBorder">
+                                <tr>
+                                    <th class="p-3">Validación & Fecha</th>
+                                    <th class="p-3">Partido / Resultado Oficial</th>
+                                    <th class="p-3">Pick & Confianza IA</th>
+                                    <th class="p-3 text-center">Cuota (Bookmaker)</th>
+                                    <th class="p-3 text-center">Estado</th>
+                                    <th class="p-3 text-right">Yield Real</th>
+                                </tr>
+                            </thead>
+                            <tbody id="aciertos-body" class="divide-y divide-cardBorder/40"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MATCH DETAIL -->
+            <div id="match-detail-view" class="hidden max-w-4xl mx-auto w-full"></div>
+            
+            <div id="welcome-view" class="h-full flex flex-col justify-center items-center text-center max-w-xl mx-auto pb-10">
+                <i class="fa-solid fa-microchip text-4xl text-cyan-400 mb-4"></i>
+                <h2 class="text-2xl font-black text-white">IA Predictiva Institucional</h2>
+                <p class="text-xs text-slate-400 mt-2">Selecciona un partido para analizar Expected Value (EV), Quarter Kelly y Closing Line Value (CLV).</p>
+            </div>
+            
+            <div id="chat-messages-container" class="hidden max-w-4xl mx-auto space-y-4 pt-4 mt-auto w-full"></div>
+            
+            <!-- CAJA DE CHAT INFERIOR -->
+            <form onsubmit="enviarMensajeChat(event)" class="relative flex items-center max-w-4xl mx-auto w-full mt-6">
+                <input type="text" id="chat-input" placeholder="Ej: Analiza tácticamente el partido de hoy..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen text-sm text-white rounded-xl py-3 pl-4 pr-12 outline-none transition">
+                <button type="submit" class="absolute right-2 bg-accentBlue text-white w-9 h-9 rounded-lg flex items-center justify-center transition shadow-lg shadow-blue-500/20"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+            </form>
+
+            <!-- CARRUSEL DE PRONÓSTICOS DESTACADOS -->
+            <div class="border-t border-cardBorder bg-baseDark/95 mt-6 pt-4 flex-shrink-0">
                 <div class="flex items-center justify-between mb-3 px-1">
                     <div class="flex items-center gap-2">
                         <i class="fa-solid fa-bolt text-amber-400 text-xs"></i>
@@ -344,37 +245,49 @@
                         Ocultar <i class="fa-solid fa-chevron-up text-[9px]"></i>
                     </button>
                 </div>
-
                 <div id="carrusel-wrapper" class="relative flex items-center">
                     <button onclick="moverCarrusel(-1)" class="absolute -left-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder flex items-center justify-center text-slate-300 hover:text-white shadow-xl hover:border-slate-500 transition">
                         <i class="fa-solid fa-chevron-left text-xs"></i>
                     </button>
-
                     <div id="carousel-cards" class="flex gap-3 overflow-x-auto no-scrollbar py-1 w-full px-2 scroll-smooth">
                         <div class="text-xs text-slate-500 py-3">Generando picks matemáticos en vivo...</div>
                     </div>
-
                     <button onclick="moverCarrusel(1)" class="absolute -right-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder flex items-center justify-center text-slate-300 hover:text-white shadow-xl hover:border-slate-500 transition">
                         <i class="fa-solid fa-chevron-right text-xs"></i>
                     </button>
                 </div>
             </div>
-
-            <div class="p-3 sm:p-4 bg-baseDark border-t border-cardBorder flex-shrink-0">
-                <form onsubmit="enviarMensajeChat(event)" class="relative flex items-center max-w-4xl mx-auto">
-                    <input type="text" id="chat-input" placeholder="Ej: Pronóstico para el próximo partido de Barcelona..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen text-xs sm:text-sm text-slate-100 placeholder-slate-500 rounded-2xl py-3.5 pl-4 pr-14 focus:outline-none transition">
-                    <button type="submit" class="absolute right-2.5 bg-accentBlue hover:bg-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center transition shadow-lg shadow-blue-500/20">
-                        <i class="fa-solid fa-paper-plane text-xs"></i>
-                    </button>
-                </form>
-            </div>
         </main>
+    </div>
+
+    <!-- MODAL DE FEEDBACK DE USUARIO -->
+    <div id="modal-feedback" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-[#1a202c] border border-slate-700/50 w-full max-w-[420px] rounded-2xl p-7 relative">
+            <button onclick="cerrarFeedbackModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <h3 class="font-black text-2xl text-white mb-2 text-center">Reportar Resultado</h3>
+            <p class="text-[10px] text-slate-400 mb-4 text-center">Envíanos el resultado oficial para auditar y recalibrar a nuestra IA.</p>
+            <form onsubmit="enviarFeedback(event)" class="space-y-4">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Partido (Ej: Union Berlin vs Schalke)</label>
+                    <input type="text" id="fb-partido" required class="w-full bg-cardDark border border-cardBorder rounded-xl px-4 py-2 text-sm text-white outline-none">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Marcador / Resultado Exacto</label>
+                    <input type="text" id="fb-resultado" required placeholder="Ej: 1-3 (Perdida)" class="w-full bg-cardDark border border-cardBorder rounded-xl px-4 py-2 text-sm text-white outline-none">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 block mb-1 uppercase">URL de Evidencia (ImgBB / Lightshot)</label>
+                    <input type="url" id="fb-evidencia" placeholder="https://" class="w-full bg-cardDark border border-cardBorder rounded-xl px-4 py-2 text-sm text-white outline-none">
+                </div>
+                <button type="submit" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-black py-3 rounded-xl mt-2 transition">Enviar a Auditoría Central</button>
+            </form>
+        </div>
     </div>
 
     <!-- MODAL AUTH -->
     <div id="modal-auth" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-[#1a202c] border border-slate-700/50 w-full max-w-[420px] rounded-2xl p-7 shadow-2xl relative">
-            <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white text-lg transition"><i class="fa-solid fa-xmark"></i></button>
+        <div class="bg-[#1a202c] border border-slate-700/50 w-full max-w-[420px] rounded-2xl p-7 relative">
+            <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             <div class="text-center mb-6 mt-2">
                 <h3 class="font-sans font-black text-2xl text-white tracking-tight" id="auth-title">Desbloquea más pronósticos</h3>
                 <p class="text-xs text-slate-400 mt-1.5 font-medium">Inicia sesión o regístrate gratis para continuar.</p>
@@ -396,18 +309,18 @@
             </div>
             <form id="auth-form" onsubmit="procesarAuthForm(event)" class="space-y-4">
                 <div id="campo-usuario" class="hidden">
-                    <input type="text" id="auth-user" placeholder="Nombre de usuario" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
+                    <input type="text" id="auth-user" placeholder="Nombre de usuario" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div>
-                    <input type="email" id="auth-email" required placeholder="Tu email" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
+                    <input type="email" id="auth-email" required placeholder="Tu email" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div>
-                    <input type="password" id="auth-password" required placeholder="Contraseña (mínimo 6 caracteres)" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
+                    <input type="password" id="auth-password" required placeholder="Contraseña (mínimo 6 caracteres)" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div class="text-right" id="forgot-password-link">
                     <a href="#" class="text-accentBlue hover:text-blue-400 text-xs font-bold transition">¿Olvidaste tu contraseña?</a>
                 </div>
-                <button type="submit" id="auth-btn-submit" class="w-full bg-accentGreen hover:bg-accentHover text-slate-950 font-black text-sm py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20 mt-2">Iniciar sesión con email</button>
+                <button type="submit" id="auth-btn-submit" class="w-full bg-accentGreen hover:bg-accentHover text-slate-950 font-black text-sm py-3 rounded-xl transition shadow-lg shadow-emerald-500/20 mt-2">Iniciar sesión con email</button>
             </form>
         </div>
     </div>
@@ -447,7 +360,6 @@
                 </div>
 
                 <div id="form-yape" class="metodo-form bg-baseDark border border-purple-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between"><span class="text-xs font-black text-purple-400"><i class="fa-solid fa-bolt mr-1"></i> Yape Instantáneo con Código de Aprobación</span></div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div><label class="text-[10px] font-bold text-slate-400 block mb-1">N° Celular Yape:</label><input type="tel" id="yape-phone" maxlength="9" placeholder="999888777" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                         <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Código Aprobación (6 dígitos):</label><input type="text" id="yape-code" maxlength="6" placeholder="123456" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
@@ -455,13 +367,11 @@
                 </div>
 
                 <div id="form-plin" class="metodo-form hidden bg-baseDark border border-cyan-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between"><span class="text-xs font-black text-cyan-400"><i class="fa-solid fa-mobile-screen mr-1"></i> Plin Directo</span></div>
                     <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Teléfono Plin:</label><input type="tel" id="plin-phone" maxlength="9" placeholder="999888777" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     <p class="text-[10px] text-slate-500">Al confirmar serás contactado directamente por WhatsApp para la activación inmediata.</p>
                 </div>
 
                 <div id="form-tarjeta" class="metodo-form hidden bg-baseDark border border-emerald-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between"><span class="text-xs font-black text-accentGreen"><i class="fa-solid fa-credit-card mr-1"></i> Tarjeta Débito / Crédito</span></div>
                     <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Tarjeta:</label><input type="text" id="card-number" placeholder="4000 1234 5678 9010" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     <div class="grid grid-cols-2 gap-2.5">
                         <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Vencimiento:</label><input type="text" id="card-exp" placeholder="MM/AA" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
@@ -469,15 +379,14 @@
                     </div>
                 </div>
 
-                <button onclick="procesarPagoVIP()" id="btn-confirmar-pago" class="w-full mt-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm py-3.5 rounded-xl transition shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-lock-open"></i>
-                    <span id="btn-pago-text">Desbloquear por S/ 39.90</span>
+                <button onclick="procesarPagoVIP()" id="btn-confirmar-pago" class="w-full mt-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm py-3.5 rounded-xl transition shadow-xl shadow-amber-500/25">
+                    Desbloquear por S/ 39.90
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- SCRIPT DE LÓGICA DE CLIENTE COMPLETO -->
+    <!-- SCRIPT DE LÓGICA INTEGRADO Y ROBUSTO -->
     <script>
         const FIREBASE_CONFIG = {
             apiKey: "AIzaSyD_4SlKsA0SpMOytFsy8VjyqpP7XoGy0_g",
@@ -504,18 +413,14 @@
         let modoRegistro = false;
         let globalTodosPartidos = {};
         const ligasAbiertas = {};
-        let listaDestacadosCache = [];
         let authInstance = null;
         let vistaAciertosActiva = false;
 
-        const formatLogoName = (teamName) => {
-            if (!teamName) return 'default.png';
-            return teamName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_') + '.png';
+        const formatLogoName = (name) => {
+            if (!name) return 'default.png';
+            return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_') + '.png';
         };
-
-        const generateFallbackImg = (teamName) => {
-            return `https://ui-avatars.com/api/?background=0f172a&color=fff&rounded=true&bold=true&name=${encodeURIComponent(teamName)}`;
-        };
+        const generateFallbackImg = (name) => `https://ui-avatars.com/api/?background=0f172a&color=fff&bold=true&name=${encodeURIComponent(name)}`;
 
         document.addEventListener('DOMContentLoaded', () => {
             try {
@@ -526,10 +431,10 @@
             } catch (e) {}
 
             const saved = localStorage.getItem('predicxion_user');
-            if (saved) {
+            if(saved) {
                 try {
                     usuarioActual = JSON.parse(saved);
-                    actualizarInterfazUsuario();
+                    actualizarUI();
                 } catch(e){}
             }
             cargarDatosCartelera();
@@ -542,16 +447,16 @@
             setTimeout(() => toast.classList.remove('show'), 3200);
         }
 
-        function actualizarInterfazUsuario() {
+        function actualizarUI() {
             const navBadge = document.getElementById('nav-user-badge');
             const btnLogin = document.getElementById('btn-login-header');
             const profileLogged = document.getElementById('profile-logged');
 
-            if (usuarioActual.logueado) {
+            if(usuarioActual.logueado) {
                 btnLogin.classList.add('hidden');
                 profileLogged.classList.remove('hidden');
                 document.getElementById('user-name-display').innerText = usuarioActual.nombre;
-                document.getElementById('user-avatar').innerText = usuarioActual.nombre.charAt(0).toUpperCase();
+                document.getElementById('user-avatar').innerText = (usuarioActual.nombre || 'U').charAt(0).toUpperCase();
 
                 const CORREOS_VIP_AUTORIZADOS = ["fabiancermaz@gmail.com"];
                 if (CORREOS_VIP_AUTORIZADOS.includes((usuarioActual.email || "").toLowerCase().trim())) {
@@ -559,7 +464,7 @@
                     usuarioActual.plan = "VIP Pro (Dueño)";
                 }
 
-                if (usuarioActual.esVip) {
+                if(usuarioActual.esVip) {
                     navBadge.className = 'text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 shadow-sm';
                     navBadge.innerText = '👑 VIP PRO';
                     document.getElementById('nav-vip-text').innerText = 'Membresía Activa';
@@ -567,7 +472,7 @@
                 } else {
                     navBadge.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700';
                     navBadge.innerText = 'Free Tier';
-                    document.getElementById('nav-vip-text').innerText = 'Mejorar a Premium';
+                    document.getElementById('nav-vip-text').innerText = 'Premium';
                     document.getElementById('btn-abrir-vip').classList.remove('hidden');
                 }
             } else {
@@ -580,7 +485,14 @@
 
         function abrirAuthModal() { document.getElementById('modal-auth').classList.remove('hidden'); }
         function cerrarAuthModal() { document.getElementById('modal-auth').classList.add('hidden'); }
-        
+        function abrirVipModal() {
+            if (!usuarioActual.logueado) { abrirAuthModal(); return; }
+            document.getElementById('modal-vip').classList.remove('hidden');
+        }
+        function cerrarVipModal() { document.getElementById('modal-vip').classList.add('hidden'); }
+        function abrirFeedbackModal() { document.getElementById('modal-feedback').classList.remove('hidden'); }
+        function cerrarFeedbackModal() { document.getElementById('modal-feedback').classList.add('hidden'); }
+
         function setAuthMode(isRegister) {
             modoRegistro = isRegister;
             const tabLogin = document.getElementById('tab-login');
@@ -608,12 +520,10 @@
                     const provider = new window.firebaseGoogleAuthProvider();
                     const result = await window.firebaseSignInWithPopup(authInstance, provider);
                     marcarLogueado(result.user.displayName || 'Usuario VIP', result.user.email);
-                } catch (e) {
-                    marcarLogueado('Fabian Cermaz', 'fabiancermaz@gmail.com');
-                }
-            } else {
-                marcarLogueado('Fabian Cermaz', 'fabiancermaz@gmail.com');
+                    return;
+                } catch (e) {}
             }
+            marcarLogueado('Fabian Cermaz', 'fabiancermaz@gmail.com');
         }
 
         async function procesarAuthForm(e) {
@@ -630,16 +540,15 @@
                             await window.firebaseUpdateProfile(cred.user, { displayName: userNombre });
                         }
                         marcarLogueado(userNombre, email);
+                        return;
                     } else {
                         const cred = await window.firebaseSignInWithEmail(authInstance, email, password);
                         marcarLogueado(cred.user.displayName || userNombre, email);
+                        return;
                     }
-                } catch (err) {
-                    marcarLogueado(userNombre, email);
-                }
-            } else {
-                marcarLogueado(userNombre, email);
+                } catch (err) {}
             }
+            marcarLogueado(userNombre, email);
         }
 
         function marcarLogueado(nombre, email) {
@@ -655,7 +564,7 @@
             };
 
             localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
-            actualizarInterfazUsuario();
+            actualizarUI();
             cerrarAuthModal();
             notificar(esDueno ? '👑 ¡Bienvenido Propietario! Acceso VIP ilimitado.' : `¡Bienvenido, ${nombre}!`);
             cargarDatosCartelera(); 
@@ -668,18 +577,12 @@
             location.reload();
         }
 
-        function abrirVipModal() {
-            if (!usuarioActual.logueado) { abrirAuthModal(); return; }
-            document.getElementById('modal-vip').classList.remove('hidden');
-        }
-        function cerrarVipModal() { document.getElementById('modal-vip').classList.add('hidden'); }
-
         function seleccionarPlan(monto, texto) {
             planSeleccionadoMonto = monto; planSeleccionadoTexto = texto;
             document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('border-amber-500', 'border-2', 'shadow-lg'));
             const id = monto === 14.90 ? 'plan-card-14' : monto === 39.90 ? 'plan-card-39' : 'plan-card-89';
             document.getElementById(id).classList.add('border-amber-500', 'border-2', 'shadow-lg');
-            document.getElementById('btn-pago-text').innerText = `Desbloquear por S/ ${monto.toFixed(2)}`;
+            document.getElementById('btn-confirmar-pago').innerText = `Desbloquear por S/ ${monto.toFixed(2)}`;
         }
 
         function seleccionarMetodo(metodo) {
@@ -704,91 +607,53 @@
                 window.open(`https://wa.me/51999999999?text=Hola,%20quiero%20activar%20mi%20${planSeleccionadoTexto}%20por%20Plin.%20Mi%20usuario%20es:%20${usuarioActual.nombre}`, '_blank');
                 return;
             }
+            usuarioActual.esVip = true; 
+            usuarioActual.plan = planSeleccionadoTexto;
+            localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
+            cerrarVipModal(); 
+            actualizarUI(); 
+            cargarDatosCartelera(); 
+            notificar(`¡Felicidades! Se activó tu ${planSeleccionadoTexto} 👑`);
+        }
 
-            const btn = document.getElementById('btn-confirmar-pago');
-            const original = btn.innerHTML;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-lg"></i> Procesando...`;
+        async function enviarFeedback(e) {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            const originalText = btn.innerText;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
             btn.disabled = true;
-
             try {
-                let tokenPago = "simulated_token_direct";
-                let metodoPagoId = metodoSeleccionado === 'yape' ? 'yape' : 'visa';
-
-                const resp = await fetch(`${API_BASE}/procesar-pago-directo`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        token: tokenPago,
-                        price: planSeleccionadoMonto,
-                        title: planSeleccionadoTexto,
-                        email: usuarioActual.email || 'usuario@predicxionia.com',
-                        metodo: metodoPagoId
-                    })
-                });
-                const data = await resp.json();
-
-                if (data.status === 'approved') {
-                    usuarioActual.esVip = true;
-                    usuarioActual.plan = planSeleccionadoTexto;
-                    localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
-                    btn.innerHTML = original; btn.disabled = false;
-                    cerrarVipModal();
-                    actualizarInterfazUsuario();
-                    cargarDatosCartelera();
-                    notificar(`¡Pago aprobado! Membresía VIP activa.`);
-                    return;
-                }
-            } catch (e) {}
-
-            setTimeout(() => {
-                usuarioActual.esVip = true;
-                usuarioActual.plan = planSeleccionadoTexto;
-                localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
-                btn.innerHTML = original; btn.disabled = false;
-                cerrarVipModal();
-                actualizarInterfazUsuario();
-                cargarDatosCartelera();
-                notificar(`¡Felicidades! Se activó tu ${planSeleccionadoTexto} 👑`);
-            }, 1500);
+                const payload = { partido: document.getElementById('fb-partido').value, resultado: document.getElementById('fb-resultado').value, evidencia_url: document.getElementById('fb-evidencia').value };
+                await fetch(`${API_BASE}/api/v2/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                cerrarFeedbackModal(); notificar("Reporte enviado a Auditoría."); e.target.reset();
+            } catch (err) {
+                notificar("Error al enviar el reporte.");
+            } finally {
+                btn.innerHTML = originalText; btn.disabled = false;
+            }
         }
 
         async function cargarDatosCartelera(reintentos = 2) {
             const sidebarMatches = document.getElementById('sidebar-matches');
             try {
-                const emailParam = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
-                const res = await fetch(`${API_BASE}/obtener-pronostico${emailParam}`);
-                
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const em = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
+                const res = await fetch(`${API_BASE}/obtener-pronostico${em}`);
+                if(!res.ok) throw new Error("HTTP error");
                 const data = await res.json();
                 
                 if (data.todos_los_partidos && Object.keys(data.todos_los_partidos).length > 0) {
                     globalTodosPartidos = data.todos_los_partidos;
                     renderizarSidebar(globalTodosPartidos);
                     document.getElementById('sidebar-total-badge').innerText = data.total_partidos || '0';
-                } else {
-                    sidebarMatches.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">No hay partidos en la ventana de tiempo actual.</p>`;
                 }
-
+                
                 if (data.pronosticos_destacados && data.pronosticos_destacados.length > 0) {
-                    listaDestacadosCache = data.pronosticos_destacados;
-                    document.getElementById('destacados-count').innerText = `(${listaDestacadosCache.length})`;
-                    renderizarCarrusel(listaDestacadosCache);
-                } else {
-                    document.getElementById('carousel-cards').innerHTML = `<p class="text-xs text-slate-500 py-4 text-center w-full">Sin pronósticos destacados disponibles.</p>`;
+                    document.getElementById('destacados-count').innerText = `(${data.pronosticos_destacados.length})`;
+                    renderizarCarrusel(data.pronosticos_destacados);
                 }
-            } catch (e) {
-                if (reintentos > 0) {
-                    setTimeout(() => cargarDatosCartelera(reintentos - 1), 2000);
-                } else {
-                    sidebarMatches.innerHTML = `
-                        <div class="text-center py-6 px-2">
-                            <p class="text-xs text-amber-400 mb-2 font-bold">Problema de conexión temporal</p>
-                            <button onclick="cargarDatosCartelera(1)" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition">
-                                <i class="fa-solid fa-rotate-right mr-1"></i> Reintentar
-                            </button>
-                        </div>
-                    `;
-                }
+            } catch(e) {
+                if(reintentos > 0) setTimeout(() => cargarDatosCartelera(reintentos - 1), 1000);
+                else sidebarMatches.innerHTML = `<p class="text-xs text-amber-400 text-center py-6">Error conectando con el servidor.</p>`;
             }
         }
 
@@ -803,49 +668,37 @@
                 if (query && filtrados.length === 0 && !liga.toLowerCase().includes(query)) continue;
                 const abierta = query ? true : ligasAbiertas[liga] !== false;
 
-                html += `
-                    <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50">
-                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-300 flex justify-between items-center hover:bg-slate-800 transition">
-                            <span class="truncate">${liga}</span>
-                            <i class="fa-solid fa-chevron-down text-[10px] text-slate-500 transition-transform ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i>
-                        </button>
-                        <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
-                `;
-
-                if (partidos.length === 0) {
+                if (partidos.length > 0 && filtrados.length > 0) {
                     html += `
-                        <div class="p-4 text-center">
-                            <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest"><i class="fa-regular fa-calendar-xmark text-slate-600 mb-1 block text-lg"></i> Sin partidos programados</span>
-                        </div>
+                        <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50 mb-2">
+                            <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-300 flex justify-between items-center hover:bg-slate-800 transition">
+                                <span class="truncate">${liga}</span>
+                                <i class="fa-solid fa-chevron-down text-[10px] text-slate-500 transition-transform ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i>
+                            </button>
+                            <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
                     `;
-                } else if (filtrados.length === 0) {
-                     html += `<div class="p-3 text-center"><span class="text-[10px] text-slate-500">No coincide con la búsqueda</span></div>`;
-                } else {
                     filtrados.forEach(p => {
                         const partes = p.partido.split(' vs ');
                         const local = partes[0] ? partes[0].trim() : p.partido;
                         const visita = partes[1] ? partes[1].trim() : '';
                         const esc = p.partido.replace(/'/g, "\\'");
-                        
                         html += `
-                            <div onclick="mostrarAnalisisDetallado('${esc}', '${p.fecha}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer flex justify-between items-center transition group">
-                                <div class="text-[11px] leading-tight space-y-1">
-                                    <div class="flex items-center gap-1.5">
-                                        <img src="/static/logos/${formatLogoName(local)}" class="w-3.5 h-3.5 object-contain" onerror="this.onerror=null; this.src='${generateFallbackImg(local)}';">
-                                        <div class="font-bold text-slate-200 group-hover:text-white">${local}</div>
+                            <div onclick="mostrarAnalisisDetallado('${esc}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer transition">
+                                <div class="flex items-center justify-between">
+                                    <div class="space-y-1 w-[70%]">
+                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null;this.src='${generateFallbackImg(local)}'" class="w-3.5 h-3.5 object-contain"><div class="font-bold text-slate-200 truncate text-[11px]">${local}</div></div>
+                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null;this.src='${generateFallbackImg(visita)}'" class="w-3.5 h-3.5 object-contain"><div class="text-slate-400 font-medium truncate text-[11px]">${visita}</div></div>
                                     </div>
-                                    <div class="flex items-center gap-1.5">
-                                        <img src="/static/logos/${formatLogoName(visita)}" class="w-3.5 h-3.5 object-contain" onerror="this.onerror=null; this.src='${generateFallbackImg(visita)}';">
-                                        <div class="text-slate-400 font-medium">${visita}</div>
+                                    <div class="text-right">
+                                        <div class="text-[9px] text-accentGreen mb-1">${p.fecha}</div>
+                                        <span class="text-[8px] font-bold text-cyan-400 border border-cyan-900/40 rounded px-1">EV ${p.ev_valor || '+0.0%'}</span>
                                     </div>
-                                    <div class="text-[9px] text-accentGreen mt-1 pl-5">${p.fecha}</div>
                                 </div>
-                                <span class="text-[9px] font-bold text-slate-400 group-hover:text-accentGreen transition"><i class="fa-solid fa-chevron-right"></i></span>
                             </div>
                         `;
                     });
+                    html += `</div></div>`;
                 }
-                html += `</div></div>`;
                 id++;
             }
             cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron ligas.</p>`;
@@ -859,9 +712,7 @@
             ligasAbiertas[liga] = !el.classList.contains('hidden');
         }
 
-        function filtrarSidebar() {
-            renderizarSidebar(globalTodosPartidos, document.getElementById('sidebar-filter').value);
-        }
+        function filtrarSidebar() { renderizarSidebar(globalTodosPartidos, document.getElementById('sidebar-filter').value); }
 
         function toggleCarrusel() {
             const wrapper = document.getElementById('carrusel-wrapper');
@@ -878,47 +729,24 @@
         function renderizarCarrusel(destacados) {
             const cont = document.getElementById('carousel-cards');
             let html = '';
-
             destacados.forEach((d) => {
-                const partes = d.partido.split(' vs ');
-                const local = partes[0] ? partes[0].trim() : d.partido;
-                const visita = partes[1] ? partes[1].trim() : '';
+                const [loc, vis] = d.partido.split(' vs ');
                 const esc = d.partido.replace(/'/g, "\\'");
-
                 html += `
-                    <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all duration-200 group">
+                    <div class="min-w-[280px] max-w-[280px] bg-[#0f172a] border border-[#1e293b] hover:border-[#334155] rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 transition-all group">
                         <div>
                             <div class="flex items-center gap-1.5 mb-3 flex-wrap">
-                                <span class="bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <i class="fa-solid fa-star text-[8px]"></i> FAVORITO
-                                </span>
-                                <span class="bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <i class="fa-solid fa-bullseye text-[8px]"></i> VALOR
-                                </span>
-                                <span class="bg-purple-950/80 text-purple-400 border border-purple-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">
-                                    <i class="fa-solid fa-bomb text-[8px]"></i> BOMBA
-                                </span>
+                                <span class="bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1">VALOR REAL</span>
+                                ${d.dropping_odds ? `<span class="bg-red-950/80 text-red-400 border border-red-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">📉 DROPPING</span>` : ''}
                             </div>
-
                             <div class="space-y-2">
-                                <div class="flex items-center gap-2.5">
-                                    <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(local)}" onerror="this.onerror=null; this.src='${generateFallbackImg(local)}';" class="w-full h-full object-contain p-0.5">
-                                    </div>
-                                    <span class="text-xs font-black text-white truncate max-w-[190px]">${local}</span>
-                                </div>
-                                <div class="flex items-center gap-2.5">
-                                    <div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden">
-                                        <img src="/static/logos/${formatLogoName(visita)}" onerror="this.onerror=null; this.src='${generateFallbackImg(visita)}';" class="w-full h-full object-contain p-0.5">
-                                    </div>
-                                    <span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${visita}</span>
-                                </div>
+                                <div class="flex items-center gap-2.5"><div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden"><img src="/static/logos/${formatLogoName(loc)}" onerror="this.onerror=null; this.src='${generateFallbackImg(loc)}';" class="w-full h-full object-contain p-0.5"></div><span class="text-xs font-black text-white truncate max-w-[190px]">${loc}</span></div>
+                                <div class="flex items-center gap-2.5"><div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden"><img src="/static/logos/${formatLogoName(vis)}" onerror="this.onerror=null; this.src='${generateFallbackImg(vis)}';" class="w-full h-full object-contain p-0.5"></div><span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${vis}</span></div>
                             </div>
                         </div>
-
                         <div class="flex items-center justify-between mt-4 pt-3 border-t border-[#1e293b] text-[10px]">
                             <span class="text-[#00d084] font-bold tracking-tight">${d.fecha}</span>
-                            <button onclick="mostrarAnalisisDetallado('${esc}', '${d.fecha}')" class="text-slate-400 hover:text-white font-black flex items-center gap-1 group-hover:text-[#00d084] transition">
+                            <button onclick="mostrarAnalisisDetallado('${esc}')" class="text-slate-400 hover:text-white font-black flex items-center gap-1 group-hover:text-[#00d084] transition">
                                 CONSULTAR <i class="fa-solid fa-arrow-right text-[9px]"></i>
                             </button>
                         </div>
@@ -928,63 +756,53 @@
             cont.innerHTML = html || `<p class="text-xs text-slate-500 py-4">No hay pronósticos destacados.</p>`;
         }
 
-        function mostrarAnalisisDetallado(nombrePartido, fecha) {
+        function mostrarAnalisisDetallado(nombrePartido) {
             document.getElementById('welcome-view').classList.add('hidden');
-            document.getElementById('chat-messages-container').classList.add('hidden');
             document.getElementById('view-aciertos').classList.add('hidden');
-            
             const detailView = document.getElementById('match-detail-view');
             detailView.classList.remove('hidden');
 
-            let matchData = null;
+            let item = null;
             for (const liga in globalTodosPartidos) {
                 const found = globalTodosPartidos[liga].find(x => x.partido === nombrePartido);
-                if (found) { matchData = found; break; }
+                if (found) item = found;
             }
+            if(!item) return;
 
-            const item = matchData || {
-                partido: nombrePartido, fecha: fecha || 'Próximo', cuota_valor: '1.80', pick_valor: 'Calculando...', ev_valor: '+0.0%',
-                cuota_bomba: '3.00', pick_bomba: 'Calculando...', ev_bomba: '+0.0%', under_25_prob: '50', over_25_prob: '50',
-                parley_pick: 'Calculando...', parley_cuota: '2.00', analisis_premium: "<p>Análisis en proceso...</p>"
-            };
-
-            const partes = item.partido.split(' vs ');
-            const local = partes[0] ? partes[0].trim() : item.partido;
-            const visita = partes[1] ? partes[1].trim() : '';
+            const [loc, vis] = item.partido.split(' vs ');
             const esVIP = usuarioActual.esVip;
+            const dropBadge = item.dropping_odds ? `<span class="bg-red-500/20 text-red-400 border border-red-500/40 text-[9px] font-black px-2 py-0.5 rounded ml-2 animate-pulse">📉 Dropping Odds</span>` : '';
 
             detailView.innerHTML = `
                 <div class="bg-cardDark border border-cardBorder rounded-2xl overflow-hidden shadow-2xl mb-6">
                     <div class="px-6 py-4 border-b border-cardBorder flex justify-between items-center bg-baseDark/60">
                         <div class="flex items-center gap-2">
                             <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
-                            <span class="text-xs font-black uppercase tracking-wider text-slate-300">Análisis del Encuentro</span>
+                            <span class="text-xs font-black uppercase tracking-wider text-slate-300">Análisis Cuantitativo ${dropBadge}</span>
                         </div>
                         <span class="text-xs text-slate-400 font-medium">${item.fecha}</span>
                     </div>
 
                     <div class="px-6 py-8 flex items-center justify-between bg-gradient-to-b from-slate-800/40 to-transparent border-b border-cardBorder mb-6">
                         <div class="flex flex-col items-center gap-3 w-[40%] text-center">
-                            <img src="/static/logos/${formatLogoName(local)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${generateFallbackImg(local)}';">
-                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${local}</h2>
+                            <img src="/static/logos/${formatLogoName(loc)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${generateFallbackImg(loc)}';">
+                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${loc}</h2>
                         </div>
                         <div class="text-slate-600 font-black text-lg px-2">VS</div>
                         <div class="flex flex-col items-center gap-3 w-[40%] text-center">
-                            <img src="/static/logos/${formatLogoName(visita)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${generateFallbackImg(visita)}';">
-                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${visita}</h2>
+                            <img src="/static/logos/${formatLogoName(vis)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${generateFallbackImg(vis)}';">
+                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${vis}</h2>
                         </div>
                     </div>
 
                     <div class="px-6 pb-6">
                         ${esVIP ? `
                         <div class="bg-baseDark border border-cardBorder rounded-xl overflow-hidden mb-6 shadow-sm">
-                            <div class="bg-slate-800/40 px-4 py-3 border-b border-cardBorder flex items-center gap-2">
-                                <span class="text-sm">📊</span>
-                                <h3 class="text-xs font-black text-slate-200 uppercase tracking-wider">Pronóstico Estadístico y Corners</h3>
+                            <div class="bg-slate-800/40 px-4 py-3 border-b border-cardBorder flex items-center justify-between">
+                                <h3 class="text-xs font-black text-slate-200 uppercase tracking-wider">Pronóstico Estadístico</h3>
+                                <span class="text-[10px] text-cyan-400 font-mono font-bold">CLV Target: ${item.clv_target || 'N/A'}</span>
                             </div>
-                            <div class="p-5 text-xs text-slate-300 leading-relaxed space-y-4">
-                                ${item.analisis_premium}
-                            </div>
+                            <div class="p-5 text-xs text-slate-300 leading-relaxed space-y-4">${item.analisis_premium}</div>
                         </div>
                         ` : ''}
 
@@ -995,79 +813,57 @@
                                     <span class="text-xs font-black text-white uppercase tracking-wider">Pick de Valor Pro</span>
                                 </div>
                                 <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
-                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota</span>
+                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota Real</span>
                                     <span class="text-amber-400 font-black text-sm">≈${item.cuota_valor}</span>
                                 </div>
                             </div>
                             ${esVIP ? `
                                 <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span><span class="font-black text-white text-sm">${item.pick_valor}</span></div>
+                                    <div>
+                                        <span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span>
+                                        <span class="font-black text-white text-sm">${item.pick_valor}</span>
+                                        <span class="text-[10px] text-cyan-400 font-mono block mt-1">Gestión: ${item.stake_kelly || '1.5% Bank'}</span>
+                                    </div>
                                     <span class="bg-accentGreen/20 text-accentGreen text-[10px] font-black px-2.5 py-1 rounded border border-accentGreen/30">EV: ${item.ev_valor}</span>
                                 </div>
                             ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Pick Oculto por Membresía</span><span class="text-accentGreen text-xs font-black">EV: +8.5%</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
                         </div>
 
-                        <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-4 relative">
-                            <div class="flex justify-between items-center mb-3">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-purple-500/15 flex items-center justify-center text-purple-400 text-xs"><i class="fa-solid fa-bomb"></i></div>
-                                    <span class="text-xs font-black text-white uppercase tracking-wider">Pick Bomba Pro</span>
-                                </div>
-                                <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
-                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota</span>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder relative">
+                                <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-full bg-purple-500/15 flex items-center justify-center text-purple-400 text-xs"><i class="fa-solid fa-bomb"></i></div><span class="text-xs font-black text-white uppercase tracking-wider">Pick Bomba</span></div>
+                                ${esVIP ? `
+                                <div class="flex items-center justify-between bg-cardDark rounded-xl p-3 border border-cardBorder">
+                                    <span class="font-black text-white text-xs">${item.pick_bomba}</span>
                                     <span class="text-amber-400 font-black text-sm">≈${item.cuota_bomba}</span>
                                 </div>
+                                ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3 bg-cardDark"><div class="vip-blur"><span class="font-bold text-white text-sm">Pick Oculto</span></div></div>`}
                             </div>
-                            ${esVIP ? `
-                                <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Selección del Modelo:</span><span class="font-black text-white text-sm">${item.pick_bomba}</span></div>
-                                    <span class="bg-purple-500/20 text-purple-400 text-[10px] font-black px-2.5 py-1 rounded border border-purple-500/30">EV: ${item.ev_bomba}</span>
-                                </div>
-                            ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Pick Bomba Oculto</span><span class="text-purple-400 text-xs font-black">EV: +14%</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
-                        </div>
-
-                        <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder mb-6 relative">
-                            <div class="flex justify-between items-center mb-3">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400 text-xs"><i class="fa-solid fa-layer-group"></i></div>
-                                    <span class="text-xs font-black text-white uppercase tracking-wider">Parley Segura (Combinada)</span>
-                                </div>
-                                <div class="border border-cardBorder rounded-lg px-3 py-1 bg-cardDark">
-                                    <span class="text-[8px] text-slate-500 block uppercase font-bold">Cuota Total</span>
+                            
+                            <div class="bg-baseDark rounded-2xl p-4 border border-cardBorder relative">
+                                <div class="flex items-center gap-2 mb-3"><div class="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center text-blue-400 text-xs"><i class="fa-solid fa-layer-group"></i></div><span class="text-xs font-black text-white uppercase tracking-wider">Parley Segura</span></div>
+                                ${esVIP ? `
+                                <div class="flex items-center justify-between bg-cardDark rounded-xl p-3 border border-cardBorder">
+                                    <span class="font-black text-white text-xs">${item.parley_pick}</span>
                                     <span class="text-amber-400 font-black text-sm">≈${item.parley_cuota}</span>
                                 </div>
+                                ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3 bg-cardDark"><div class="vip-blur"><span class="font-bold text-white text-sm">Parley Oculta</span></div></div>`}
                             </div>
-                            ${esVIP ? `
-                                <div class="flex items-center justify-between bg-cardDark rounded-xl p-3.5 border border-cardBorder">
-                                    <div><span class="text-[9px] font-bold text-slate-400 block uppercase mb-0.5">Fórmula Estructurada:</span><span class="font-black text-white text-sm">${item.parley_pick}</span></div>
-                                    <span class="bg-blue-500/20 text-blue-400 text-[10px] font-black px-2.5 py-1 rounded border border-blue-500/30">Valor</span>
-                                </div>
-                            ` : `<div class="relative overflow-hidden rounded-xl border border-cardBorder p-3.5 bg-cardDark"><div class="vip-blur flex justify-between items-center"><span class="font-bold text-white text-sm">Parley Oculta</span><span class="text-blue-400 text-xs font-black">Combinada</span></div><div class="absolute inset-0 flex items-center justify-center"><span class="text-xs font-bold text-amber-400 bg-slate-900/90 px-3 py-1 rounded-lg border border-amber-500/30 flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Solo Premium</span></div></div>`}
                         </div>
 
                         ${!esVIP ? `
-                            <div class="bg-baseDark border border-cardBorder rounded-2xl p-8 text-center relative overflow-hidden">
+                            <div class="bg-baseDark border border-cardBorder rounded-2xl p-8 text-center mt-6">
                                 <div class="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto mb-3 text-amber-400 text-xl"><i class="fa-solid fa-lock"></i></div>
                                 <h3 class="text-lg font-black text-white">Análisis premium</h3>
-                                <p class="text-xs text-slate-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">Desbloquea el análisis completo, proyecciones de corners, 1X2, modelo xG y los fundamentos matemáticos de este partido.</p>
+                                <p class="text-xs text-slate-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">Desbloquea proyecciones de corners, 1X2, modelo xG y los fundamentos matemáticos.</p>
                                 <button onclick="abrirVipModal()" class="bg-accentGreen hover:bg-accentHover text-slate-950 font-black text-xs px-6 py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20">Desbloquear ahora</button>
                             </div>
                         ` : `
-                            <div class="bg-baseDark rounded-2xl p-5 border border-cardBorder">
-                                <h4 class="text-xs font-black text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                    <i class="fa-solid fa-futbol text-slate-400"></i> Proyección de Goles (Línea 2.5)
-                                </h4>
+                            <div class="bg-baseDark rounded-2xl p-5 border border-cardBorder mt-6">
+                                <h4 class="text-xs font-black text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2"><i class="fa-solid fa-futbol text-slate-400"></i> Proyección de Goles</h4>
                                 <div class="grid grid-cols-2 gap-3 mb-4">
-                                    <div class="bg-cardDark border border-cardBorder p-3 rounded-xl">
-                                        <span class="text-[10px] text-slate-400 font-bold block mb-1">MENOS DE 2.5</span>
-                                        <div class="text-xl font-black text-white mb-2">${item.under_25_prob}%</div>
-                                        <div class="progress-track"><div class="progress-fill-dark" style="width: ${item.under_25_prob}%"></div></div>
-                                    </div>
-                                    <div class="bg-cardDark border border-accentGreen/40 p-3 rounded-xl">
-                                        <span class="text-[10px] text-accentGreen font-bold block mb-1">MÁS DE 2.5</span>
-                                        <div class="text-xl font-black text-white mb-2">${item.over_25_prob}%</div>
-                                        <div class="progress-track"><div class="progress-fill-green" style="width: ${item.over_25_prob}%"></div></div>
-                                    </div>
+                                    <div class="bg-cardDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 font-bold block mb-1">MENOS DE 2.5</span><div class="text-xl font-black text-white mb-2">${item.under_25_prob}%</div><div class="progress-track"><div class="progress-fill-dark" style="width: ${item.under_25_prob}%"></div></div></div>
+                                    <div class="bg-cardDark border border-accentGreen/40 p-3 rounded-xl"><span class="text-[10px] text-accentGreen font-bold block mb-1">MÁS DE 2.5</span><div class="text-xl font-black text-white mb-2">${item.over_25_prob}%</div><div class="progress-track"><div class="progress-fill-green" style="width: ${item.over_25_prob}%"></div></div></div>
                                 </div>
                             </div>
                         `}
@@ -1099,10 +895,9 @@
         }
 
         async function cargarDatosAciertos() {
-            const tbody = document.getElementById('tabla-aciertos-body');
+            const tbody = document.getElementById('aciertos-body');
             const filtroLiga = document.getElementById('filtro-acierto-liga').value.toLowerCase();
-            const filtroMercado = document.getElementById('filtro-acierto-mercado').value.toLowerCase();
-
+            
             try {
                 const res = await fetch(`${API_BASE}/api/v2/aciertos`);
                 if (!res.ok) throw new Error("Fallo al consultar historial");
@@ -1111,58 +906,62 @@
                 const stats = data.metricas_globales;
                 document.getElementById('stat-winrate').innerText = `${stats.tasa_acierto_pct}%`;
                 document.getElementById('bar-winrate').style.width = `${stats.tasa_acierto_pct}%`;
-                document.getElementById('stat-win-loss').innerText = `${stats.acertados} Acertadas / ${stats.fallados} Falladas`;
+                document.getElementById('stat-win-loss').innerText = `${stats.acertados} Acertadas / ${stats.falladas} Falladas`;
                 document.getElementById('stat-yield').innerText = `${stats.yield_pct > 0 ? '+' : ''}${stats.yield_pct}%`;
                 document.getElementById('stat-units').innerText = `${stats.unidades_netas > 0 ? '+' : ''}${stats.unidades_netas}u`;
                 document.getElementById('stat-streak').innerText = stats.racha_actual;
                 document.getElementById('stat-odds').innerText = stats.cuota_promedio.toFixed(2);
-                document.getElementById('stat-best-month').innerText = `Mejor: ${stats.mejor_mes}`;
 
                 let registros = data.registros;
-                if (filtroLiga) {
-                    registros = registros.filter(r => r.competicion.toLowerCase().includes(filtroLiga));
-                }
-                if (filtroMercado) {
-                    registros = registros.filter(r => r.mercado.toLowerCase().includes(filtroMercado));
-                }
+                if (filtroLiga) registros = registros.filter(r => r.competicion.toLowerCase().includes(filtroLiga));
 
                 document.getElementById('contador-partidos-resueltos').innerText = `${registros.length} pronósticos auditados`;
 
                 let html = '';
                 if (registros.length === 0) {
-                    html = `<tr><td colspan="7" class="text-center py-6 text-slate-500">No hay pronósticos registrados para este filtro.</td></tr>`;
+                    html = `<tr><td colspan="6" class="text-center py-6 text-slate-500">No hay pronósticos registrados para este filtro.</td></tr>`;
                 } else {
                     registros.forEach(r => {
                         const esWin = r.estado === "GANADA";
-                        const badge = esWin 
-                            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-accentGreen text-[10px] font-black"><i class="fa-solid fa-check"></i> GANADA</span>`
-                            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-950/80 border border-red-500/40 text-red-400 text-[10px] font-black"><i class="fa-solid fa-xmark"></i> PERDIDA</span>`;
+                        const esNula = r.estado === "NULA";
+                        
+                        let badgeEstado = '';
+                        if(esWin) badgeEstado = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-accentGreen text-[9px] font-black"><i class="fa-solid fa-check"></i> W</span>`;
+                        else if(esNula) badgeEstado = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-400 text-[9px] font-black"><i class="fa-solid fa-minus"></i> NULL</span>`;
+                        else badgeEstado = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/40 text-red-400 text-[9px] font-black"><i class="fa-solid fa-xmark"></i> L</span>`;
+
+                        const badgeVerif = r.verificacion_status === 'VERIFIED'
+                            ? `<div class="flex items-center gap-1 mt-1 text-[8px] text-blue-300 bg-blue-900/40 px-1 rounded w-fit"><i class="fa-solid fa-shield-check"></i> Verificado</div>`
+                            : `<div class="flex items-center gap-1 mt-1 text-[8px] text-red-400 bg-red-900/40 px-1 rounded w-fit" title="Pendiente"><i class="fa-solid fa-triangle-exclamation"></i> No Verificado</div>`;
+                            
+                        const confClass = (r.ia_confianza || 50) > 60 ? 'text-accentBlue' : 'text-red-400';
+                        const decisionBadge = (r.ia_decision || "").includes("Rechazado")
+                            ? `<span class="${confClass} text-[8px] block mt-0.5">✗ ${r.ia_confianza}% (Rechazado)</span>`
+                            : `<span class="text-accentGreen text-[8px] block mt-0.5">✓ ${r.ia_confianza || 75}% (Aceptado)</span>`;
 
                         html += `
                             <tr class="hover:bg-slate-800/40 transition">
-                                <td class="py-3 px-4">
-                                    <div class="font-bold text-slate-200">${r.competicion}</div>
-                                    <div class="text-[10px] text-slate-500">${r.fecha || 'Reciente'}</div>
+                                <td class="py-3 px-3 border-r border-cardBorder/40">
+                                    ${badgeVerif}
+                                    <div class="text-[9px] text-slate-500 mt-1">${r.fecha || 'Reciente'}</div>
                                 </td>
-                                <td class="py-3 px-4">
-                                    <div class="font-black text-white">${r.partido}</div>
-                                    <div class="text-[11px] text-cyan-400 font-mono font-bold mt-0.5">Final: ${r.marcador || 'Culminado'}</div>
+                                <td class="py-3 px-3">
+                                    <div class="font-black text-white text-[11px] leading-tight">${r.partido}</div>
+                                    <div class="text-[10px] text-cyan-400 font-mono font-bold mt-1">Real: ${r.marcador || 'Culminado'}</div>
+                                    <div class="text-[9px] text-slate-400 mt-0.5 uppercase">${r.competicion}</div>
                                 </td>
-                                <td class="py-3 px-4">
-                                    <span class="text-[9px] font-bold text-slate-400 uppercase block">${r.mercado || 'Pick'}</span>
-                                    <span class="font-black text-white text-xs">${r.direccion_pick}</span>
+                                <td class="py-3 px-3">
+                                    <span class="font-black text-white text-[10px] leading-tight">${r.direccion_pick}</span>
+                                    ${decisionBadge}
                                 </td>
-                                <td class="py-3 px-3 text-center font-mono font-bold text-amber-400">
-                                    ${(parseFloat(r.cuota_entrada) || 1.80).toFixed(2)}
+                                <td class="py-3 px-2 text-center">
+                                    <div class="font-mono font-bold text-amber-400">${(parseFloat(r.cuota_entrada) || 1.0).toFixed(2)}</div>
+                                    <div class="text-[8px] text-cyan-300 font-mono mt-0.5">CLV: ${(parseFloat(r.cuota_cierre_clv) || 1.0).toFixed(2)}</div>
+                                    <div class="text-[8px] text-slate-500 uppercase mt-0.5">${r.bookmaker || 'Bookmaker'}</div>
                                 </td>
-                                <td class="py-3 px-3 text-center font-mono text-[10px] text-cyan-300">
-                                    ${(parseFloat(r.cuota_cierre_clv) || 1.70).toFixed(2)}
-                                </td>
-                                <td class="py-3 px-4 text-center">
-                                    ${badge}
-                                </td>
-                                <td class="py-3 px-4 text-right font-mono font-black ${esWin ? 'text-accentGreen' : 'text-red-400'}">
-                                    ${r.roi_realizado > 0 ? '+' : ''}${parseFloat(r.roi_realizado).toFixed(2)}u
+                                <td class="py-3 px-2 text-center">${badgeEstado}</td>
+                                <td class="py-3 px-3 text-right font-mono font-black ${esWin ? 'text-accentGreen' : (esNula ? 'text-slate-400' : 'text-red-400')}">
+                                    ${(r.roi_realizado || 0) > 0 ? '+' : ''}${parseFloat(r.roi_realizado || 0).toFixed(2)}u
                                 </td>
                             </tr>
                         `;
@@ -1170,7 +969,7 @@
                 }
                 tbody.innerHTML = html;
             } catch(e) {
-                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-400">Error cargando auditoría de aciertos.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-red-400">Error cargando auditoría de aciertos.</td></tr>`;
             }
         }
 
@@ -1192,20 +991,14 @@
             const idLoad = 'load-' + Date.now();
             chatContainer.innerHTML += `<div id="${idLoad}" class="flex justify-start"><div class="bg-cardDark border border-cardBorder text-slate-400 text-xs py-2.5 px-4 rounded-2xl flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin text-accentGreen"></i> Ejecutando motor de Inteligencia Artificial...</div></div>`;
 
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 9000);
-
             try {
                 const res = await fetch(`${API_BASE}/chat-ia`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mensaje: msg }),
-                    signal: controller.signal
+                    body: JSON.stringify({ mensaje: msg })
                 });
                 
-                clearTimeout(timeoutId);
-                if (!res.ok) throw new Error("Error del servidor");
-                
+                if (!res.ok) throw new Error("Error de conexión");
                 const data = await res.json();
                 document.getElementById(idLoad)?.remove();
 
@@ -1215,11 +1008,7 @@
 
             } catch (err) {
                 document.getElementById(idLoad)?.remove();
-                if (err.name === 'AbortError') {
-                    chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl"><i class="fa-solid fa-triangle-exclamation mr-1"></i> El servidor tardó demasiado en responder (Timeout). Intenta consultar de nuevo.</div></div>`;
-                } else {
-                    chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl"><i class="fa-solid fa-circle-xmark mr-1"></i> Motor temporalmente saturado. Reintenta en unos instantes.</div></div>`;
-                }
+                chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-red-950/60 border border-red-800 text-red-300 text-xs p-3 rounded-xl"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Hubo un problema al procesar tu solicitud.</div></div>`;
             }
         }
     </script>
