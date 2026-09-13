@@ -1,0 +1,7 @@
+Flask
+Flask-Cors
+requests
+google-genai
+mercadopago
+firebase-admin
+gunicorn
