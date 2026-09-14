@@ -43,20 +43,26 @@ logger = logging.getLogger("PredicXionApp")
 # 2. INICIALIZACIÓN DE SERVICIOS EXTERNOS (FIREBASE & MERCADOPAGO)
 # --------------------------------------------------------------------------------------
 def init_firebase_admin():
-    """Inicializa Firebase Admin SDK de forma resiliente con validación de credenciales."""
+    """Inicializa Firebase buscando primero en el almacén secreto de Render."""
     try:
         if not firebase_admin._apps:
-            cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_key.json")
-            if os.path.exists(cred_path):
-                cred = credentials.Certificate(cred_path)
+            # Ruta donde Render monta los Secret Files
+            secret_path = "/etc/secrets/FIREBASE_CREDENTIALS_JSON"
+            
+            if os.path.exists(secret_path):
+                cred = credentials.Certificate(secret_path)
                 firebase_admin.initialize_app(cred)
-                logger.info("Firebase inicializado correctamente mediante clave de servicio: %s", cred_path)
             else:
-                firebase_admin.initialize_app()
-                logger.warning("Clave de servicio no encontrada en '%s'. Usando Application Default Credentials.", cred_path)
+                # Ruta local por defecto para desarrollo en tu PC
+                cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_key.json")
+                if os.path.exists(cred_path):
+                    cred = credentials.Certificate(cred_path)
+                    firebase_admin.initialize_app(cred)
+                else:
+                    firebase_admin.initialize_app()
         return firestore.client()
     except Exception as exc:
-        logger.critical("Fallo catastrófico al inicializar Firebase Admin: %s", exc)
+        print(f"Error crítico al inicializar Firebase: {exc}")
         raise exc
 
 db = init_firebase_admin()
