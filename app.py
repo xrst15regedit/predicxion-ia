@@ -27,7 +27,13 @@ except (ImportError, ModuleNotFoundError):
 
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
-from apscheduler.schedulers.background import BackgroundScheduler
+
+# Carga resiliente de apscheduler: evita caídas si la dependencia no está presente en el contenedor de producción
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+except (ImportError, ModuleNotFoundError):
+    BackgroundScheduler = None
+
 from pytz import timezone
 
 # --------------------------------------------------------------------------------------
@@ -855,10 +861,13 @@ def create_app() -> Flask:
     # ----------------------------------------------------------------------------------
     # INICIALIZACIÓN DEL PLANIFICADOR DE TAREAS (APSCHEDULER A LAS 3:00 AM)
     # ----------------------------------------------------------------------------------
-    scheduler = BackgroundScheduler(timezone=timezone("America/Lima"))
-    scheduler.add_job(etl_worker.run_daily_pipeline, "cron", hour=3, minute=0, id="etl_daily_run")
-    scheduler.start()
-    logger.info("Planificador APScheduler iniciado: Tarea ETL programada a las 3:00 AM (America/Lima).")
+    if BackgroundScheduler is not None:
+        scheduler = BackgroundScheduler(timezone=timezone("America/Lima"))
+        scheduler.add_job(etl_worker.run_daily_pipeline, "cron", hour=3, minute=0, id="etl_daily_run")
+        scheduler.start()
+        logger.info("Planificador APScheduler iniciado: Tarea ETL programada a las 3:00 AM (America/Lima).")
+    else:
+        logger.warning("APScheduler no está instalado. El planificador automático no se iniciará.")
 
     return app
 
