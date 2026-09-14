@@ -17,7 +17,14 @@ from urllib3.util.retry import Retry
 import numpy as np
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
-from dotenv import load_dotenv
+
+# Carga resiliente de python-dotenv: evita caídas si la dependencia no está presente en el contenedor de producción
+try:
+    from dotenv import load_dotenv
+except (ImportError, ModuleNotFoundError):
+    def load_dotenv(*args, **kwargs):
+        return None
+
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from apscheduler.schedulers.background import BackgroundScheduler
