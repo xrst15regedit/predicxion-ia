@@ -4,7 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PredicXion IA - Dashboard Institucional</title>
-    <link rel="icon" href="data:,">
+    <!-- Metadatos SEO y Open Graph -->
+    <meta name="description" content="PredicXion IA: Arquitectura Institucional de Inteligencia Deportiva. Análisis probabilístico, Expected Value (EV), Criterio de Kelly y Closing Line Value (CLV).">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="PredicXion IA - Dashboard Institucional">
+    <meta property="og:description" content="Plataforma cuantitativa de análisis deportivo y modelos matemáticos de alta convergencia.">
+    <meta property="og:type" content="website">
+    
+    <!-- Favicon SVG optimizado para eliminar errores 404 de consola -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080e1a'/><text x='50%' y='68%' font-size='55' font-weight='bold' fill='%2300d084' text-anchor='middle'>P</text></svg>">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -45,14 +53,15 @@
 </head>
 
 <body class="min-h-screen flex flex-col font-sans antialiased selection:bg-accentGreen selection:text-slate-950">
-    <div id="toast" class="toast-notification flex items-center justify-center gap-2"><i class="fa-solid fa-circle-check"></i> <span id="toast-text">Notificación</span></div>
+    <div id="toast" class="toast-notification flex items-center justify-center gap-2" role="status" aria-live="polite"><i class="fa-solid fa-circle-check"></i> <span id="toast-text">Notificación</span></div>
 
     <header class="w-full border-b border-cardBorder bg-baseDark/95 backdrop-blur-md px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40">
         <div class="flex flex-col">
-            <span class="font-outfit font-black text-2xl tracking-tight text-white flex items-center gap-2">
+            <!-- Jerarquía de encabezado H1 semántica -->
+            <h1 class="font-outfit font-black text-2xl tracking-tight text-white flex items-center gap-2 m-0">
                 PredicXion<span class="text-accentGreen"> IA</span>
                 <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
-            </span>
+            </h1>
             <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Arquitectura Institucional de Inteligencia Deportiva</p>
         </div>
 
@@ -70,7 +79,7 @@
                 <div id="profile-logged" class="hidden flex items-center gap-2 bg-cardDark border border-cardBorder px-3 py-1.5 rounded-xl">
                     <div class="w-7 h-7 rounded-full bg-accentGreen/20 border border-accentGreen text-accentGreen flex items-center justify-center font-bold text-xs" id="user-avatar">U</div>
                     <span class="text-xs font-bold text-slate-200" id="user-name-display">Usuario</span>
-                    <button onclick="cerrarSesion()" class="text-slate-400 hover:text-red-400 text-xs ml-1"><i class="fa-solid fa-right-from-bracket"></i></button>
+                    <button onclick="cerrarSesion()" class="text-slate-400 hover:text-red-400 text-xs ml-1" aria-label="Cerrar sesión"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
             </div>
         </div>
@@ -80,7 +89,7 @@
         
         <aside class="w-full lg:w-80 border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-85px)] overflow-hidden">
             <div class="p-3 border-b border-cardBorder/60">
-                <a href="https://t.me/predicxionia" target="_blank" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
+                <a href="https://t.me/predicxionia" target="_blank" rel="noopener noreferrer" class="w-full bg-accentBlue hover:bg-blue-600 border border-blue-400/40 rounded-xl p-3 flex items-center justify-between shadow-md transition group">
                     <div class="flex items-center gap-3">
                         <i class="fa-brands fa-telegram text-white text-2xl group-hover:scale-110 transition-transform"></i>
                         <div class="text-left">
@@ -98,7 +107,7 @@
             </div>
 
             <div class="p-3 border-b border-cardBorder/60 bg-cardDark/40">
-                <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." aria-label="Buscar equipo o liga" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
             </div>
 
             <div id="sidebar-matches" class="flex-1 overflow-y-auto p-2.5 space-y-2 text-center text-xs text-slate-500 py-10">Cargando partidos...</div>
@@ -232,12 +241,12 @@
                 <p class="text-xs text-slate-400 mt-2">Selecciona un partido para analizar Expected Value (EV), Quarter Kelly y Closing Line Value (CLV).</p>
             </div>
             
-            <div id="chat-messages-container" class="hidden max-w-4xl mx-auto space-y-4 pt-4 mt-auto w-full"></div>
+            <div id="chat-messages-container" class="hidden max-w-4xl mx-auto space-y-4 pt-4 mt-auto w-full" aria-live="polite"></div>
             
             <!-- CAJA DE CHAT INFERIOR -->
             <form onsubmit="enviarMensajeChat(event)" class="relative flex items-center max-w-4xl mx-auto w-full mt-6">
-                <input type="text" id="chat-input" placeholder="Ej: Analiza tácticamente el partido de hoy..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen text-sm text-white rounded-xl py-3 pl-4 pr-12 outline-none">
-                <button type="submit" class="absolute right-2 bg-accentBlue text-white w-9 h-9 rounded-lg flex items-center justify-center"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+                <input type="text" id="chat-input" placeholder="Ej: Analiza tácticamente el partido de hoy..." aria-label="Pregunta al asistente de IA deportiva" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen text-sm text-white rounded-xl py-3 pl-4 pr-12 outline-none">
+                <button type="submit" aria-label="Enviar mensaje al asistente de IA" class="absolute right-2 bg-accentBlue text-white w-9 h-9 rounded-lg flex items-center justify-center"><i class="fa-solid fa-paper-plane text-xs"></i></button>
             </form>
 
             <!-- CARRUSEL DE PRONÓSTICOS DESTACADOS RANKING -->
@@ -251,21 +260,21 @@
                     <button onclick="toggleCarrusel()" id="btn-toggle-carrusel" class="text-[11px] text-slate-400 hover:text-white font-semibold transition">Ocultar <i class="fa-solid fa-chevron-up"></i></button>
                 </div>
                 <div id="carrusel-wrapper" class="relative flex items-center">
-                    <button onclick="moverCarrusel(-1)" class="absolute -left-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder text-slate-300 shadow-xl transition hover:border-slate-500"><i class="fa-solid fa-chevron-left text-xs"></i></button>
+                    <button onclick="moverCarrusel(-1)" aria-label="Desplazar carrusel hacia la izquierda" class="absolute -left-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder text-slate-300 shadow-xl transition hover:border-slate-500"><i class="fa-solid fa-chevron-left text-xs"></i></button>
                     <div id="carousel-cards" class="flex gap-3 overflow-x-auto no-scrollbar py-1 w-full px-2 scroll-smooth">
                         <div class="text-xs text-slate-500 py-3">Generando picks matemáticos en vivo...</div>
                     </div>
-                    <button onclick="moverCarrusel(1)" class="absolute -right-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder text-slate-300 shadow-xl transition hover:border-slate-500"><i class="fa-solid fa-chevron-right text-xs"></i></button>
+                    <button onclick="moverCarrusel(1)" aria-label="Desplazar carrusel hacia la derecha" class="absolute -right-2 z-10 w-8 h-8 rounded-full bg-cardDark border border-cardBorder text-slate-300 shadow-xl transition hover:border-slate-500"><i class="fa-solid fa-chevron-right text-xs"></i></button>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- MODALES AUTH & VIP (INTACTOS) -->
-    <div id="modal-auth" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <!-- MODALES AUTH & VIP CON ATRIBUTOS ARIA SEMÁNTICOS -->
+    <div id="modal-auth" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-[#1a202c] border border-slate-700 w-full max-w-[420px] rounded-2xl p-7 relative">
-            <button onclick="cerrarAuthModal()" class="absolute top-5 right-5 text-slate-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
-            <h3 class="font-black text-2xl text-white mb-6 text-center">Inicia Sesión</h3>
+            <button onclick="cerrarAuthModal()" aria-label="Cerrar modal de autenticación" class="absolute top-5 right-5 text-slate-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <h3 id="auth-modal-title" class="font-black text-2xl text-white mb-6 text-center">Inicia Sesión</h3>
             <div class="bg-cardDark rounded-xl p-1.5 flex items-center mb-6 border border-cardBorder">
                 <button id="tab-login" onclick="setAuthMode(false)" class="flex-1 bg-accentBlue text-white font-bold text-sm py-2.5 rounded-lg transition shadow-md">Ya tengo cuenta</button>
                 <button id="tab-register" onclick="setAuthMode(true)" class="flex-1 text-slate-400 hover:text-white font-bold text-sm py-2.5 rounded-lg transition">Crear tu usuario</button>
@@ -274,25 +283,25 @@
             
             <form id="auth-form" onsubmit="procesarAuthForm(event)" class="space-y-4">
                 <div id="campo-usuario" class="hidden">
-                    <input type="text" id="auth-user" placeholder="Nombre de usuario" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
+                    <input type="text" id="auth-user" placeholder="Nombre de usuario" aria-label="Nombre de usuario" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div>
-                    <input type="email" id="auth-email" required placeholder="Tu email" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
+                    <input type="email" id="auth-email" required placeholder="Tu email" aria-label="Correo electrónico" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <div>
-                    <input type="password" id="auth-password" required placeholder="Contraseña (mínimo 6 caracteres)" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
+                    <input type="password" id="auth-password" required placeholder="Contraseña (mínimo 6 caracteres)" aria-label="Contraseña" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-4 py-3.5 text-sm text-white placeholder-slate-500 focus:outline-none transition">
                 </div>
                 <button type="submit" id="auth-btn-submit" class="w-full bg-accentGreen hover:bg-accentHover text-slate-950 font-black text-sm py-3.5 rounded-xl transition shadow-lg shadow-emerald-500/20 mt-2">Iniciar sesión con email</button>
             </form>
         </div>
     </div>
 
-    <div id="modal-vip" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+    <div id="modal-vip" role="dialog" aria-modal="true" aria-labelledby="vip-modal-title" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
         <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-5 sm:p-7 relative my-auto">
-            <button onclick="cerrarVipModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="cerrarVipModal()" aria-label="Cerrar modal VIP" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
             <div class="text-center mb-6">
                 <span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">Membresía Exclusiva</span>
-                <h3 class="font-outfit font-black text-2xl text-white mt-2">Desbloquea el análisis completo</h3>
+                <h3 id="vip-modal-title" class="font-outfit font-black text-2xl text-white mt-2">Desbloquea el análisis completo</h3>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
                 <div onclick="seleccionarPlan(14.90, 'Pase Semanal')" id="plan-card-14" class="plan-card cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center"><span class="text-[10px] font-black text-slate-400 uppercase">Semanal</span><div class="font-black text-2xl text-white mt-1">S/ 14.90</div></div>
@@ -307,18 +316,18 @@
                 </div>
                 <div id="form-yape" class="metodo-form bg-baseDark border border-purple-900/40 rounded-2xl p-4 space-y-3">
                     <div class="grid grid-cols-2 gap-2.5">
-                        <div><input type="tel" id="yape-phone" placeholder="Celular" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white"></div>
-                        <div><input type="text" id="yape-code" placeholder="Código" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white"></div>
+                        <div><input type="tel" id="yape-phone" placeholder="Celular" aria-label="Número de celular Yape" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white"></div>
+                        <div><input type="text" id="yape-code" placeholder="Código" aria-label="Código de aprobación Yape" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white"></div>
                     </div>
                 </div>
                 <div id="form-plin" class="metodo-form hidden bg-baseDark border border-cyan-900/40 rounded-2xl p-4 space-y-3">
-                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Teléfono Plin:</label><input type="tel" id="plin-phone" maxlength="9" placeholder="999888777" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                    <div><label for="plin-phone" class="text-[10px] font-bold text-slate-400 block mb-1">Número de Teléfono Plin:</label><input type="tel" id="plin-phone" maxlength="9" placeholder="999888777" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                 </div>
                 <div id="form-tarjeta" class="metodo-form hidden bg-baseDark border border-emerald-900/40 rounded-2xl p-4 space-y-3">
-                    <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Número de Tarjeta:</label><input type="text" id="card-number" placeholder="4000 1234 5678 9010" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                    <div><label for="card-number" class="text-[10px] font-bold text-slate-400 block mb-1">Número de Tarjeta:</label><input type="text" id="card-number" placeholder="4000 1234 5678 9010" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     <div class="grid grid-cols-2 gap-2.5">
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">Vencimiento:</label><input type="text" id="card-exp" placeholder="MM/AA" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
-                        <div><label class="text-[10px] font-bold text-slate-400 block mb-1">CVV:</label><input type="password" id="card-cvv" placeholder="123" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div><label for="card-exp" class="text-[10px] font-bold text-slate-400 block mb-1">Vencimiento:</label><input type="text" id="card-exp" placeholder="MM/AA" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
+                        <div><label for="card-cvv" class="text-[10px] font-bold text-slate-400 block mb-1">CVV:</label><input type="password" id="card-cvv" placeholder="123" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none font-mono"></div>
                     </div>
                 </div>
                 <button onclick="procesarPagoVIP()" id="btn-confirmar-pago" class="w-full mt-4 bg-amber-500 text-slate-950 font-black py-3.5 rounded-xl">Desbloquear por S/ 39.90</button>
@@ -326,7 +335,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT LOGIC -->
+    <!-- SCRIPT LOGIC CON SANITIZACIÓN XSS Y MANEJO SEGURO -->
     <script>
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -338,12 +347,30 @@
         const ligasAbiertas = {};
         let vistaAciertosActiva = false;
 
-        const formatLogoName = (name) => name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_') + '.png';
-        const fallbackImg = (name) => `https://ui-avatars.com/api/?background=0f172a&color=fff&bold=true&name=${encodeURIComponent(name)}`;
+        // Función de escape para neutralizar vectores XSS
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str ?? '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        const formatLogoName = (name) => (name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_') + '.png';
+        const fallbackImg = (name) => `https://ui-avatars.com/api/?background=0f172a&color=fff&bold=true&name=${encodeURIComponent(name || 'Equipo')}`;
 
         document.addEventListener('DOMContentLoaded', () => {
             const saved = localStorage.getItem('predicxion_user');
-            if(saved) { usuarioActual = JSON.parse(saved); actualizarUI(); }
+            if(saved) { 
+                try {
+                    usuarioActual = JSON.parse(saved); 
+                    actualizarUI(); 
+                } catch(e) {
+                    console.error("Error al leer sesión almacenada", e);
+                }
+            }
             cargarDatosCartelera();
         });
 
@@ -359,7 +386,7 @@
                 document.getElementById('btn-login-header').classList.add('hidden');
                 document.getElementById('profile-logged').classList.remove('hidden');
                 document.getElementById('user-name-display').innerText = usuarioActual.nombre;
-                if(usuarioActual.email.includes("fabiancermaz")) {
+                if(usuarioActual.email && usuarioActual.email.includes("fabiancermaz")) {
                     usuarioActual.esVip = true;
                     document.getElementById('nav-user-badge').innerText = '👑 DUEÑO';
                     document.getElementById('btn-abrir-vip').classList.add('hidden');
@@ -400,8 +427,8 @@
 
         async function procesarAuthForm(e) {
             e.preventDefault();
-            const email = document.getElementById('auth-email').value;
-            const userNombre = document.getElementById('auth-user')?.value || email.split('@')[0];
+            const email = document.getElementById('auth-email').value.trim();
+            const userNombre = document.getElementById('auth-user')?.value.trim() || email.split('@')[0];
             usuarioActual = { logueado: true, nombre: userNombre, email: email, esVip: email.includes("fabiancermaz") };
             localStorage.setItem('predicxion_user', JSON.stringify(usuarioActual));
             actualizarUI(); cerrarAuthModal(); notificar(`Bienvenido, ${userNombre}`); cargarDatosCartelera();
@@ -464,7 +491,7 @@
                     html += `
                         <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50 mb-2">
                             <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-300 flex justify-between items-center hover:bg-slate-800 transition">
-                                <span class="truncate">${liga}</span>
+                                <span class="truncate">${escapeHtml(liga)}</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-500 transition-transform ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i>
                             </button>
                             <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
@@ -476,12 +503,12 @@
                             <div onclick="mostrarAnalisisDetallado('${esc}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer transition">
                                 <div class="flex items-center justify-between">
                                     <div class="space-y-1 w-[70%]">
-                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(loc)}" onerror="this.onerror=null;this.src='${fallbackImg(loc)}'" class="w-3.5 h-3.5 object-contain"><div class="font-bold text-slate-200 truncate text-[11px]">${loc}</div></div>
-                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(vis)}" onerror="this.onerror=null;this.src='${fallbackImg(vis)}'" class="w-3.5 h-3.5 object-contain"><div class="text-slate-400 font-medium truncate text-[11px]">${vis}</div></div>
+                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(loc)}" alt="${escapeHtml(loc)}" onerror="this.onerror=null;this.src='${fallbackImg(loc)}'" class="w-3.5 h-3.5 object-contain"><div class="font-bold text-slate-200 truncate text-[11px]">${escapeHtml(loc)}</div></div>
+                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(vis)}" alt="${escapeHtml(vis)}" onerror="this.onerror=null;this.src='${fallbackImg(vis)}'" class="w-3.5 h-3.5 object-contain"><div class="text-slate-400 font-medium truncate text-[11px]">${escapeHtml(vis)}</div></div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="text-[9px] text-accentGreen mb-1">${p.fecha}</div>
-                                        <span class="text-[8px] font-bold text-cyan-400 border border-cyan-900/40 rounded px-1">EV ${p.ev_valor}</span>
+                                        <div class="text-[9px] text-accentGreen mb-1">${escapeHtml(p.fecha)}</div>
+                                        <span class="text-[8px] font-bold text-cyan-400 border border-cyan-900/40 rounded px-1">EV ${escapeHtml(p.ev_valor)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -523,12 +550,12 @@
                                 ${d.dropping_odds ? `<span class="bg-red-950/80 text-red-400 border border-red-800/60 text-[9px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">📉 DROPPING</span>` : ''}
                             </div>
                             <div class="space-y-2">
-                                <div class="flex items-center gap-2.5"><div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden"><img src="/static/logos/${formatLogoName(loc)}" onerror="this.onerror=null; this.src='${fallbackImg(loc)}';" class="w-full h-full object-contain p-0.5"></div><span class="text-xs font-black text-white truncate max-w-[190px]">${loc}</span></div>
-                                <div class="flex items-center gap-2.5"><div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden"><img src="/static/logos/${formatLogoName(vis)}" onerror="this.onerror=null; this.src='${fallbackImg(vis)}';" class="w-full h-full object-contain p-0.5"></div><span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${vis}</span></div>
+                                <div class="flex items-center gap-2.5"><div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden"><img src="/static/logos/${formatLogoName(loc)}" alt="${escapeHtml(loc)}" onerror="this.onerror=null; this.src='${fallbackImg(loc)}';" class="w-full h-full object-contain p-0.5"></div><span class="text-xs font-black text-white truncate max-w-[190px]">${escapeHtml(loc)}</span></div>
+                                <div class="flex items-center gap-2.5"><div class="w-6 h-6 rounded-lg bg-[#1e293b] border border-slate-700/80 flex items-center justify-center overflow-hidden"><img src="/static/logos/${formatLogoName(vis)}" alt="${escapeHtml(vis)}" onerror="this.onerror=null; this.src='${fallbackImg(vis)}';" class="w-full h-full object-contain p-0.5"></div><span class="text-xs font-bold text-slate-300 truncate max-w-[190px]">${escapeHtml(vis)}</span></div>
                             </div>
                         </div>
                         <div class="flex items-center justify-between mt-4 pt-3 border-t border-[#1e293b] text-[10px]">
-                            <span class="text-[#00d084] font-bold tracking-tight">${d.fecha}</span>
+                            <span class="text-[#00d084] font-bold tracking-tight">${escapeHtml(d.fecha)}</span>
                             <button onclick="mostrarAnalisisDetallado('${esc}')" class="text-slate-400 hover:text-white font-black flex items-center gap-1 group-hover:text-[#00d084] transition">
                                 CONSULTAR <i class="fa-solid fa-arrow-right text-[9px]"></i>
                             </button>
@@ -563,18 +590,18 @@
                             <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
                             <span class="text-xs font-black uppercase tracking-wider text-slate-300">Análisis Institucional ${dropBadge}</span>
                         </div>
-                        <span class="text-xs text-slate-400 font-medium">${item.fecha}</span>
+                        <span class="text-xs text-slate-400 font-medium">${escapeHtml(item.fecha)}</span>
                     </div>
 
                     <div class="px-6 py-8 flex items-center justify-between bg-gradient-to-b from-slate-800/40 to-transparent border-b border-cardBorder mb-6">
                         <div class="flex flex-col items-center gap-3 w-[40%] text-center">
-                            <img src="/static/logos/${formatLogoName(loc)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${fallbackImg(loc)}';">
-                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${loc}</h2>
+                            <img src="/static/logos/${formatLogoName(loc)}" alt="${escapeHtml(loc)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${fallbackImg(loc)}';">
+                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${escapeHtml(loc)}</h2>
                         </div>
                         <div class="text-slate-600 font-black text-lg px-2">VS</div>
                         <div class="flex flex-col items-center gap-3 w-[40%] text-center">
-                            <img src="/static/logos/${formatLogoName(vis)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${fallbackImg(vis)}';">
-                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${vis}</h2>
+                            <img src="/static/logos/${formatLogoName(vis)}" alt="${escapeHtml(vis)}" class="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-xl" onerror="this.onerror=null; this.src='${fallbackImg(vis)}';">
+                            <h2 class="text-sm sm:text-xl font-black text-white leading-tight">${escapeHtml(vis)}</h2>
                         </div>
                     </div>
 
@@ -583,26 +610,26 @@
                         <div class="bg-slate-800/30 rounded-xl p-5 mb-4 border border-cardBorder text-xs text-slate-300 space-y-3">
                             <div class="flex justify-between items-center mb-2 border-b border-cardBorder pb-2">
                                 <span class="font-bold text-accentGreen">✓ 3-Layer Consensus Verified</span>
-                                <span class="font-mono text-cyan-400">CLV Target: ${item.clv_target}</span>
+                                <span class="font-mono text-cyan-400">CLV Target: ${escapeHtml(item.clv_target)}</span>
                             </div>
-                            ${item.analisis_premium}
+                            ${escapeHtml(item.analisis_premium)}
                         </div>
                         ` : `<div class="bg-baseDark rounded-xl p-6 text-center border border-cardBorder mb-4"><i class="fa-solid fa-lock text-2xl text-amber-500 mb-2"></i><p class="text-xs text-slate-400">Análisis Dinámico Oculto</p><button onclick="abrirVipModal()" class="mt-3 text-xs bg-accentGreen text-slate-900 font-bold px-4 py-2 rounded-lg">Ser Premium</button></div>`}
 
                         <div class="grid sm:grid-cols-2 gap-4 mb-4">
                             <div class="bg-baseDark border border-cardBorder rounded-xl p-4">
-                                <div class="flex justify-between text-xs font-bold text-slate-400 mb-2"><span class="text-accentGreen">VALUE BET (EV ${item.ev_valor})</span><span>Cuota Real: ${item.cuota_valor}</span></div>
-                                <div class="text-sm font-black text-white">${item.pick_valor}</div>
-                                <div class="mt-2 text-[10px] text-cyan-400 font-mono">Gestión: ${item.stake_kelly}</div>
+                                <div class="flex justify-between text-xs font-bold text-slate-400 mb-2"><span class="text-accentGreen">VALUE BET (EV ${escapeHtml(item.ev_valor)})</span><span>Cuota Real: ${escapeHtml(item.cuota_valor)}</span></div>
+                                <div class="text-sm font-black text-white">${escapeHtml(item.pick_valor)}</div>
+                                <div class="mt-2 text-[10px] text-cyan-400 font-mono">Gestión: ${escapeHtml(item.stake_kelly)}</div>
                             </div>
                             <div class="bg-baseDark border border-cardBorder rounded-xl p-4">
                                 <div class="flex justify-between text-xs font-bold text-slate-400 mb-2"><span class="text-purple-400">PICK BOMBA</span></div>
-                                <div class="text-sm font-black text-white">${item.pick_bomba}</div>
+                                <div class="text-sm font-black text-white">${escapeHtml(item.pick_bomba)}</div>
                             </div>
                         </div>
                         <div class="bg-baseDark border border-cardBorder rounded-xl p-4">
-                            <div class="flex justify-between text-xs font-bold text-slate-400 mb-2"><span class="text-blue-400">PARLEY SUGERIDA</span><span>Cuota Combinada: ${item.parley_cuota}</span></div>
-                            <div class="text-sm font-black text-white">${item.parley_pick}</div>
+                            <div class="flex justify-between text-xs font-bold text-slate-400 mb-2"><span class="text-blue-400">PARLEY SUGERIDA</span><span>Cuota Combinada: ${escapeHtml(item.parley_cuota)}</span></div>
+                            <div class="text-sm font-black text-white">${escapeHtml(item.parley_pick)}</div>
                         </div>
                     </div>
                 </div>
@@ -653,7 +680,7 @@
                         : `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/40 text-red-400 text-[9px] font-black"><i class="fa-solid fa-xmark"></i> L</span>`;
 
                     const badgeVerif = r.verificacion_status === 'VERIFIED'
-                        ? `<div class="flex items-center gap-1 mt-1 text-[8px] text-blue-300 bg-blue-900/40 px-1 rounded w-fit" title="Hash: ${r.hash_origen}"><i class="fa-solid fa-shield-check"></i> Verificado</div>`
+                        ? `<div class="flex items-center gap-1 mt-1 text-[8px] text-blue-300 bg-blue-900/40 px-1 rounded w-fit" title="Hash: ${escapeHtml(r.hash_origen)}"><i class="fa-solid fa-shield-check"></i> Verificado</div>`
                         : `<div class="flex items-center gap-1 mt-1 text-[8px] text-red-400 bg-red-900/40 px-1 rounded w-fit"><i class="fa-solid fa-triangle-exclamation"></i> En Cuarentena</div>`;
                         
                     const decisionBadge = r.ia_confianza > 60
@@ -664,21 +691,21 @@
                         <tr class="hover:bg-slate-800/40 transition">
                             <td class="py-3 px-3 border-r border-cardBorder/40">
                                 ${badgeVerif}
-                                <div class="text-[9px] text-slate-500 mt-1">${r.fecha || 'Reciente'}</div>
+                                <div class="text-[9px] text-slate-500 mt-1">${escapeHtml(r.fecha) || 'Reciente'}</div>
                             </td>
                             <td class="py-3 px-3">
-                                <div class="font-black text-white text-[11px] leading-tight">${r.partido}</div>
-                                <div class="text-[10px] text-cyan-400 font-mono font-bold mt-1">Real: ${r.marcador || 'Liquidado'}</div>
-                                <div class="text-[9px] text-slate-400 mt-0.5 uppercase">${r.competicion}</div>
+                                <div class="font-black text-white text-[11px] leading-tight">${escapeHtml(r.partido)}</div>
+                                <div class="text-[10px] text-cyan-400 font-mono font-bold mt-1">Real: ${escapeHtml(r.marcador) || 'Liquidado'}</div>
+                                <div class="text-[9px] text-slate-400 mt-0.5 uppercase">${escapeHtml(r.competicion)}</div>
                             </td>
                             <td class="py-3 px-3">
-                                <span class="font-black text-white text-[10px] leading-tight">${r.direccion_pick}</span>
+                                <span class="font-black text-white text-[10px] leading-tight">${escapeHtml(r.direccion_pick)}</span>
                                 ${decisionBadge}
                             </td>
                             <td class="py-3 px-2 text-center">
                                 <div class="font-mono font-bold text-amber-400">${(parseFloat(r.cuota_entrada) || 1.0).toFixed(2)}</div>
                                 <div class="text-[8px] text-cyan-300 font-mono mt-0.5">CLV: ${(parseFloat(r.cuota_cierre_clv) || 1.0).toFixed(2)}</div>
-                                <div class="text-[8px] text-slate-500 uppercase mt-0.5">${r.bookmaker}</div>
+                                <div class="text-[8px] text-slate-500 uppercase mt-0.5">${escapeHtml(r.bookmaker)}</div>
                             </td>
                             <td class="py-3 px-2 text-center">${badge}</td>
                             <td class="py-3 px-3 text-right font-mono font-black ${esWin ? 'text-accentGreen' : 'text-red-400'}">
@@ -703,7 +730,8 @@
             const chatContainer = document.getElementById('chat-messages-container');
             chatContainer.classList.remove('hidden');
 
-            chatContainer.innerHTML += `<div class="flex justify-end"><div class="bg-accentBlue text-white text-xs font-bold py-3 px-4 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">${msg}</div></div>`;
+            // Inserción sanitizada contra XSS
+            chatContainer.innerHTML += `<div class="flex justify-end"><div class="bg-accentBlue text-white text-xs font-bold py-3 px-4 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">${escapeHtml(msg)}</div></div>`;
             input.value = '';
 
             const idLoad = 'load-' + Date.now();
@@ -719,7 +747,8 @@
                 const data = await res.json();
                 document.getElementById(idLoad)?.remove();
 
-                const formatted = (data.respuesta || "").replace(/\*\*(.*?)\*\*/g, '<strong class="text-accentGreen font-bold">$1</strong>').replace(/\n/g, '<br>');
+                const safeText = escapeHtml(data.respuesta || "");
+                const formatted = safeText.replace(/\*\*(.*?)\*\*/g, '<strong class="text-accentGreen font-bold">$1</strong>').replace(/\n/g, '<br>');
                 chatContainer.innerHTML += `<div class="flex justify-start"><div class="bg-cardDark border border-cardBorder text-slate-200 text-xs p-4 rounded-2xl rounded-tl-sm max-w-[95%] leading-relaxed shadow-lg"><span class="text-accentGreen font-black block text-[10px] uppercase tracking-wider mb-1.5"><i class="fa-solid fa-bolt text-amber-400 mr-1"></i> PredicXion IA</span>${formatted}</div></div>`;
                 chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
             } catch (err) {
