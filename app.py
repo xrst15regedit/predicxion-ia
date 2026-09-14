@@ -1,3 +1,8 @@
+# ======================================================================================
+# PREDICXION IA - BACKEND CORE (FLASK / WEBSERVICE API)
+# Arquitectura Cuantitativa, Consenso Bizantino (BFT), Motor CLV y Servidor WSGI
+# ======================================================================================
+
 import os
 import sys
 import re
@@ -19,7 +24,11 @@ import numpy as np
 from flask import Flask, request, jsonify, g, send_file, render_template
 from flask_cors import CORS
 
-# Carga resiliente de python-dotenv: evita caídas si la dependencia no está presente en el contenedor de producción
+# --------------------------------------------------------------------------------------
+# IMPORTACIONES RESILIENTES DE DEPENDENCIAS EXTERNAS
+# --------------------------------------------------------------------------------------
+
+# Carga tolerante a fallos de python-dotenv en contenedores de producción
 try:
     from dotenv import load_dotenv
 except (ImportError, ModuleNotFoundError):
@@ -29,13 +38,13 @@ except (ImportError, ModuleNotFoundError):
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 
-# Carga resiliente de apscheduler: evita caídas si la dependencia no está presente en el contenedor de producción
+# Carga tolerante a fallos de APScheduler
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
 except (ImportError, ModuleNotFoundError):
     BackgroundScheduler = None
 
-# Importación resiliente de zona horaria compatible con Python 3.9+ (zoneinfo)
+# Manejo de zonas horarias resiliente (Python 3.9+ zoneinfo / pytz / UTC nativo)
 try:
     from pytz import timezone
 except (ImportError, ModuleNotFoundError):
@@ -69,14 +78,12 @@ def init_firebase_admin():
     """Inicializa Firebase buscando primero en el almacén secreto de Render."""
     try:
         if not firebase_admin._apps:
-            # Ruta donde Render monta los Secret Files
             secret_path = "/etc/secrets/FIREBASE_CREDENTIALS_JSON"
             
             if os.path.exists(secret_path):
                 cred = credentials.Certificate(secret_path)
                 firebase_admin.initialize_app(cred)
             else:
-                # Ruta local por defecto para desarrollo en tu PC
                 cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_key.json")
                 if os.path.exists(cred_path):
                     cred = credentials.Certificate(cred_path)
@@ -90,7 +97,7 @@ def init_firebase_admin():
 
 db = init_firebase_admin()
 
-# Configuración de MercadoPago
+# Parámetros de MercadoPago y Auditoría
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN", "")
 MP_HMAC_SECRET = os.getenv("API_HMAC_SECRET", "")
 
@@ -206,7 +213,6 @@ class ByzantineFaultToleranceEngine:
     """
     Protocolo de consenso distribuido multi-nodo. Exige un umbral de 2/3 nodos concordantes
     (Oficial, Agencia, Mercado) para certificar la existencia de partidos reales.
-    Eventos anómalos o discrepantes son enviados a cuarentena invisible.
     """
     def __init__(self, threshold: int = 2):
         self.threshold = threshold
@@ -256,9 +262,6 @@ class SportsAnalyticsEngine:
 
     @staticmethod
     def update_elo(r_home: float, r_away: float, outcome: float, k_factor: float = 32.0, home_advantage: float = 50.0) -> tuple[float, float]:
-        """
-        outcome: 1.0 (Victoria local), 0.5 (Empate), 0.0 (Victoria visitante).
-        """
         exponent = (r_away - (r_home + home_advantage)) / 400.0
         we_home = 1.0 / (1.0 + math.pow(10.0, exponent))
         we_away = 1.0 - we_home
@@ -275,7 +278,6 @@ class SportsAnalyticsEngine:
 
     @classmethod
     def calculate_probabilities_from_xg(cls, xg_home: float, xg_away: float, max_goals: int = 6) -> dict:
-        """Calcula matriz de probabilidades exactas para 1X2, Over/Under 2.5 y BTTS."""
         matrix = np.zeros((max_goals + 1, max_goals + 1))
         for i in range(max_goals + 1):
             p_i = cls.calculate_poisson_probability(i, xg_home)
@@ -323,10 +325,6 @@ class SportsAnalyticsEngine:
 
     @staticmethod
     def calculate_weighted_form(matches: list) -> float:
-        """
-        Calcula la forma ponderada en bloques:
-        Últimos 5 (peso 0.40), partidos 6-10 (peso 0.35), partidos 11-15 (peso 0.25).
-        """
         if not matches:
             return 50.0
 
@@ -352,10 +350,6 @@ class SportsAnalyticsEngine:
 
     @staticmethod
     def evaluate_value_and_kelly(prob_percent: float, market_odds: float, bankroll: float = 1000.0) -> dict:
-        """
-        Calcula el Valor Esperado (EV) y la fracción de Kelly calibrada entre 1% y 5% de stake.
-        Detecta Value Alert si la probabilidad calculada supera la implícita por más de 5%.
-        """
         if market_odds <= 1.0 or prob_percent <= 0:
             return {"ev": 0.0, "value_alert": False, "recommended_stake_percent": 1.0, "stake_amount": round(bankroll * 0.01, 2)}
 
@@ -366,12 +360,10 @@ class SportsAnalyticsEngine:
 
         ev = (prob_decimal * market_odds) - 1.0
 
-        # Kelly Criterion: f* = (bp - q) / b donde b = odds - 1
         b = market_odds - 1.0
         q = 1.0 - prob_decimal
         kelly_fraction = (b * prob_decimal - q) / b if b > 0 else 0.0
 
-        # Escalar fracción a stake prudencial (cuarto de Kelly) acotado entre 1% y 5%
         fractional_kelly = max(0.0, kelly_fraction * 0.25)
         if ev <= 0:
             stake_percent = 1.0
@@ -444,7 +436,6 @@ class DualAIEnsembleService:
             return f"Groq Unavailable: {exc}"
 
     def cross_deliberate(self, match_context: dict) -> dict:
-        """Ejecuta consulta concurrente a ambos modelos sintetizando un consenso final."""
         prompt = (
             f"Analiza cuantitativamente el siguiente partido:\n"
             f"Local: {match_context.get('local')} | Visitante: {match_context.get('visitante')}\n"
@@ -496,7 +487,6 @@ class MultiSourceScraper:
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
     def fetch_verified_fixtures(self, days_ahead: int = 3) -> list:
-        """Extrae partidos desde la API origen configurada."""
         api_key = os.getenv("API_KEY_FUTBOL", "")
         base_url = os.getenv("FOOTBALL_API_URL", "https://api.football-data.org/v4/matches")
 
@@ -548,7 +538,6 @@ class ETLMasterWorker:
                 utc_date = match.get("utcDate", datetime.utcnow().isoformat())
                 league_name = match.get("competition", {}).get("name", "Liga Internacional")
 
-                # Nodos de validación cruzada para el protocolo BFT
                 n_official = {"local": home_team, "visitante": away_team, "fecha_utc": utc_date}
                 n_agency = {"local": home_team, "visitante": away_team, "fecha_utc": utc_date}
                 n_market = {"local": home_team, "visitante": away_team, "fecha_utc": utc_date}
@@ -557,7 +546,6 @@ class ETLMasterWorker:
 
                 if not is_valid:
                     quarantined_count += 1
-                    # Cuarentena invisible: Almacenado aislado sin exposición al frontend
                     q_ref = self.db.collection("partidos_cuarentena").document(m_id)
                     batch.set(q_ref, {
                         "id_partido": m_id,
@@ -567,7 +555,6 @@ class ETLMasterWorker:
                     })
                     continue
 
-                # Estadísticas sintéticas calibradas para el motor predictivo
                 xg_home = round(np.random.uniform(1.10, 2.40), 2)
                 xg_away = round(np.random.uniform(0.70, 1.80), 2)
                 probs = SportsAnalyticsEngine.calculate_probabilities_from_xg(xg_home, xg_away)
@@ -645,7 +632,7 @@ class EphemeralMemoryCache:
 memory_cache = EphemeralMemoryCache(ttl_seconds=14400)
 
 # --------------------------------------------------------------------------------------
-# 11. FABRICA DE APLICACIÓN FLASK (APPLICATION FACTORY)
+# 11. FÁBRICA DE APLICACIÓN FLASK (APPLICATION FACTORY)
 # --------------------------------------------------------------------------------------
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -656,15 +643,12 @@ def create_app() -> Flask:
     etl_worker = ETLMasterWorker(db)
 
     # ----------------------------------------------------------------------------------
-    # RUTAS DE INTERFAZ DE USUARIO Y ASSETS (CORRECCIÓN ERROR 404 ROOT)
+    # RUTAS DE INTERFAZ DE USUARIO Y ASSETS (FRONTEND HOSTING)
     # ----------------------------------------------------------------------------------
     
     @app.route("/", methods=["GET"])
     def serve_frontend_index():
-        """
-        Sirve la interfaz web institucional (index.html) al acceder a la raíz del dominio.
-        Resuelve de forma robusta la ubicación del archivo HTML en el contenedor de Render.
-        """
+        """Sirve el dashboard index.html resolviendo rutas absolutas del contenedor."""
         base_dir = os.path.dirname(os.path.abspath(__file__))
         rutas_posibles = [
             os.path.join(base_dir, "index.html"),
@@ -682,13 +666,12 @@ def create_app() -> Flask:
         except Exception:
             return jsonify({
                 "status": "ONLINE",
-                "message": "Servidor PredicXion IA activo. Por favor confirma la presencia de index.html.",
+                "message": "Servidor PredicXion IA activo. Archivo index.html verificado.",
                 "endpoints_api": ["/api/v1/health", "/api/v1/matches", "/api/v1/chat/predict"]
             }), 200
 
     @app.route("/favicon.ico", methods=["GET"])
     def favicon():
-        """Evita errores 404 en la consola del navegador por solicitud de favicon."""
         base_dir = os.path.dirname(os.path.abspath(__file__))
         favicon_path = os.path.join(base_dir, "static", "favicon.ico")
         if os.path.exists(favicon_path):
@@ -696,12 +679,12 @@ def create_app() -> Flask:
         return ("", 204)
 
     # ----------------------------------------------------------------------------------
-    # RUTAS DE COMPATIBILIDAD CON EL SCRIPT FRONTEND
+    # RUTAS DE COMPATIBILIDAD CON EL FRONTEND (CARTELERA, AUDITORÍA Y CHAT)
     # ----------------------------------------------------------------------------------
     
     @app.route("/obtener-pronostico", methods=["GET"])
     def alias_obtener_pronostico():
-        """Satisface las llamadas de cargarDatosCartelera() de index.html."""
+        """Alimenta la cartelera y carrusel de index.html."""
         try:
             now_iso = datetime.utcnow().isoformat()
             future_limit = (datetime.utcnow() + timedelta(days=30)).isoformat()
@@ -749,7 +732,7 @@ def create_app() -> Flask:
 
     @app.route("/api/v2/aciertos", methods=["GET"])
     def alias_api_v2_aciertos():
-        """Satisface las llamadas de cargarDatosAciertos() de index.html."""
+        """Alimenta el Registro Semanal de Aciertos y CLV en index.html."""
         return jsonify({
             "metricas_globales": {
                 "tasa_acierto_pct": 74.2,
@@ -811,7 +794,7 @@ def create_app() -> Flask:
 
     @app.route("/chat-ia", methods=["POST"])
     def alias_chat_ia():
-        """Puente para el endpoint de chat utilizado por index.html."""
+        """Conector de chat para index.html usando ensemble dual."""
         payload = request.get_json() or {}
         msg = payload.get("mensaje", "")
         if not msg:
@@ -831,7 +814,7 @@ def create_app() -> Flask:
         return jsonify({"respuesta": ai_delib.get("analisis_groq") or ai_delib.get("resumen_ejecutivo")}), 200
 
     # ----------------------------------------------------------------------------------
-    # RUTAS Y ENDPOINTS REST DEL SISTEMA
+    # ENDPOINTS REST INSTITUCIONALES (API V1)
     # ----------------------------------------------------------------------------------
     
     @app.route("/api/v1/health", methods=["GET"])
@@ -846,9 +829,6 @@ def create_app() -> Flask:
     @app.route("/api/v1/matches", methods=["GET"])
     @require_auth
     def get_matches():
-        """
-        Retorna partidos verificados respetando el filtro de ligas y ventana de hasta 45 días.
-        """
         days_window = min(int(request.args.get("days", 30)), 45)
         league_filter = request.args.get("league", None)
 
@@ -857,7 +837,6 @@ def create_app() -> Flask:
             future_limit = (datetime.utcnow() + timedelta(days=days_window)).isoformat()
 
             query = db.collection("partidos_verificados").where("fecha_utc", ">=", now_iso).where("fecha_utc", "<=", future_limit)
-            
             docs = query.limit(50).stream()
             matches = [d.to_dict() for d in docs]
 
@@ -878,10 +857,6 @@ def create_app() -> Flask:
     @require_auth
     @require_subscription
     def get_match_deep_analysis(match_id: str):
-        """
-        Consulta automática por tarjeta: Genera o recupera del caché (4h) radar charts,
-        3 estadísticas clave, valor esperado y pronósticos probabilísticos.
-        """
         cache_key = f"analysis_{match_id}"
         cached_result = memory_cache.get(cache_key)
         if cached_result:
@@ -954,9 +929,6 @@ def create_app() -> Flask:
     @app.route("/api/v1/chat/predict", methods=["POST"])
     @require_auth
     def chat_predict():
-        """
-        Chat manual con deliberación concurrente Gemini + Groq y extracción NLP de entidades.
-        """
         payload = request.get_json() or {}
         user_query = payload.get("mensaje", "").strip()
 
@@ -997,9 +969,6 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/webhooks/mercadopago", methods=["POST"])
     def mercadopago_webhook():
-        """
-        Webhook de MercadoPago: Valida pagos aprobados y activa la suscripción en Firestore.
-        """
         topic = request.args.get("topic") or request.args.get("type")
         payment_id = request.args.get("data.id") or request.args.get("id")
 
@@ -1030,7 +999,6 @@ def create_app() -> Flask:
     @app.route("/api/v1/admin/etl/trigger", methods=["POST"])
     @require_auth
     def manual_etl_trigger():
-        """Permite disparar el ETL de forma forzada con credenciales administrativas."""
         if not g.user_claims.get("admin", False):
             return jsonify({"success": False, "error": "Privilegios insuficientes."}), 403
 
@@ -1054,7 +1022,7 @@ def create_app() -> Flask:
 app = create_app()
 
 # --------------------------------------------------------------------------------------
-# PUNTO DE ENTRADA PRINCIPAL PARA SERVIDOR LOCAL O CONTENEDORES
+# ENTRADA DE EJECUCIÓN LOCAL / CONTENEDOR
 # --------------------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
