@@ -1,5 +1,6 @@
 import os
 import sys
+import re  # <<< CORRECCIÓN ERROR 2: Importación requerida para re.sub en ByzantineFaultToleranceEngine >>>
 import math
 import time
 import json
@@ -34,7 +35,16 @@ try:
 except (ImportError, ModuleNotFoundError):
     BackgroundScheduler = None
 
-from pytz import timezone
+# <<< CORRECCIÓN ERROR 1: Importación resiliente de zona horaria compatible con Python 3.9+ (zoneinfo) >>>
+try:
+    from pytz import timezone
+except (ImportError, ModuleNotFoundError):
+    try:
+        from zoneinfo import ZoneInfo as timezone
+    except (ImportError, ModuleNotFoundError):
+        from datetime import timezone as _dt_tz
+        def timezone(name):
+            return _dt_tz.utc
 
 # --------------------------------------------------------------------------------------
 # 1. CONFIGURACIÓN DE ENTORNO Y SISTEMA DE LOGGING
