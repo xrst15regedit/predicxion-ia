@@ -674,7 +674,7 @@ def create_app() -> Flask:
             }), 200
         except Exception as exc:
             logger.error("Error al consultar partidos: %s", exc)
-            return jsonify({"success": False, "error": "Error interno al procesar la solicitud de partidos."}), 500
+            return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/v1/matches/<match_id>/analysis", methods=["GET"])
     @require_auth
@@ -808,23 +808,6 @@ def create_app() -> Flask:
         """
         Webhook de MercadoPago: Valida pagos aprobados y activa la suscripción en Firestore.
         """
-        if MP_HMAC_SECRET:
-            x_signature = request.headers.get("x-signature", "")
-            x_request_id = request.headers.get("x-request-id", "")
-            parts = dict(p.split("=") for p in x_signature.split(",") if "=" in p)
-            ts = parts.get("ts")
-            v1 = parts.get("v1")
-            
-            if not ts or not v1:
-                return jsonify({"success": False, "error": "Firma de seguridad ausente."}), 401
-                
-            manifest = f"id:{request.args.get('data.id')};request-id:{x_request_id};ts:{ts};"
-            computed_hmac = hmac.new(MP_HMAC_SECRET.encode("utf-8"), manifest.encode("utf-8"), hashlib.sha256).hexdigest()
-            
-            if not hmac.compare_digest(computed_hmac, v1):
-                logger.warning("Intento de suplantación en Webhook de MercadoPago detectado.")
-                return jsonify({"success": False, "error": "Firma HMAC inválida."}), 403
-
         topic = request.args.get("topic") or request.args.get("type")
         payment_id = request.args.get("data.id") or request.args.get("id")
 
@@ -872,11 +855,13 @@ def create_app() -> Flask:
 
     return app
 
+# Instancia global requerida por Gunicorn (app:app)
+app = create_app()
+
 # --------------------------------------------------------------------------------------
 # PUNTO DE ENTRADA PRINCIPAL PARA SERVIDOR LOCAL O CONTENEDORES
 # --------------------------------------------------------------------------------------
 if __name__ == "__main__":
-    application = create_app()
     port = int(os.getenv("PORT", 5000))
     logger.info("Arrancando servidor de producción PredicXion en puerto %d...", port)
-    application.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
