@@ -7,3 +7,4 @@ firebase-admin
 gunicorn
 numpy>=2.4.0
 python-dotenv
+apscheduler
