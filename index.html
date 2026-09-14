@@ -57,7 +57,6 @@
 
     <header class="w-full border-b border-cardBorder bg-baseDark/95 backdrop-blur-md px-4 sm:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40">
         <div class="flex flex-col">
-            <!-- Jerarquía de encabezado H1 semántica -->
             <h1 class="font-outfit font-black text-2xl tracking-tight text-white flex items-center gap-2 m-0">
                 PredicXion<span class="text-accentGreen"> IA</span>
                 <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
@@ -335,7 +334,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT LOGIC CON SANITIZACIÓN XSS Y MANEJO SEGURO -->
+    <!-- SCRIPT LOGIC CON SANITIZACIÓN XSS Y GESTIÓN DE SESIÓN -->
     <script>
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -347,7 +346,6 @@
         const ligasAbiertas = {};
         let vistaAciertosActiva = false;
 
-        // Función de escape para neutralizar vectores XSS
         function escapeHtml(str) {
             if (typeof str !== 'string') return str ?? '';
             return str
@@ -408,6 +406,13 @@
         function abrirVipModal() { document.getElementById('modal-vip').classList.remove('hidden'); }
         function cerrarVipModal() { document.getElementById('modal-vip').classList.add('hidden'); }
         
+        function cerrarSesion() {
+            usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
+            localStorage.removeItem('predicxion_user');
+            actualizarUI();
+            notificar("Sesión cerrada correctamente.");
+        }
+
         function setAuthMode(isRegister) {
             modoRegistro = isRegister;
             const tabLogin = document.getElementById('tab-login');
@@ -730,7 +735,6 @@
             const chatContainer = document.getElementById('chat-messages-container');
             chatContainer.classList.remove('hidden');
 
-            // Inserción sanitizada contra XSS
             chatContainer.innerHTML += `<div class="flex justify-end"><div class="bg-accentBlue text-white text-xs font-bold py-3 px-4 rounded-2xl rounded-tr-sm max-w-[85%] shadow-md">${escapeHtml(msg)}</div></div>`;
             input.value = '';
 
