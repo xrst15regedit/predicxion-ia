@@ -5,3 +5,4 @@ google-genai
 mercadopago
 firebase-admin
 gunicorn
+numpy>=2.4.0
