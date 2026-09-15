@@ -14,7 +14,9 @@
     <!-- Favicon SVG optimizado para eliminar errores 404 de consola -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080e1a'/><text x='50%' y='68%' font-size='55' font-weight='bold' fill='%2300d084' text-anchor='middle'>P</text></svg>">
     
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- CONFIGURACIÓN TAILWIND (Opción A): Enlace al CSS compilado estáticamente en lugar del CDN -->
+    <link href="/static/output.css" rel="stylesheet">
+    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://sdk.mercadopago.com/js/v2"></script>
@@ -28,16 +30,8 @@
         window.firebaseCreateUser = createUserWithEmailAndPassword; window.firebaseUpdateProfile = updateProfile;
     </script>
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'], outfit: ['Outfit', 'sans-serif'] },
-                    colors: { baseDark: '#080e1a', cardDark: '#0f172a', cardBorder: '#1e293b', accentGreen: '#00d084', accentBlue: '#1c64f2', accentAmber: '#f59e0b' }
-                }
-            }
-        }
-    </script>
+    <!-- La configuración inline de Tailwind se retiró porque ahora vive en tu archivo tailwind.config.js -->
+
     <style>
         body { background-color: #080e1a; color: #f8fafc; }
         ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -460,9 +454,6 @@
             cerrarVipModal(); actualizarUI(); cargarDatosCartelera(); notificar(`¡Felicidades! Se activó tu ${planSeleccionadoTexto}`);
         }
 
-        // =====================================================================
-        // CORRECCIÓN APLICADA: MANEJO DEL ESTADO VACÍO Y ERROR DE CONEXIÓN
-        // =====================================================================
         async function cargarDatosCartelera(reintentos = 2) {
             try {
                 const em = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
@@ -470,7 +461,6 @@
                 if(!res.ok) throw new Error("HTTP error");
                 const data = await res.json();
                 
-                // Se renderiza el contenedor incluso si la API devuelve datos vacíos
                 if (data.todos_los_partidos) {
                     globalTodosPartidos = data.todos_los_partidos;
                     renderizarSidebar(globalTodosPartidos);
@@ -487,7 +477,6 @@
                 if(reintentos > 0) {
                     setTimeout(() => cargarDatosCartelera(reintentos - 1), 1000);
                 } else {
-                    // Fallback visual si el servidor no responde o la API está caída
                     document.getElementById('sidebar-matches').innerHTML = `<p class="text-xs text-red-400 text-center py-4">Error al cargar datos del servidor.</p>`;
                     document.getElementById('carousel-cards').innerHTML = `<div class="text-xs text-red-400 py-3 px-2">Fallo de conexión.</div>`;
                 }
@@ -536,7 +525,6 @@
                 id++;
             }
             
-            // CORRECCIÓN APLICADA: Si el bucle no generó HTML, mostramos el mensaje de lista vacía
             cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron ligas activas.</p>`;
         }
 
