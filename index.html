@@ -14,10 +14,7 @@
     <!-- Favicon SVG optimizado para eliminar errores 404 de consola -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080e1a'/><text x='50%' y='68%' font-size='55' font-weight='bold' fill='%2300d084' text-anchor='middle'>P</text></svg>">
     
-    <!-- ===================================================================== -->
-    <!-- LÍNEAS CORREGIDAS: RESTAURACIÓN DE MOTOR TAILWIND Y TEMA PERSONALIZADO -->
-    <!-- Elimina la llamada a output.css (404) y recupera el diseño al instante -->
-    <!-- ===================================================================== -->
+    <!-- Carga del motor Tailwind CDN con configuración extendida -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -29,7 +26,6 @@
             }
         }
     </script>
-    <!-- ===================================================================== -->
     
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -340,7 +336,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT LOGIC CON MANEJO DE ESTADO Y ERRORES DE RED -->
+    <!-- SCRIPT LOGIC CON MANEJO DE ESTADO, ROTACIÓN MENSUAL Y ERRORES DE RED -->
     <script>
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -364,6 +360,11 @@
 
         const formatLogoName = (name) => (name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '_') + '.png';
         const fallbackImg = (name) => `https://ui-avatars.com/api/?background=0f172a&color=fff&bold=true&name=${encodeURIComponent(name || 'Equipo')}`;
+
+        function obtenerMesActualFormateado() {
+            const ahora = new Date();
+            return ahora.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             const saved = localStorage.getItem('predicxion_user');
@@ -495,49 +496,81 @@
             }
         }
 
-        function renderizarSidebar(ligas, filtro="") {
+        function renderizarSidebar(ligas, filtro = "") {
             const query = filtro.toLowerCase().trim();
             const cont = document.getElementById('sidebar-matches');
-            let html = ''; let id = 0;
+            let html = '';
+            let totalPartidosCalculados = 0;
+            let id = 0;
 
             for (const [liga, partidos] of Object.entries(ligas)) {
-                const filtrados = partidos.filter(p => p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query));
-                if (query && filtrados.length === 0 && !liga.toLowerCase().includes(query)) continue;
-                const abierta = query ? true : ligasAbiertas[liga] !== false;
+                const listaPartidos = Array.isArray(partidos) ? partidos : [];
+                
+                const filtrados = query 
+                    ? listaPartidos.filter(p => p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query))
+                    : listaPartidos;
 
-                if (partidos.length > 0 && filtrados.length > 0) {
-                    html += `
-                        <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50 mb-2">
-                            <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-300 flex justify-between items-center hover:bg-slate-800 transition">
-                                <span class="truncate">${escapeHtml(liga)}</span>
+                if (query && filtrados.length === 0 && !liga.toLowerCase().includes(query)) {
+                    continue;
+                }
+
+                const abierta = query ? true : ligasAbiertas[liga] !== false;
+                totalPartidosCalculados += filtrados.length;
+
+                html += `
+                    <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50 mb-2">
+                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-300 flex justify-between items-center hover:bg-slate-800 transition">
+                            <span class="truncate flex items-center gap-1.5">
+                                <i class="fa-solid fa-trophy text-[10px] text-accentGreen"></i>
+                                ${escapeHtml(liga)}
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">${filtrados.length}</span>
                                 <i class="fa-solid fa-chevron-down text-[10px] text-slate-500 transition-transform ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i>
-                            </button>
-                            <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
-                    `;
+                            </div>
+                        </button>
+                        <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
+                `;
+
+                if (filtrados.length > 0) {
                     filtrados.forEach(p => {
-                        const [loc, vis] = p.partido.split(' vs ');
+                        const [loc, vis] = p.partido.includes(' vs ') ? p.partido.split(' vs ') : [p.partido, 'Rival'];
                         const esc = p.partido.replace(/'/g, "\\'");
                         html += `
                             <div onclick="mostrarAnalisisDetallado('${esc}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer transition">
                                 <div class="flex items-center justify-between">
                                     <div class="space-y-1 w-[70%]">
-                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(loc)}" alt="${escapeHtml(loc)}" onerror="this.onerror=null;this.src='${fallbackImg(loc)}'" class="w-3.5 h-3.5 object-contain"><div class="font-bold text-slate-200 truncate text-[11px]">${escapeHtml(loc)}</div></div>
-                                        <div class="flex items-center gap-1.5"><img src="/static/logos/${formatLogoName(vis)}" alt="${escapeHtml(vis)}" onerror="this.onerror=null;this.src='${fallbackImg(vis)}'" class="w-3.5 h-3.5 object-contain"><div class="text-slate-400 font-medium truncate text-[11px]">${escapeHtml(vis)}</div></div>
+                                        <div class="flex items-center gap-1.5">
+                                            <img src="/static/logos/${formatLogoName(loc)}" alt="${escapeHtml(loc)}" onerror="this.onerror=null;this.src='${fallbackImg(loc)}'" class="w-3.5 h-3.5 object-contain">
+                                            <div class="font-bold text-slate-200 truncate text-[11px]">${escapeHtml(loc)}</div>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <img src="/static/logos/${formatLogoName(vis)}" alt="${escapeHtml(vis)}" onerror="this.onerror=null;this.src='${fallbackImg(vis)}'" class="w-3.5 h-3.5 object-contain">
+                                            <div class="text-slate-400 font-medium truncate text-[11px]">${escapeHtml(vis)}</div>
+                                        </div>
                                     </div>
                                     <div class="text-right">
                                         <div class="text-[9px] text-accentGreen mb-1">${escapeHtml(p.fecha)}</div>
-                                        <span class="text-[8px] font-bold text-cyan-400 border border-cyan-900/40 rounded px-1">EV ${escapeHtml(p.ev_valor)}</span>
+                                        <span class="text-[8px] font-bold text-cyan-400 border border-cyan-900/40 rounded px-1">${escapeHtml(p.ev_valor || 'PROG')}</span>
                                     </div>
                                 </div>
                             </div>
                         `;
                     });
-                    html += `</div></div>`;
+                } else {
+                    html += `
+                        <div class="p-3 text-center text-[10px] text-slate-500 italic">
+                            Partidos de ${obtenerMesActualFormateado()} en programación.
+                        </div>
+                    `;
                 }
+
+                html += `</div></div>`;
                 id++;
             }
-            
-            cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron ligas activas.</p>`;
+
+            cont.innerHTML = html;
+            document.getElementById('sidebar-total-badge').innerText = totalPartidosCalculados;
         }
 
         function toggleLiga(liga, id) {
