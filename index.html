@@ -334,7 +334,7 @@
         </div>
     </div>
 
-    <!-- SCRIPT LOGIC CON SANITIZACIÓN XSS Y GESTIÓN DE SESIÓN -->
+    <!-- SCRIPT LOGIC CON MANEJO DE ESTADO Y ERRORES DE RED -->
     <script>
         const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
         let usuarioActual = { logueado: false, nombre: '', email: '', esVip: false, plan: null };
@@ -460,6 +460,9 @@
             cerrarVipModal(); actualizarUI(); cargarDatosCartelera(); notificar(`¡Felicidades! Se activó tu ${planSeleccionadoTexto}`);
         }
 
+        // =====================================================================
+        // CORRECCIÓN APLICADA: MANEJO DEL ESTADO VACÍO Y ERROR DE CONEXIÓN
+        // =====================================================================
         async function cargarDatosCartelera(reintentos = 2) {
             try {
                 const em = usuarioActual.email ? `?email=${encodeURIComponent(usuarioActual.email)}` : '';
@@ -467,7 +470,8 @@
                 if(!res.ok) throw new Error("HTTP error");
                 const data = await res.json();
                 
-                if (data.todos_los_partidos && Object.keys(data.todos_los_partidos).length > 0) {
+                // Se renderiza el contenedor incluso si la API devuelve datos vacíos
+                if (data.todos_los_partidos) {
                     globalTodosPartidos = data.todos_los_partidos;
                     renderizarSidebar(globalTodosPartidos);
                     document.getElementById('sidebar-total-badge').innerText = data.total_partidos || '0';
@@ -476,9 +480,17 @@
                 if (data.pronosticos_destacados && data.pronosticos_destacados.length > 0) {
                     document.getElementById('destacados-count').innerText = `(${data.pronosticos_destacados.length})`;
                     renderizarCarrusel(data.pronosticos_destacados);
+                } else {
+                    document.getElementById('carousel-cards').innerHTML = `<div class="text-xs text-slate-500 py-3 px-2">No hay pronósticos destacados en este momento.</div>`;
                 }
             } catch(e) {
-                if(reintentos > 0) setTimeout(() => cargarDatosCartelera(reintentos - 1), 1000);
+                if(reintentos > 0) {
+                    setTimeout(() => cargarDatosCartelera(reintentos - 1), 1000);
+                } else {
+                    // Fallback visual si el servidor no responde o la API está caída
+                    document.getElementById('sidebar-matches').innerHTML = `<p class="text-xs text-red-400 text-center py-4">Error al cargar datos del servidor.</p>`;
+                    document.getElementById('carousel-cards').innerHTML = `<div class="text-xs text-red-400 py-3 px-2">Fallo de conexión.</div>`;
+                }
             }
         }
 
@@ -523,7 +535,9 @@
                 }
                 id++;
             }
-            cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron ligas.</p>`;
+            
+            // CORRECCIÓN APLICADA: Si el bucle no generó HTML, mostramos el mensaje de lista vacía
+            cont.innerHTML = html || `<p class="text-xs text-slate-500 text-center py-4">No se encontraron ligas activas.</p>`;
         }
 
         function toggleLiga(liga, id) {
