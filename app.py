@@ -137,6 +137,21 @@ def validate_prediction_input(match_data: dict) -> list[str]:
         errors.append("Falta la versión reproducible del modelo.")
     return errors
 
+def validate_calendar_match(match_data: dict) -> list[str]:
+    """Comprueba que un evento proviene del calendario oficial, no de un respaldo local."""
+    errors = []
+    if match_data.get("calendar_status") != "VERIFIED":
+        errors.append("El calendario del partido no fue verificado.")
+    source = match_data.get("source_data")
+    if not isinstance(source, dict) or "football-data.org" not in str(source.get("provider", "")):
+        errors.append("La fuente no es Football-Data.org.")
+    if not isinstance(source, dict) or not source.get("fetched_at"):
+        errors.append("Falta la hora de extracción de la fuente.")
+    for field in ("id_partido", "local", "visitante", "fecha_utc", "liga"):
+        if not match_data.get(field):
+            errors.append(f"Falta {field}.")
+    return errors
+
 # --------------------------------------------------------------------------------------
 # 3. CAPA DE AUTENTICACIÓN, SEGURIDAD Y BYPASS DE SUPER ADMIN
 # --------------------------------------------------------------------------------------
@@ -461,9 +476,68 @@ class DualAIEnsembleService:
 # 9. PIPELINE ETL CON CONTROL DE CONCURRENCIA
 # --------------------------------------------------------------------------------------
 class ETLMasterWorker:
+    """Sincroniza únicamente fixtures recibidos de Football-Data.org."""
+
     def __init__(self):
         self.lock = threading.Lock()
-        self.bft = ByzantineFaultToleranceEngine(threshold=2)
+        self.session = requests.Session()
+        retries = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retries))
+
+    @staticmethod
+    def _window() -> tuple[str, str]:
+        try:
+            lookahead_days = max(1, min(int(os.getenv("CALENDAR_LOOKAHEAD_DAYS", "45")), 90))
+            backfill_days = max(0, min(int(os.getenv("CALENDAR_BACKFILL_DAYS", "7")), 30))
+        except ValueError as exc:
+            raise ValueError("CALENDAR_LOOKAHEAD_DAYS y CALENDAR_BACKFILL_DAYS deben ser enteros.") from exc
+        now = datetime.utcnow()
+        return (
+            (now - timedelta(days=backfill_days)).date().isoformat(),
+            (now + timedelta(days=lookahead_days)).date().isoformat(),
+        )
+
+    @staticmethod
+    def _to_document(match: dict, fetched_at: str) -> dict | None:
+        match_id = match.get("id")
+        home = (match.get("homeTeam") or {}).get("name")
+        away = (match.get("awayTeam") or {}).get("name")
+        scheduled_utc = match.get("utcDate")
+        competition = match.get("competition") or {}
+        competition_name = competition.get("name")
+        if not all((match_id, home, away, scheduled_utc, competition_name)):
+            return None
+
+        # Estos campos se copian sin inferir marcadores, cuotas, xG ni pronósticos.
+        return {
+            "id_partido": str(match_id),
+            "liga": competition_name,
+            "competicion": {
+                "id": competition.get("id"),
+                "code": competition.get("code"),
+                "name": competition_name,
+                "area": (competition.get("area") or {}).get("name"),
+            },
+            "local": home,
+            "visitante": away,
+            "fecha_utc": scheduled_utc,
+            "estado": match.get("status", "SCHEDULED"),
+            "marcador": match.get("score") or {},
+            "calendar_status": "VERIFIED",
+            "source_data": {
+                "provider": "football-data.org/v4",
+                "endpoint": "/matches",
+                "fetched_at": fetched_at,
+                "last_updated": match.get("lastUpdated"),
+                "source_match_id": match_id,
+            },
+            "actualizado_en": firestore.SERVER_TIMESTAMP,
+        }
 
     def run(self):
         if not self.lock.acquire(blocking=False):
@@ -471,66 +545,59 @@ class ETLMasterWorker:
             return False
 
         try:
-            logger.info("Iniciando extracción y validación de fixtures.")
-            api_key = os.getenv("API_KEY_FUTBOL", "")
+            api_key = os.getenv("FOOTBALL_API_KEY") or os.getenv("API_KEY_FUTBOL")
             if not api_key:
-                logger.warning("API_KEY_FUTBOL no configurada. Omitiendo llamada externa.")
-                return True
+                logger.error("FOOTBALL_API_KEY no configurada; no se actualizará el calendario.")
+                return False
 
+            date_from, date_to = self._window()
             url = os.getenv("FOOTBALL_API_URL", "https://api.football-data.org/v4/matches")
-            headers = {"X-Auth-Token": api_key}
-            r = requests.get(url, headers=headers, timeout=12)
-            
-            if r.status_code == 200:
-                fixtures = r.json().get("matches", [])
-                batch = db.batch()
-                count = 0
+            response = self.session.get(
+                url,
+                headers={"X-Auth-Token": api_key},
+                params={"dateFrom": date_from, "dateTo": date_to},
+                timeout=(5, 20),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            fixtures = payload.get("matches")
+            if not isinstance(fixtures, list):
+                raise ValueError("Football-Data.org devolvió una respuesta sin una lista de partidos.")
 
-                for m in fixtures:
-                    m_id = str(m.get("id"))
-                    home = m.get("homeTeam", {}).get("name", "Local")
-                    away = m.get("awayTeam", {}).get("name", "Visitante")
-                    utc_date = m.get("utcDate", datetime.utcnow().isoformat())
-                    league = m.get("competition", {}).get("name", "Liga Internacional")
+            fetched_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+            written, skipped = 0, 0
+            batch = db.batch()
+            for match in fixtures:
+                document = self._to_document(match, fetched_at)
+                if document is None:
+                    skipped += 1
+                    logger.warning("Partido descartado: faltan campos obligatorios de Football-Data.org.")
+                    continue
+                batch.set(
+                    db.collection("partidos_verificados").document(document["id_partido"]),
+                    document,
+                    merge=True,
+                )
+                written += 1
+                if written % 450 == 0:
+                    batch.commit()
+                    batch = db.batch()
 
-                    node_official = {"local": home, "visitante": away, "fecha_utc": utc_date}
-                    node_agency = {"local": home, "visitante": away, "fecha_utc": utc_date}
-                    node_market = {"local": home, "visitante": away, "fecha_utc": utc_date}
-
-                    is_valid, bft_hash = self.bft.verify_consensus(node_official, node_agency, node_market)
-
-                    if not is_valid:
-                        continue
-
-                    xg_h = round(np.random.uniform(1.10, 2.30), 2)
-                    xg_a = round(np.random.uniform(0.70, 1.80), 2)
-                    probs = SportsAnalyticsEngine.evaluate_match_probabilities(xg_h, xg_a)
-
-                    doc_data = {
-                        "id_partido": m_id,
-                        "liga": league,
-                        "local": home,
-                        "visitante": away,
-                        "fecha_utc": utc_date,
-                        "bft_hash": bft_hash,
-                        "estado": "VERIFICADO",
-                        "metricas": {
-                            "xg_home": xg_h,
-                            "xg_away": xg_a,
-                            "probabilidades": probs,
-                            "radar": {"ataque_h": 75, "defensa_h": 70, "ataque_a": 65, "defensa_a": 68}
-                        },
-                        "cuotas": {"1": 1.95, "X": 3.40, "2": 3.80},
-                        "actualizado_en": firestore.SERVER_TIMESTAMP
-                    }
-                    batch.set(db.collection("partidos_verificados").document(m_id), doc_data, merge=True)
-                    count += 1
-
+            if written % 450:
                 batch.commit()
-                logger.info("Pipeline ETL finalizado. Partidos procesados: %d", count)
+            logger.info(
+                "Calendario sincronizado desde Football-Data.org: %d partidos, %d descartados, ventana %s a %s.",
+                written, skipped, date_from, date_to,
+            )
             return True
-        except Exception as e:
-            logger.error("Error en Pipeline ETL: %s", e)
+        except requests.RequestException as exc:
+            logger.error("No fue posible consultar Football-Data.org: %s", exc)
+            return False
+        except (TypeError, ValueError) as exc:
+            logger.error("Respuesta inválida de Football-Data.org: %s", exc)
+            return False
+        except Exception:
+            logger.exception("Error no esperado en la sincronización del calendario.")
             return False
         finally:
             self.lock.release()
@@ -862,34 +929,39 @@ def create_app() -> Flask:
 
             for d in docs:
                 m = d.to_dict()
-                if validate_prediction_input(m):
+                if validate_calendar_match(m):
                     continue
-                liga = m.get("liga", "Otras Ligas")
-                probabilities = m["metricas"].get("probabilidades", {})
-                prediction = m.get("prediccion", {})
+                liga = m["liga"]
+                prediction_errors = validate_prediction_input(m)
+                prediction_available = not prediction_errors
                 item = {
-                    "id_partido": m.get("id_partido", d.id),
-                    "partido": f"{m.get('local')} vs {m.get('visitante')}",
+                    "id_partido": m["id_partido"],
+                    "partido": f"{m['local']} vs {m['visitante']}",
                     "liga": liga,
-                    "fecha": m.get("fecha_utc", "")[:16].replace("T", " "),
-                    "estado": m.get("estado", "PENDIENTE"),
-                    "probabilidades": probabilities,
-                    "prediccion": prediction,
-                    "model_version": m["model_version"],
+                    "competicion": m.get("competicion", {}),
+                    "fecha": m["fecha_utc"][:16].replace("T", " "),
+                    "estado": m.get("estado", "SCHEDULED"),
+                    "marcador": m.get("marcador", {}),
+                    "calendar_verified": True,
+                    "prediction_available": prediction_available,
                     "source_provider": m["source_data"]["provider"],
                     "source_fetched_at": m["source_data"]["fetched_at"],
-                    "notice": "Solo se muestran datos con insumos verificados; las probabilidades no son garantías."
+                    "source_last_updated": m["source_data"].get("last_updated"),
                 }
+                if prediction_available:
+                    item["probabilidades"] = m["metricas"].get("probabilidades", {})
+                    item["prediccion"] = m.get("prediccion", {})
+                    item["model_version"] = m["model_version"]
+                    if len(destacados) < 8 and item["estado"] == "SCHEDULED":
+                        destacados.append(item)
                 todos.setdefault(liga, []).append(item)
-                if len(destacados) < 8 and item["estado"] == "PENDIENTE":
-                    destacados.append(item)
 
             return jsonify({
                 "todos_los_partidos": todos,
                 "total_partidos": sum(len(v) for v in todos.values()),
                 "pronosticos_destacados": destacados,
                 "mes_activo": ahora.strftime("%B %Y"),
-                "data_status": "Solo se incluyen partidos con insumos de predicción verificados."
+                "data_status": "Calendario obtenido exclusivamente desde Football-Data.org. Una predicción solo aparece cuando sus insumos están verificados."
             }), 200
 
         except Exception as exc:
