@@ -79,15 +79,17 @@ def init_firebase():
     try:
         if not firebase_admin._apps:
             secret_path = "/etc/secrets/FIREBASE_CREDENTIALS_JSON"
-            local_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_key.json")
+            local_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
             
             if os.path.exists(secret_path):
                 cred = credentials.Certificate(secret_path)
                 firebase_admin.initialize_app(cred)
-            elif os.path.exists(local_path):
+            elif local_path and os.path.isfile(local_path):
                 cred = credentials.Certificate(local_path)
                 firebase_admin.initialize_app(cred)
             else:
+                # En despliegues gestionados se usan Application Default Credentials.
+                # Nunca se busca una clave dentro del repositorio.
                 firebase_admin.initialize_app()
         return firestore.client()
     except Exception as exc:
