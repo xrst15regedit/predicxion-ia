@@ -18,9 +18,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuración Firebase
+# Configuración Firebase: la credencial debe llegar por una ruta segura configurada.
 if not firebase_admin._apps:
-    cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_key.json"))
+    firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+    if not firebase_credentials_path or not os.path.isfile(firebase_credentials_path):
+        raise RuntimeError("FIREBASE_CREDENTIALS_PATH debe apuntar a una credencial de Firebase válida fuera del repositorio.")
+    cred = credentials.Certificate(firebase_credentials_path)
     firebase_admin.initialize_app(cred)
 db = firestore.client()
 
