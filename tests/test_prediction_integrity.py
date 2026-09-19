@@ -23,3 +23,14 @@ def test_firebase_credentials_are_external_to_the_repository():
     assert '"firebase_key.json"' not in APP_SOURCE
     assert '"firebase_key.json"' not in ETL_SOURCE
     assert 'FIREBASE_CREDENTIALS_PATH' in ETL_SOURCE
+
+
+def test_calendar_uses_football_data_without_fabricated_metrics():
+    assert 'dateFrom' in APP_SOURCE
+    assert 'dateTo' in APP_SOURCE
+    assert 'np.random.uniform' not in APP_SOURCE
+    assert 'calendar_status": "VERIFIED"' in APP_SOURCE
+    assert 'partidos_verificados' in ETL_SOURCE
+    assert 'football-data.org/v4' in ETL_SOURCE
+    assert '"metricas"' not in ETL_SOURCE
+    assert '"cuotas"' not in ETL_SOURCE
