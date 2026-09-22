@@ -79,15 +79,17 @@ def init_firebase():
     try:
         if not firebase_admin._apps:
             secret_path = "/etc/secrets/FIREBASE_CREDENTIALS_JSON"
-            local_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "firebase_key.json")
+            local_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
             
             if os.path.exists(secret_path):
                 cred = credentials.Certificate(secret_path)
                 firebase_admin.initialize_app(cred)
-            elif os.path.exists(local_path):
+            elif local_path and os.path.isfile(local_path):
                 cred = credentials.Certificate(local_path)
                 firebase_admin.initialize_app(cred)
             else:
+                # En despliegues gestionados se usan Application Default Credentials.
+                # Nunca se busca una clave dentro del repositorio.
                 firebase_admin.initialize_app()
         return firestore.client()
     except Exception as exc:
@@ -98,7 +100,57 @@ db = init_firebase()
 
 MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN", "")
 MP_HMAC_SECRET = os.getenv("API_HMAC_SECRET", "")
-AUDIT_SALT = os.getenv("AUDIT_SALT", "SALT_PREDICXION_PROD_SECURE_99")
+AUDIT_SALT = os.getenv("AUDIT_SALT", "")
+
+# Una predicción solo se publica cuando los insumos vienen de una fuente identificable
+# y han sido validados por el proceso de datos. No se inventan valores para completar
+# la interfaz ni se confunde una probabilidad de modelo con una garantía.
+def validate_prediction_input(match_data: dict) -> list[str]:
+    errors = []
+    if match_data.get("prediction_status") != "VERIFIED":
+        errors.append("El partido no tiene insumos de predicción verificados.")
+    source = match_data.get("source_data")
+    if not isinstance(source, dict) or not source.get("provider") or not source.get("fetched_at"):
+        errors.append("Falta procedencia verificable de los datos.")
+    metrics = match_data.get("metricas")
+    if not isinstance(metrics, dict):
+        errors.append("Faltan métricas del partido.")
+        return errors
+    for field in ("xg_home", "xg_away"):
+        try:
+            value = float(metrics[field])
+            if not 0.0 <= value <= 10.0:
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"Métrica inválida: {field}.")
+    odds = match_data.get("cuotas")
+    if not isinstance(odds, dict):
+        errors.append("Faltan cuotas observadas.")
+    else:
+        for field in ("1", "X", "2"):
+            try:
+                if float(odds[field]) <= 1.0:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                errors.append(f"Cuota inválida: {field}.")
+    if not match_data.get("model_version"):
+        errors.append("Falta la versión reproducible del modelo.")
+    return errors
+
+def validate_calendar_match(match_data: dict) -> list[str]:
+    """Comprueba que un evento proviene del calendario oficial, no de un respaldo local."""
+    errors = []
+    if match_data.get("calendar_status") != "VERIFIED":
+        errors.append("El calendario del partido no fue verificado.")
+    source = match_data.get("source_data")
+    if not isinstance(source, dict) or "football-data.org" not in str(source.get("provider", "")):
+        errors.append("La fuente no es Football-Data.org.")
+    if not isinstance(source, dict) or not source.get("fetched_at"):
+        errors.append("Falta la hora de extracción de la fuente.")
+    for field in ("id_partido", "local", "visitante", "fecha_utc", "liga"):
+        if not match_data.get(field):
+            errors.append(f"Falta {field}.")
+    return errors
 
 # --------------------------------------------------------------------------------------
 # 3. CAPA DE AUTENTICACIÓN, SEGURIDAD Y BYPASS DE SUPER ADMIN
@@ -257,45 +309,33 @@ class SportsAnalyticsEngine:
 
     @classmethod
     def evaluate_match_probabilities(cls, xg_h: float, xg_a: float, max_goals: int = 6) -> dict:
+        if xg_h < 0 or xg_a < 0:
+            raise ValueError("Los valores xG no pueden ser negativos.")
+
+        # Amplía la cola de Poisson para que mercados de goles no pierdan masa
+        # de probabilidad de manera silenciosa.
+        max_goals = max(max_goals, min(15, math.ceil(max(xg_h, xg_a) + 7 * math.sqrt(max(xg_h, xg_a, 0.01)))))
         matrix = np.zeros((max_goals + 1, max_goals + 1))
         for i in range(max_goals + 1):
             p_i = cls.calculate_poisson(i, xg_h)
             for j in range(max_goals + 1):
-                p_j = cls.calculate_poisson(j, xg_a)
-                matrix[i, j] = p_i * p_j
+                matrix[i, j] = p_i * cls.calculate_poisson(j, xg_a)
+
+        total = float(matrix.sum())
+        if total <= 0:
+            raise ValueError("No se pudo normalizar la distribución de goles.")
+        matrix /= total
 
         prob_h = float(np.sum(np.tril(matrix, -1)))
         prob_d = float(np.sum(np.diag(matrix)))
         prob_a = float(np.sum(np.triu(matrix, 1)))
-
-        total = prob_h + prob_d + prob_a
-        if total > 0:
-            prob_h /= total
-            prob_d /= total
-            prob_a /= total
-
-        prob_under_2_5 = 0.0
-        for i in range(max_goals + 1):
-            for j in range(max_goals + 1):
-                if i + j < 2.5:
-                    prob_under_2_5 += matrix[i, j]
-        prob_over_2_5 = max(0.0, min(1.0, 1.0 - prob_under_2_5))
+        prob_under_2_5 = float(sum(matrix[i, j] for i in range(max_goals + 1) for j in range(max_goals + 1) if i + j <= 2))
         prob_btts = float(np.sum(matrix[1:, 1:]))
 
         return {
-            "1X2": {
-                "1": round(prob_h * 100, 2),
-                "X": round(prob_d * 100, 2),
-                "2": round(prob_a * 100, 2)
-            },
-            "over_under_2_5": {
-                "over": round(prob_over_2_5 * 100, 2),
-                "under": round(prob_under_2_5 * 100, 2)
-            },
-            "btts": {
-                "yes": round(prob_btts * 100, 2),
-                "no": round((1.0 - prob_btts) * 100, 2)
-            }
+            "1X2": {"1": round(prob_h * 100, 2), "X": round(prob_d * 100, 2), "2": round(prob_a * 100, 2)},
+            "over_under_2_5": {"over": round((1.0 - prob_under_2_5) * 100, 2), "under": round(prob_under_2_5 * 100, 2)},
+            "btts": {"yes": round(prob_btts * 100, 2), "no": round((1.0 - prob_btts) * 100, 2)}
         }
 
     @staticmethod
@@ -306,8 +346,8 @@ class SportsAnalyticsEngine:
                 "implied_probability": 0.0,
                 "edge_percent": 0.0,
                 "value_detected": False,
-                "stake_percent": 1.0,
-                "recommended_amount": round(bankroll * 0.01, 2)
+                "stake_percent": 0.0,
+                "recommended_amount": 0.0
             }
 
         p = prob_percent / 100.0
@@ -320,12 +360,12 @@ class SportsAnalyticsEngine:
         full_kelly = (b * p - q) / b if b > 0 else 0.0
         fractional_kelly = max(0.0, full_kelly * 0.25)
         
-        stake_percent = min(5.0, max(1.0, fractional_kelly * 100)) if ev > 0 else 1.0
+        stake_percent = min(2.0, max(0.0, fractional_kelly * 100)) if ev > 0 and edge >= 0.03 else 0.0
         return {
             "ev_percent": round(ev * 100, 2),
             "implied_probability": round(implied_p * 100, 2),
             "edge_percent": round(edge * 100, 2),
-            "value_detected": edge >= 0.05,
+            "value_detected": ev > 0 and edge >= 0.03,
             "stake_percent": round(stake_percent, 2),
             "recommended_amount": round(bankroll * (stake_percent / 100.0), 2)
         }
@@ -427,122 +467,77 @@ class DualAIEnsembleService:
         }
 
 # --------------------------------------------------------------------------------------
-# 8. GENERADOR Y GESTOR DEL CALENDARIO COMPLETO DEL MES (6 LIGAS)
+# 8. CALENDARIO
 # --------------------------------------------------------------------------------------
-def generar_calendario_completo_mes():
-    """Genera las jornadas completas del mes actual para las 6 ligas integradas."""
-    ahora = datetime.utcnow()
-    y = ahora.year
-    m = ahora.month
-
-    ligas_fixtures = {
-        "La Liga": [
-            ("Real Madrid", "Villarreal", 1, 15, 0, "FINALIZADO", "3 - 1"),
-            ("Barcelona", "Getafe", 4, 14, 0, "FINALIZADO", "2 - 0"),
-            ("Atlético Madrid", "Sevilla", 8, 16, 15, "PENDIENTE", None),
-            ("Athletic Club", "Real Sociedad", 12, 14, 0, "PENDIENTE", None),
-            ("Valencia", "Real Betis", 16, 11, 30, "PENDIENTE", None),
-            ("Villarreal", "Barcelona", 20, 15, 0, "PENDIENTE", None),
-            ("Sevilla", "Real Madrid", 24, 14, 0, "PENDIENTE", None),
-            ("Real Sociedad", "Atlético Madrid", 28, 16, 0, "PENDIENTE", None)
-        ],
-        "Premier League": [
-            ("Arsenal", "Chelsea", 2, 11, 30, "FINALIZADO", "2 - 1"),
-            ("Manchester City", "Liverpool", 5, 10, 30, "FINALIZADO", "1 - 1"),
-            ("Tottenham", "Manchester United", 9, 14, 0, "PENDIENTE", None),
-            ("Aston Villa", "Newcastle", 13, 11, 30, "PENDIENTE", None),
-            ("Liverpool", "Everton", 17, 9, 0, "PENDIENTE", None),
-            ("Chelsea", "Manchester City", 21, 11, 30, "PENDIENTE", None),
-            ("Manchester United", "Arsenal", 25, 14, 30, "PENDIENTE", None),
-            ("Newcastle", "Tottenham", 29, 10, 0, "PENDIENTE", None)
-        ],
-        "Serie A": [
-            ("Inter", "Juventus", 3, 13, 45, "FINALIZADO", "1 - 1"),
-            ("Milan", "Napoli", 6, 14, 45, "FINALIZADO", "1 - 2"),
-            ("Roma", "Lazio", 10, 11, 0, "PENDIENTE", None),
-            ("Atalanta", "Fiorentina", 14, 13, 45, "PENDIENTE", None),
-            ("Juventus", "Milan", 18, 14, 45, "PENDIENTE", None),
-            ("Napoli", "Inter", 22, 13, 45, "PENDIENTE", None),
-            ("Lazio", "Atalanta", 26, 11, 0, "PENDIENTE", None),
-            ("Fiorentina", "Roma", 30, 13, 45, "PENDIENTE", None)
-        ],
-        "Bundesliga": [
-            ("Bayern Múnich", "Borussia Dortmund", 4, 12, 30, "FINALIZADO", "3 - 2"),
-            ("Bayer Leverkusen", "RB Leipzig", 7, 10, 30, "FINALIZADO", "2 - 1"),
-            ("Eintracht Frankfurt", "Stuttgart", 11, 9, 30, "PENDIENTE", None),
-            ("Borussia Dortmund", "Bayer Leverkusen", 15, 12, 30, "PENDIENTE", None),
-            ("RB Leipzig", "Bayern Múnich", 19, 10, 30, "PENDIENTE", None),
-            ("Stuttgart", "Wolfsburg", 23, 9, 30, "PENDIENTE", None),
-            ("Bayern Múnich", "Eintracht Frankfurt", 27, 10, 30, "PENDIENTE", None)
-        ],
-        "UEFA Champions League": [
-            ("Real Madrid", "Bayern Múnich", 14, 14, 0, "PENDIENTE", None),
-            ("Manchester City", "PSG", 14, 14, 0, "PENDIENTE", None),
-            ("Arsenal", "Inter", 15, 14, 0, "PENDIENTE", None),
-            ("Barcelona", "Juventus", 15, 14, 0, "PENDIENTE", None),
-            ("PSG", "Real Madrid", 28, 14, 0, "PENDIENTE", None),
-            ("Liverpool", "Bayer Leverkusen", 29, 14, 0, "PENDIENTE", None)
-        ],
-        "Liga 1": [
-            ("Universitario", "Sporting Cristal", 6, 15, 30, "FINALIZADO", "2 - 1"),
-            ("Alianza Lima", "Melgar", 9, 20, 0, "PENDIENTE", None),
-            ("Cienciano", "Cusco FC", 13, 18, 0, "PENDIENTE", None),
-            ("Sport Huancayo", "Universitario", 17, 13, 0, "PENDIENTE", None),
-            ("Sporting Cristal", "Alianza Lima", 21, 15, 30, "PENDIENTE", None),
-            ("Melgar", "Cienciano", 25, 19, 0, "PENDIENTE", None),
-            ("Universitario", "Alianza Lima", 29, 15, 30, "PENDIENTE", None)
-        ]
-    }
-
-    todos = {}
-    destacados = []
-    analytics = SportsAnalyticsEngine()
-
-    for liga, partidos in ligas_fixtures.items():
-        todos[liga] = []
-        for idx, p in enumerate(partidos):
-            loc, vis, dia, hora, minuto, estado, marcador = p
-            fecha_dt = datetime(y, m, min(dia, 28), hora, minuto)
-            fecha_str = fecha_dt.strftime("%Y-%m-%d %H:%M")
-            m_id = f"{re.sub(r'[^a-zA-Z0-9]', '', liga)[:4]}-{m}-{idx+1}"
-
-            xg_h = round(1.2 + ((idx * 7) % 15) / 10.0, 2)
-            xg_a = round(0.8 + ((idx * 5) % 12) / 10.0, 2)
-            probs = analytics.evaluate_match_probabilities(xg_h, xg_a)
-            cuota = round(1.70 + ((idx * 3) % 10) / 10.0, 2)
-            ev = analytics.evaluate_kelly_stake(probs["1X2"]["1"], cuota)
-
-            item = {
-                "id_partido": m_id,
-                "partido": f"{loc} vs {vis}",
-                "liga": liga,
-                "fecha": fecha_str,
-                "estado": estado,
-                "marcador": marcador,
-                "ev_valor": f"+{ev['ev_percent']}%",
-                "dropping_odds": ev["value_detected"],
-                "cuota_valor": cuota,
-                "pick_valor": f"Victoria {loc}",
-                "stake_kelly": f"{ev['stake_percent']}% Kelly",
-                "pick_bomba": "Over 2.5 Goles",
-                "parley_pick": f"{loc} Gana o Empata",
-                "parley_cuota": "1.65",
-                "clv_target": f"{(cuota - 0.12):.2f}",
-                "analisis_premium": f"Superioridad métrica proyectada en {loc} con xG de {xg_h:.2f} y ventaja neta sobre cuota de cierre."
-            }
-            todos[liga].append(item)
-            if len(destacados) < 8 and estado == "PENDIENTE":
-                destacados.append(item)
-
-    return todos, destacados
+# Los encuentros se consultan exclusivamente desde partidos_verificados. No se mantiene
+# un calendario de respaldo con fixtures o resultados ficticios.
 
 # --------------------------------------------------------------------------------------
 # 9. PIPELINE ETL CON CONTROL DE CONCURRENCIA
 # --------------------------------------------------------------------------------------
 class ETLMasterWorker:
+    """Sincroniza únicamente fixtures recibidos de Football-Data.org."""
+
     def __init__(self):
         self.lock = threading.Lock()
-        self.bft = ByzantineFaultToleranceEngine(threshold=2)
+        self.session = requests.Session()
+        retries = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retries))
+
+    @staticmethod
+    def _window() -> tuple[str, str]:
+        try:
+            lookahead_days = max(1, min(int(os.getenv("CALENDAR_LOOKAHEAD_DAYS", "45")), 90))
+            backfill_days = max(0, min(int(os.getenv("CALENDAR_BACKFILL_DAYS", "7")), 30))
+        except ValueError as exc:
+            raise ValueError("CALENDAR_LOOKAHEAD_DAYS y CALENDAR_BACKFILL_DAYS deben ser enteros.") from exc
+        now = datetime.utcnow()
+        return (
+            (now - timedelta(days=backfill_days)).date().isoformat(),
+            (now + timedelta(days=lookahead_days)).date().isoformat(),
+        )
+
+    @staticmethod
+    def _to_document(match: dict, fetched_at: str) -> dict | None:
+        match_id = match.get("id")
+        home = (match.get("homeTeam") or {}).get("name")
+        away = (match.get("awayTeam") or {}).get("name")
+        scheduled_utc = match.get("utcDate")
+        competition = match.get("competition") or {}
+        competition_name = competition.get("name")
+        if not all((match_id, home, away, scheduled_utc, competition_name)):
+            return None
+
+        # Estos campos se copian sin inferir marcadores, cuotas, xG ni pronósticos.
+        return {
+            "id_partido": str(match_id),
+            "liga": competition_name,
+            "competicion": {
+                "id": competition.get("id"),
+                "code": competition.get("code"),
+                "name": competition_name,
+                "area": (competition.get("area") or {}).get("name"),
+            },
+            "local": home,
+            "visitante": away,
+            "fecha_utc": scheduled_utc,
+            "estado": match.get("status", "SCHEDULED"),
+            "marcador": match.get("score") or {},
+            "calendar_status": "VERIFIED",
+            "source_data": {
+                "provider": "football-data.org/v4",
+                "endpoint": "/matches",
+                "fetched_at": fetched_at,
+                "last_updated": match.get("lastUpdated"),
+                "source_match_id": match_id,
+            },
+            "actualizado_en": firestore.SERVER_TIMESTAMP,
+        }
 
     def run(self):
         if not self.lock.acquire(blocking=False):
@@ -550,66 +545,59 @@ class ETLMasterWorker:
             return False
 
         try:
-            logger.info("Iniciando extracción y validación de fixtures.")
-            api_key = os.getenv("API_KEY_FUTBOL", "")
+            api_key = os.getenv("FOOTBALL_API_KEY") or os.getenv("API_KEY_FUTBOL")
             if not api_key:
-                logger.warning("API_KEY_FUTBOL no configurada. Omitiendo llamada externa.")
-                return True
+                logger.error("FOOTBALL_API_KEY no configurada; no se actualizará el calendario.")
+                return False
 
+            date_from, date_to = self._window()
             url = os.getenv("FOOTBALL_API_URL", "https://api.football-data.org/v4/matches")
-            headers = {"X-Auth-Token": api_key}
-            r = requests.get(url, headers=headers, timeout=12)
-            
-            if r.status_code == 200:
-                fixtures = r.json().get("matches", [])
-                batch = db.batch()
-                count = 0
+            response = self.session.get(
+                url,
+                headers={"X-Auth-Token": api_key},
+                params={"dateFrom": date_from, "dateTo": date_to},
+                timeout=(5, 20),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            fixtures = payload.get("matches")
+            if not isinstance(fixtures, list):
+                raise ValueError("Football-Data.org devolvió una respuesta sin una lista de partidos.")
 
-                for m in fixtures:
-                    m_id = str(m.get("id"))
-                    home = m.get("homeTeam", {}).get("name", "Local")
-                    away = m.get("awayTeam", {}).get("name", "Visitante")
-                    utc_date = m.get("utcDate", datetime.utcnow().isoformat())
-                    league = m.get("competition", {}).get("name", "Liga Internacional")
+            fetched_at = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+            written, skipped = 0, 0
+            batch = db.batch()
+            for match in fixtures:
+                document = self._to_document(match, fetched_at)
+                if document is None:
+                    skipped += 1
+                    logger.warning("Partido descartado: faltan campos obligatorios de Football-Data.org.")
+                    continue
+                batch.set(
+                    db.collection("partidos_verificados").document(document["id_partido"]),
+                    document,
+                    merge=True,
+                )
+                written += 1
+                if written % 450 == 0:
+                    batch.commit()
+                    batch = db.batch()
 
-                    node_official = {"local": home, "visitante": away, "fecha_utc": utc_date}
-                    node_agency = {"local": home, "visitante": away, "fecha_utc": utc_date}
-                    node_market = {"local": home, "visitante": away, "fecha_utc": utc_date}
-
-                    is_valid, bft_hash = self.bft.verify_consensus(node_official, node_agency, node_market)
-
-                    if not is_valid:
-                        continue
-
-                    xg_h = round(np.random.uniform(1.10, 2.30), 2)
-                    xg_a = round(np.random.uniform(0.70, 1.80), 2)
-                    probs = SportsAnalyticsEngine.evaluate_match_probabilities(xg_h, xg_a)
-
-                    doc_data = {
-                        "id_partido": m_id,
-                        "liga": league,
-                        "local": home,
-                        "visitante": away,
-                        "fecha_utc": utc_date,
-                        "bft_hash": bft_hash,
-                        "estado": "VERIFICADO",
-                        "metricas": {
-                            "xg_home": xg_h,
-                            "xg_away": xg_a,
-                            "probabilidades": probs,
-                            "radar": {"ataque_h": 75, "defensa_h": 70, "ataque_a": 65, "defensa_a": 68}
-                        },
-                        "cuotas": {"1": 1.95, "X": 3.40, "2": 3.80},
-                        "actualizado_en": firestore.SERVER_TIMESTAMP
-                    }
-                    batch.set(db.collection("partidos_verificados").document(m_id), doc_data, merge=True)
-                    count += 1
-
+            if written % 450:
                 batch.commit()
-                logger.info("Pipeline ETL finalizado. Partidos procesados: %d", count)
+            logger.info(
+                "Calendario sincronizado desde Football-Data.org: %d partidos, %d descartados, ventana %s a %s.",
+                written, skipped, date_from, date_to,
+            )
             return True
-        except Exception as e:
-            logger.error("Error en Pipeline ETL: %s", e)
+        except requests.RequestException as exc:
+            logger.error("No fue posible consultar Football-Data.org: %s", exc)
+            return False
+        except (TypeError, ValueError) as exc:
+            logger.error("Respuesta inválida de Football-Data.org: %s", exc)
+            return False
+        except Exception:
+            logger.exception("Error no esperado en la sincronización del calendario.")
             return False
         finally:
             self.lock.release()
@@ -941,69 +929,49 @@ def create_app() -> Flask:
 
             for d in docs:
                 m = d.to_dict()
-                liga = m.get("liga", "Otras Ligas")
-                partido = f"{m.get('local')} vs {m.get('visitante')}"
-                probs = m.get("metricas", {}).get("probabilidades", {}).get("1X2", {})
-                cuota_1 = float(m.get("cuotas", {}).get("1", 1.95))
-                
-                ev_data = analytics.evaluate_kelly_stake(probs.get("1", 50.0), cuota_1)
-
+                if validate_calendar_match(m):
+                    continue
+                liga = m["liga"]
+                prediction_errors = validate_prediction_input(m)
+                prediction_available = not prediction_errors
                 item = {
-                    "id_partido": m.get("id_partido", d.id),
-                    "partido": partido,
+                    "id_partido": m["id_partido"],
+                    "partido": f"{m['local']} vs {m['visitante']}",
                     "liga": liga,
-                    "fecha": m.get("fecha_utc", "")[:16].replace("T", " "),
-                    "estado": m.get("estado", "PENDIENTE"),
-                    "marcador": m.get("marcador", None),
-                    "ev_valor": f"+{ev_data['ev_percent']}%",
-                    "dropping_odds": ev_data["value_detected"],
-                    "cuota_valor": cuota_1,
-                    "pick_valor": f"Victoria {m.get('local')}",
-                    "stake_kelly": f"{ev_data['stake_percent']}% Kelly",
-                    "pick_bomba": "Over 2.5 Goles",
-                    "parley_pick": f"{m.get('local')} Gana o Empata",
-                    "parley_cuota": "1.65",
-                    "clv_target": f"{(cuota_1 - 0.12):.2f}",
-                    "analisis_premium": f"Superioridad métrica en {m.get('local')} con xG verificado y valor esperado positivo."
+                    "competicion": m.get("competicion", {}),
+                    "fecha": m["fecha_utc"][:16].replace("T", " "),
+                    "estado": m.get("estado", "SCHEDULED"),
+                    "marcador": m.get("marcador", {}),
+                    "calendar_verified": True,
+                    "prediction_available": prediction_available,
+                    "source_provider": m["source_data"]["provider"],
+                    "source_fetched_at": m["source_data"]["fetched_at"],
+                    "source_last_updated": m["source_data"].get("last_updated"),
                 }
-                if liga not in todos:
-                    todos[liga] = []
-                todos[liga].append(item)
-                if len(destacados) < 8 and item["estado"] == "PENDIENTE":
-                    destacados.append(item)
-
-            # 2. Fusión con el calendario completo de 6 ligas para garantizar la visualización de todo el mes
-            cal_todos, cal_destacados = generar_calendario_completo_mes()
-            for cal_liga, cal_partidos in cal_todos.items():
-                if cal_liga not in todos or len(todos[cal_liga]) == 0:
-                    todos[cal_liga] = cal_partidos
-                else:
-                    partidos_existentes = {p["partido"] for p in todos[cal_liga]}
-                    for cp in cal_partidos:
-                        if cp["partido"] not in partidos_existentes:
-                            todos[cal_liga].append(cp)
-
-            if not destacados:
-                destacados = cal_destacados
+                if prediction_available:
+                    item["probabilidades"] = m["metricas"].get("probabilidades", {})
+                    item["prediccion"] = m.get("prediccion", {})
+                    item["model_version"] = m["model_version"]
+                    if len(destacados) < 8 and item["estado"] == "SCHEDULED":
+                        destacados.append(item)
+                todos.setdefault(liga, []).append(item)
 
             return jsonify({
                 "todos_los_partidos": todos,
                 "total_partidos": sum(len(v) for v in todos.values()),
                 "pronosticos_destacados": destacados,
-                "mes_activo": ahora.strftime("%B %Y")
+                "mes_activo": ahora.strftime("%B %Y"),
+                "data_status": "Calendario obtenido exclusivamente desde Football-Data.org. Una predicción solo aparece cuando sus insumos están verificados."
             }), 200
 
         except Exception as exc:
             logger.error("Error al consolidar cartelera: %s", exc)
-            cal_todos, cal_destacados = generar_calendario_completo_mes()
             return jsonify({
-                "todos_los_partidos": cal_todos,
-                "total_partidos": sum(len(v) for v in cal_todos.values()),
-                "pronosticos_destacados": cal_destacados,
-                "mes_activo": datetime.utcnow().strftime("%B %Y")
-            }), 200
+                "success": False,
+                "error": "No fue posible consultar la cartelera verificada."
+            }), 503
 
-    # Auditoría Semanal y Métricas
+    # Auditoría Semanal y Métricas    # Auditoría Semanal y Métricas
     @app.route("/api/v2/aciertos", methods=["GET"])
     def api_aciertos():
         try:
@@ -1039,13 +1007,15 @@ def create_app() -> Flask:
                 })
 
             if not registros:
-                registros = [
-                    {"estado": "GANADA", "verificacion_status": "VERIFIED", "hash_origen": "0x4f8ac910", "fecha": "2026-09-02", "partido": "Arsenal vs Chelsea", "marcador": "2 - 1", "competicion": "Premier League", "direccion_pick": "Victoria Local (1X2)", "ia_confianza": 84, "cuota_entrada": 1.95, "cuota_cierre_clv": 1.82, "bookmaker": "Pinnacle", "roi_realizado": 0.95},
-                    {"estado": "GANADA", "verificacion_status": "VERIFIED", "hash_origen": "0x7a2bd331", "fecha": "2026-09-04", "partido": "Bayern Múnich vs Borussia Dortmund", "marcador": "3 - 2", "competicion": "Bundesliga", "direccion_pick": "Over 2.5 Goles", "ia_confianza": 88, "cuota_entrada": 1.75, "cuota_cierre_clv": 1.62, "bookmaker": "Bet365", "roi_realizado": 0.75},
-                    {"estado": "GANADA", "verificacion_status": "VERIFIED", "hash_origen": "0x1b9cd205", "fecha": "2026-09-06", "partido": "Universitario vs Sporting Cristal", "marcador": "2 - 1", "competicion": "Liga 1", "direccion_pick": "Victoria Local (1X2)", "ia_confianza": 78, "cuota_entrada": 2.10, "cuota_cierre_clv": 1.95, "bookmaker": "TeApuesto", "roi_realizado": 1.10},
-                    {"estado": "PERDIDA", "verificacion_status": "VERIFIED", "hash_origen": "0x3e1ca904", "fecha": "2026-09-03", "partido": "Inter vs Juventus", "marcador": "1 - 1", "competicion": "Serie A", "direccion_pick": "Victoria Visitante", "ia_confianza": 62, "cuota_entrada": 3.10, "cuota_cierre_clv": 3.00, "bookmaker": "Pinnacle", "roi_realizado": -1.00}
-                ]
-                acertados, fallados, unidades = 3, 1, 1.80
+                return jsonify({
+                    "metricas_globales": {
+                        "tasa_acierto_pct": 0.0, "acertados": 0, "fallados": 0,
+                        "yield_pct": 0.0, "unidades_netas": 0.0,
+                        "racha_actual": "Sin historial verificado", "cuota_promedio": None
+                    },
+                    "registros": [],
+                    "data_status": "Aún no existen resultados auditados y verificados."
+                }), 200
 
             tot = acertados + fallados
             winrate = round((acertados / tot * 100), 1) if tot > 0 else 0.0
@@ -1169,50 +1139,26 @@ def create_app() -> Flask:
                 if query_matches:
                     match_data = query_matches[0].to_dict()
 
-            # Búsqueda en el catálogo completo mensual si aún no está indexado en Firestore
             if not match_data:
-                todos, _ = generar_calendario_completo_mes()
-                for _, lista in todos.items():
-                    for p in lista:
-                        if p.get("id_partido") == match_id:
-                            loc, vis = p["partido"].split(" vs ")
-                            match_data = {
-                                "id_partido": match_id,
-                                "local": loc,
-                                "visitante": vis,
-                                "fecha_utc": p["fecha"],
-                                "metricas": {
-                                    "xg_home": 1.95,
-                                    "xg_away": 1.20,
-                                    "radar": {"ataque_h": 82, "defensa_h": 75, "ataque_a": 68, "defensa_a": 70}
-                                },
-                                "cuotas": {"1": float(p.get("cuota_valor", 1.95)), "X": 3.40, "2": 3.80}
-                            }
-                            break
-                    if match_data:
-                        break
+                return jsonify({
+                    "success": False,
+                    "error": "Partido no encontrado en la fuente verificada."
+                }), 404
 
-            # Respaldo estructurado por defecto si no coincide
-            if not match_data:
-                match_data = {
-                    "id_partido": match_id,
-                    "local": "Equipo Local",
-                    "visitante": "Equipo Visitante",
-                    "fecha_utc": datetime.utcnow().isoformat(),
-                    "metricas": {
-                        "xg_home": 1.90,
-                        "xg_away": 1.15,
-                        "radar": {"ataque_h": 78, "defensa_h": 72, "ataque_a": 65, "defensa_a": 68}
-                    },
-                    "cuotas": {"1": 1.95, "X": 3.40, "2": 3.80}
-                }
+            validation_errors = validate_prediction_input(match_data)
+            if validation_errors:
+                return jsonify({
+                    "success": False,
+                    "error": "Predicción no publicada: faltan datos verificables.",
+                    "validation_errors": validation_errors
+                }), 409
 
             metrics = match_data.get("metricas", {})
-            xg_h = float(metrics.get("xg_home", 1.85))
-            xg_a = float(metrics.get("xg_away", 1.20))
+            xg_h = float(metrics["xg_home"])
+            xg_a = float(metrics["xg_away"])
             probs = analytics.evaluate_match_probabilities(xg_h, xg_a)
 
-            cuotas = match_data.get("cuotas", {"1": 1.95, "X": 3.40, "2": 3.80})
+            cuotas = match_data["cuotas"]
             odds_1 = float(cuotas.get("1", 1.95))
             prob_1 = probs.get("1X2", {}).get("1", 48.0)
             
@@ -1228,11 +1174,7 @@ def create_app() -> Flask:
                 "id_partido": match_id,
                 "partido": f"{match_data.get('local')} vs {match_data.get('visitante')}",
                 "fecha": match_data.get("fecha_utc", "")[:16].replace("T", " "),
-                "radar_chart": {
-                    "labels": ["Ataque", "Defensa", "Posesión", "Eficiencia", "Discreción Táctica", "Forma"],
-                    "home_dataset": [82, 75, 60, 85, 70, 78],
-                    "away_dataset": [68, 70, 40, 62, 65, 60]
-                },
+                "radar_chart": metrics.get("radar", {}),
                 "probabilidades": probs,
                 "evaluacion_ev": val_eval,
                 "datos_destacados": highlights,
@@ -1240,7 +1182,7 @@ def create_app() -> Flask:
                     "mercado": "Resultado Directo (1X2)",
                     "seleccion": match_data.get("local"),
                     "confianza": f"{prob_1}%",
-                    "justificacion": "Superioridad métrica verificada en Expected Goals (xG) y ventaja sobre cuota real."
+                    "justificacion": "Estimación Poisson basada en los xG y cuotas verificadas de la fuente."
                 },
                 "pronosticos_alternativos": [
                     {
@@ -1254,7 +1196,13 @@ def create_app() -> Flask:
                         "confianza": f"{probs.get('btts', {}).get('yes', 52)}%"
                     }
                 ],
-                "clv_target": f"{(odds_1 - 0.12):.2f}"
+                "clv_target": None,
+                "model_quality": {
+                    "model_version": match_data["model_version"],
+                    "source_provider": match_data["source_data"]["provider"],
+                    "source_fetched_at": match_data["source_data"]["fetched_at"],
+                    "notice": "Probabilidades de modelo; no constituyen una garantía ni una recomendación de apuesta."
+                }
             }
 
             audit_hash = CryptographicAuditEngine.persist_record("ANALISIS_PARTIDO", match_id, analysis_bundle)
@@ -1275,62 +1223,49 @@ def create_app() -> Flask:
     # Inferencia Táctica Rápida
     @app.route("/chat-ia", methods=["POST"])
     def chat_ia():
-        payload = request.get_json() or {}
-        msg = payload.get("mensaje", "")
-        if not msg:
-            return jsonify({"respuesta": "Por favor formula una consulta táctica."}), 400
+        return jsonify({
+            "respuesta": "Para un análisis verificable usa /api/v1/chat/predict e indica match_id.",
+            "notice": "El asistente no genera pronósticos con partidos o métricas inventadas."
+        }), 400
 
-        res = ai_service.execute_consensus({
-            "local": "Local",
-            "visitante": "Visitante",
-            "xg_home": 1.85,
-            "xg_away": 1.15,
-            "odds_1": 1.95,
-            "odds_x": 3.40,
-            "odds_2": 3.90
-        })
-        return jsonify({"respuesta": res.get("analisis_groq") or res.get("resumen")}), 200
-
-    # Chat Cuantitativo Auditado con Firma Criptográfica
+    # Chat Cuantitativo: solamente trabaja con un partido y una versión de modelo verificables.
     @app.route("/api/v1/chat/predict", methods=["POST"])
     @require_auth
     def chat_predict():
         payload = request.get_json() or {}
-        user_query = payload.get("mensaje", "").strip()
+        match_id = str(payload.get("match_id", "")).strip()
+        if not match_id:
+            return jsonify({"success": False, "error": "match_id es obligatorio para evitar análisis sin datos."}), 400
 
-        if not user_query:
-            return jsonify({"success": False, "error": "El mensaje no puede estar vacío."}), 400
+        doc = db.collection("partidos_verificados").document(match_id).get()
+        if not doc.exists:
+            return jsonify({"success": False, "error": "Partido no encontrado en la fuente verificada."}), 404
+        match_context = doc.to_dict()
+        validation_errors = validate_prediction_input(match_context)
+        if validation_errors:
+            return jsonify({
+                "success": False,
+                "error": "Predicción no publicada: faltan datos verificables.",
+                "validation_errors": validation_errors
+            }), 409
 
-        match_context = {
-            "local": "Real Madrid",
-            "visitante": "Barcelona",
-            "xg_home": 1.95,
-            "xg_away": 1.45,
-            "form_home": 85.0,
-            "form_away": 75.0,
-            "odds_1": 2.10,
-            "odds_x": 3.40,
-            "odds_2": 3.20
-        }
-
-        ai_deliberation = ai_service.execute_consensus(match_context)
-        probs = analytics.evaluate_match_probabilities(match_context["xg_home"], match_context["xg_away"])
-        val_eval = analytics.evaluate_kelly_stake(probs["1X2"]["1"], match_context["odds_1"])
-
+        metrics, odds = match_context["metricas"], match_context["cuotas"]
+        probs = analytics.evaluate_match_probabilities(float(metrics["xg_home"]), float(metrics["xg_away"]))
+        val_eval = analytics.evaluate_kelly_stake(probs["1X2"]["1"], float(odds["1"]))
         response_data = {
-            "resumen_tres_lineas": ai_deliberation["resumen"],
+            "partido": f"{match_context.get('local')} vs {match_context.get('visitante')}",
             "probabilidades": probs,
             "evaluacion_ev": val_eval,
-            "analisis_deliberado": ai_deliberation["analisis_groq"],
             "metadatos": {
-                "modelos": ["Gemini-1.5-Flash", "Llama-3.3-70b-Groq"],
-                "timestamp": datetime.utcnow().isoformat()
+                "model_version": match_context["model_version"],
+                "source_provider": match_context["source_data"]["provider"],
+                "source_fetched_at": match_context["source_data"]["fetched_at"],
+                "timestamp": datetime.utcnow().isoformat(),
+                "notice": "Probabilidades de modelo; no son certezas ni consejo de apuesta."
             }
         }
-
         audit_hash = CryptographicAuditEngine.persist_record("CHAT_QUERY", g.user_id, response_data)
         response_data["audit_hash"] = audit_hash
-
         return jsonify({"success": True, "data": response_data}), 200
 
     # Disparador ETL Manual

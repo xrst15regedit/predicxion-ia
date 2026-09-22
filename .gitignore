@@ -1,1 +1,19 @@
+# Environments and secrets
+.env
+.evn
+*.env
+firebase_key.json
+*.json
+!.env.example
+
+# Python
+.venv/
 venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Logs
+*.log
