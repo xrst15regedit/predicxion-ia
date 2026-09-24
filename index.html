@@ -517,7 +517,12 @@
                 btn.disabled = false;
                 btn.innerText = "Enviar Comprobante (S/ 39.90)";
             }
-        }
+       }
+        
+        // Ejecución inmediata al cargar el documento
+        document.addEventListener('DOMContentLoaded', cargarDatosCartelera);
+        cargarDatosCartelera();
+        
     </script>
 </body>
 </html>
