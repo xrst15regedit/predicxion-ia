@@ -261,6 +261,10 @@ class FootballDataETL:
         retries = Retry(total=3, backoff_factor=2, status_forcelist=(429, 500, 502, 503, 504))
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
+    def run_sync(self):
+        """Alias para ejecutar la sincronización de la temporada 2026."""
+        return self.run_sync_full_season(2026)
+        
     def run_sync_full_season(self, season_year=2026):
         if not self.lock.acquire(blocking=False):
             logger.warning("ETL ya se encuentra en ejecución activa.")
@@ -564,7 +568,7 @@ def create_app() -> Flask:
         
     # Sincronización automática al arrancar si la clave de Football está configurada
     if os.getenv("FOOTBALL_API_KEY"):
-        threading.Thread(target=etl_service.run_sync, daemon=True).start()
+        threading.Thread(target=etl_service.run_sync_full_season, daemon=True).start()
 
     return app
     
