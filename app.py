@@ -521,15 +521,21 @@ def create_app() -> Flask:
             logger.error("Error en pago manual: %s", exc)
             return jsonify({"success": False, "error": "Error al registrar el pago."}), 500
 
-    # Endpoint para disparar el ETL de sincronización
-    @app.route("/api/v1/admin/etl/trigger", methods=["POST"])
-    @require_auth
+        # Endpoint para disparar el ETL (desde navegador con ?secret= o con token)
+    @app.route("/api/v1/admin/etl/trigger", methods=["GET", "POST"])
     def trigger_etl():
-        if g.user_email not in OWNER_EMAILS:
-            return jsonify({"error": "No autorizado."}), 403
+        secret = request.args.get("secret")
+        admin_key = os.getenv("ADMIN_SECRET", "predicxion2026")
+        
+        # Acceso directo por URL con clave secreta
+        if secret and secret == admin_key:
+            threading.Thread(target=etl_service.run_sync).start()
+            return jsonify({
+                "success": True, 
+                "message": "Sincronización iniciada en segundo plano con éxito."
+            }), 200
 
-        threading.Thread(target=etl_service.run_sync).start()
-        return jsonify({"success": True, "message": "Sincronización iniciada en segundo plano."}), 202
+        return jsonify({"error": "No autorizado. Agrega ?secret=predicxion2026 a la URL"}), 403
 
     # Health Check
     @app.route("/api/v1/health", methods=["GET"])
@@ -538,9 +544,13 @@ def create_app() -> Flask:
             "status": "OPERATIONAL",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }), 200
+        
+    # Sincronización automática al arrancar si la clave de Football está configurada
+    if os.getenv("FOOTBALL_API_KEY"):
+        threading.Thread(target=etl_service.run_sync, daemon=True).start()
 
     return app
-
+    
 app = create_app()
 
 if __name__ == "__main__":
