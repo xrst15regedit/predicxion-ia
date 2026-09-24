@@ -1,7 +1,7 @@
-Flask
-Flask-Cors
-requests
-google-genai
-mercadopago
-firebase-admin
-gunicorn
+Flask==3.1.3
+Flask-Cors==6.0.5
+requests==2.34.2
+firebase-admin==7.5.0
+numpy==2.5.3
+gunicorn==26.2.0
+APScheduler==3.11.3

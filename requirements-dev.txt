@@ -1,0 +1,10 @@
+-r requirements.txt
+
+python-dotenv==1.2.3
+pytest
+pytest-cov
+ruff
+mypy
+pre-commit
+bandit
+pip-audit
