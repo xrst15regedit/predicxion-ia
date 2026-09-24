@@ -1,57 +1,108 @@
-import hashlib
-import json
-import re
-import logging
+# ======================================================================================
+# ARCHIVO: core_engines/predictive_engine.py
+# DESCRIPCIÓN: Motor Estadístico y Cuantitativo de Fútbol
+# MODELOS: Distribución de Poisson Bivariada, Matriz de Marcador Exacto y Criterio de Kelly
+# ======================================================================================
 
-logger = logging.getLogger(__name__)
+import math
+import numpy as np
 
-class ByzantineConsensusEngine:
-    def __init__(self, tolerance_threshold=2):
-        # Se exige que al menos 2 de las 3 fuentes (nodos) validen el evento
-        self.threshold = tolerance_threshold
+class PredictiveSportsEngine:
+    @staticmethod
+    def _poisson_probability(k: int, lamb: float) -> float:
+        """Calcula la probabilidad puntual de Poisson P(X = k; lambda)."""
+        if lamb <= 0:
+            return 1.0 if k == 0 else 0.0
+        return (math.pow(lamb, k) * math.exp(-lamb)) / math.factorial(k)
 
-    def _normalize(self, text):
-        """Estandariza los nombres para evitar fallos por espacios, tildes o mayúsculas."""
-        if not text:
-            return ""
-        text = str(text).lower().strip()
-        # Elimina todo lo que no sea letra o número (ej. "Real Madrid CF" -> "realmadridcf")
-        return re.sub(r'[^a-z0-9]', '', text)
-
-    def _verify_node_match(self, node1, node2):
-        """Compara si dos fuentes distintas hablan exactamente del mismo partido."""
-        if not node1 or not node2:
-            return False
-        
-        local_match = self._normalize(node1.get('local')) == self._normalize(node2.get('local'))
-        visit_match = self._normalize(node1.get('visitante')) == self._normalize(node2.get('visitante'))
-        
-        return local_match and visit_match
-
-    def validate_fixture(self, source_official, source_agency, source_market):
+    @classmethod
+    def calculate_match_matrix(cls, lambda_home: float, lambda_away: float, max_goals: int = 6) -> dict:
         """
-        Ejecuta el contrato de verificación cruzada entre las 3 fuentes.
-        Retorna (True, bft_hash) si hay consenso, o (False, 'QUARANTINED') si el evento es anómalo.
+        Genera la matriz de probabilidades de goles y calcula los mercados principales:
+        1X2, Over/Under 1.5, 2.5, 3.5, Ambos Marcan (BTTS) y Marcadores Exactos.
         """
-        nodes = [source_official, source_agency, source_market]
-        votes = 0
-        
-        # Votación cruzada (Protocolo BFT)
-        if self._verify_node_match(nodes[0], nodes[1]): votes += 1 # Oficial vs Agencia
-        if self._verify_node_match(nodes[1], nodes[2]): votes += 1 # Agencia vs Mercado
-        if self._verify_node_match(nodes[0], nodes[2]): votes += 1 # Oficial vs Mercado
+        lh = max(0.2, float(lambda_home))
+        la = max(0.2, float(lambda_away))
 
-        if votes >= self.threshold:
-            # Consenso alcanzado: El partido es 100% real.
-            # Se genera la firma criptográfica (CLV) usando la fuente principal.
-            base_data = json.dumps({
-                "l": self._normalize(source_official.get('local')),
-                "v": self._normalize(source_official.get('visitante')),
-                "d": source_official.get('fecha_utc')
-            }, sort_keys=True)
-            
-            bft_hash = hashlib.sha256(base_data.encode('utf-8')).hexdigest()
-            return True, bft_hash
-        else:
-            logger.warning(f"Consenso fallido. Partido bloqueado y enviado a cuarentena.")
-            return False, "QUARANTINED"
+        matrix = np.zeros((max_goals + 1, max_goals + 1))
+        for i in range(max_goals + 1):
+            p_i = cls._poisson_probability(i, lh)
+            for j in range(max_goals + 1):
+                matrix[i, j] = p_i * cls._poisson_probability(j, la)
+
+        total = float(matrix.sum())
+        if total > 0:
+            matrix /= total
+
+        # Probabilidades 1X2
+        prob_home = float(np.sum(np.tril(matrix, -1)))
+        prob_draw = float(np.sum(np.diag(matrix)))
+        prob_away = float(np.sum(np.triu(matrix, 1)))
+
+        # Mercados de Total de Goles
+        prob_under_1_5 = float(sum(matrix[i, j] for i in range(max_goals + 1) for j in range(max_goals + 1) if i + j <= 1))
+        prob_under_2_5 = float(sum(matrix[i, j] for i in range(max_goals + 1) for j in range(max_goals + 1) if i + j <= 2))
+        prob_under_3_5 = float(sum(matrix[i, j] for i in range(max_goals + 1) for j in range(max_goals + 1) if i + j <= 3))
+
+        # Ambos Equipos Anotan (BTTS)
+        prob_btts = float(np.sum(matrix[1:, 1:]))
+
+        # Top 3 Marcadores Exactos más probables
+        exact_scores = []
+        for i in range(max_goals + 1):
+            for j in range(max_goals + 1):
+                exact_scores.append((f"{i}-{j}", round(float(matrix[i, j]) * 100, 1)))
+        exact_scores.sort(key=lambda x: x, reverse=True)
+
+        return {
+            "1X2": {
+                "1": round(prob_home * 100, 1),
+                "X": round(prob_draw * 100, 1),
+                "2": round(prob_away * 100, 1)
+            },
+            "goles": {
+                "over_1_5": round((1.0 - prob_under_1_5) * 100, 1),
+                "under_1_5": round(prob_under_1_5 * 100, 1),
+                "over_2_5": round((1.0 - prob_under_2_5) * 100, 1),
+                "under_2_5": round(prob_under_2_5 * 100, 1),
+                "over_3_5": round((1.0 - prob_under_3_5) * 100, 1),
+                "under_3_5": round(prob_under_3_5 * 100, 1)
+            },
+            "btts": {
+                "yes": round(prob_btts * 100, 1),
+                "no": round((1.0 - prob_btts) * 100, 1)
+            },
+            "cuotas_justas": {
+                "1": round(1.0 / prob_home, 2) if prob_home > 0 else None,
+                "X": round(1.0 / prob_draw, 2) if prob_draw > 0 else None,
+                "2": round(1.0 / prob_away, 2) if prob_away > 0 else None
+            },
+            "marcadores_probables": exact_scores[:3]
+        }
+
+    @staticmethod
+    def calculate_value_and_kelly(prob_percent: float, market_odds: float, bankroll: float = 1000.0) -> dict:
+        """Calcula el Valor Esperado (EV) y el dimensionamiento de apuesta con Kelly Fraccional (0.25)."""
+        if market_odds <= 1.0 or prob_percent <= 0:
+            return {"ev_percent": 0.0, "value_detected": False, "stake_percent": 0.0, "monto_sugerido": 0.0}
+
+        p = prob_percent / 100.0
+        implied_p = 1.0 / market_odds
+        edge = p - implied_p
+        ev = (p * market_odds) - 1.0
+
+        b = market_odds - 1.0
+        q = 1.0 - p
+        full_kelly = (b * p - q) / b if b > 0 else 0.0
+        fractional_kelly = max(0.0, full_kelly * 0.25)
+
+        has_value = ev > 0 and edge >= 0.02
+        stake_pct = min(2.5, round(fractional_kelly * 100, 2)) if has_value else 0.0
+
+        return {
+            "ev_percent": round(ev * 100, 2),
+            "edge_percent": round(edge * 100, 2),
+            "value_detected": has_value,
+            "stake_percent": stake_pct,
+            "monto_sugerido": round(bankroll * (stake_pct / 100.0), 2)
+        }
