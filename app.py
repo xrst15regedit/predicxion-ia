@@ -239,18 +239,29 @@ class SportsAnalyticsEngine:
         }
 
 # --------------------------------------------------------------------------------------
-# 5. WORKER ETL REAL: FOOTBALL-DATA.ORG
+# 5. WORKER ETL: TEMPORADA COMPLETA DE TODAS LAS LIGAS DISPONIBLES
 # --------------------------------------------------------------------------------------
 class FootballDataETL:
-    FREE_TIER_COMPETITIONS = ["PL", "PD", "SA", "BL1", "FL1", "DED", "PPL", "CL", "BSA"]
+    FREE_TIER_COMPETITIONS = [
+        {"code": "PL", "name": "Premier League"},
+        {"code": "PD", "name": "LaLiga EA Sports"},
+        {"code": "SA", "name": "Serie A"},
+        {"code": "BL1", "name": "Bundesliga"},
+        {"code": "FL1", "name": "Ligue 1"},
+        {"code": "CL", "name": "UEFA Champions League"},
+        {"code": "PPL", "name": "Primeira Liga"},
+        {"code": "DED", "name": "Eredivisie"},
+        {"code": "ELC", "name": "Championship"},
+        {"code": "BSA", "name": "Brasileirão Série A"}
+    ]
 
     def __init__(self):
         self.lock = threading.Lock()
         self.session = requests.Session()
-        retries = Retry(total=3, backoff_factor=1, status_forcelist=(429, 500, 502, 503, 504))
+        retries = Retry(total=3, backoff_factor=2, status_forcelist=(429, 500, 502, 503, 504))
         self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
-    def run_sync(self):
+    def run_sync_full_season(self, season_year=2026):
         if not self.lock.acquire(blocking=False):
             logger.warning("ETL ya se encuentra en ejecución activa.")
             return False
@@ -258,79 +269,85 @@ class FootballDataETL:
         try:
             api_key = os.getenv("FOOTBALL_API_KEY")
             if not api_key:
-                logger.error("FOOTBALL_API_KEY ausente. Configúrala en las variables de entorno.")
+                logger.error("FOOTBALL_API_KEY ausente.")
                 return False
-
-            now = datetime.now(timezone.utc)
-            date_from = now.strftime("%Y-%m-%d")
-            date_to = (now + timedelta(days=30)).strftime("%Y-%m-%d")
 
             headers = {"X-Auth-Token": api_key}
-            url = "https://api.football-data.org/v4/matches"
-            
-            logger.info("Sincronizando partidos desde Football-Data.org (%s a %s)...", date_from, date_to)
-            resp = self.session.get(
-                url,
-                headers=headers,
-                params={"dateFrom": date_from, "dateTo": date_to},
-                timeout=15
-            )
-
-            if resp.status_code == 429:
-                logger.warning("Rate limit alcanzado en Football-Data.org. Reintentar en 60 segundos.")
-                return False
-
-            resp.raise_for_status()
-            data = resp.json()
-            matches = data.get("matches", [])
-
-            saved_count = 0
+            total_guardados = 0
             batch = db.batch()
+            batch_count = 0
 
-            for m in matches:
-                comp_code = (m.get("competition") or {}).get("code")
-                # Filtrar solo ligas soportadas
-                if comp_code and comp_code not in self.FREE_TIER_COMPETITIONS:
-                    continue
+            logger.info("Iniciando descarga de toda la temporada %s para 10 competiciones...", season_year)
 
-                match_id = str(m.get("id"))
-                home_team = (m.get("homeTeam") or {}).get("name")
-                away_team = (m.get("awayTeam") or {}).get("name")
+            for comp in self.FREE_TIER_COMPETITIONS:
+                code = comp["code"]
+                url = f"https://api.football-data.org/v4/competitions/{code}/matches?season={season_year}"
 
-                if not home_team or not away_team:
-                    continue
+                try:
+                    logger.info("Descargando temporada completa de %s (%s)...", comp["name"], code)
+                    resp = self.session.get(url, headers=headers, timeout=20)
 
-                doc_data = {
-                    "id_partido": match_id,
-                    "liga": (m.get("competition") or {}).get("name", "Liga Internacional"),
-                    "codigo_liga": comp_code,
-                    "local": home_team,
-                    "visitante": away_team,
-                    "logo_local": (m.get("homeTeam") or {}).get("crest"),
-                    "logo_visitante": (m.get("awayTeam") or {}).get("crest"),
-                    "fecha_utc": m.get("utcDate"),
-                    "estado": m.get("status", "SCHEDULED"),
-                    "marcador": m.get("score") or {},
-                    "actualizado_en": firestore.SERVER_TIMESTAMP,
-                    "source_provider": "football-data.org"
-                }
+                    if resp.status_code == 429:
+                        logger.warning("Límite de peticiones alcanzado. Pausando 60s...")
+                        time.sleep(60)
+                        resp = self.session.get(url, headers=headers, timeout=20)
 
-                doc_ref = db.collection("partidos_verificados").document(match_id)
-                batch.set(doc_ref, doc_data, merge=True)
-                saved_count += 1
+                    resp.raise_for_status()
+                    matches = resp.json().get("matches", [])
 
-                if saved_count % 400 == 0:
-                    batch.commit()
-                    batch = db.batch()
+                    for m in matches:
+                        match_id = str(m.get("id"))
+                        home_team = (m.get("homeTeam") or {}).get("name")
+                        away_team = (m.get("awayTeam") or {}).get("name")
 
-            if saved_count > 0:
+                        if not home_team or not away_team:
+                            continue
+
+                        doc_data = {
+                            "id_partido": match_id,
+                            "temporada": str(season_year),
+                            "jornada": m.get("matchday"),
+                            "etapa": m.get("stage"),
+                            "liga": (m.get("competition") or {}).get("name", comp["name"]),
+                            "codigo_liga": code,
+                            "local": home_team,
+                            "visitante": away_team,
+                            "logo_local": (m.get("homeTeam") or {}).get("crest"),
+                            "logo_visitante": (m.get("awayTeam") or {}).get("crest"),
+                            "fecha_utc": m.get("utcDate"),
+                            "estado": m.get("status", "SCHEDULED"),
+                            "marcador": m.get("score") or {},
+                            "actualizado_en": firestore.SERVER_TIMESTAMP,
+                            "source_provider": "football-data.org"
+                        }
+
+                        doc_ref = db.collection("partidos_verificados").document(match_id)
+                        batch.set(doc_ref, doc_data, merge=True)
+                        total_guardados += 1
+                        batch_count += 1
+
+                        if batch_count >= 400:
+                            batch.commit()
+                            batch = db.batch()
+                            batch_count = 0
+
+                    logger.info("Guardados %d partidos de %s.", len(matches), comp["name"])
+                    
+                    # Pausa de 6.5s para no exceder las 10 peticiones por minuto
+                    time.sleep(6.5)
+
+                except Exception as comp_err:
+                    logger.error("Error al descargar liga %s: %s", code, comp_err)
+                    time.sleep(6.5)
+
+            if batch_count > 0:
                 batch.commit()
 
-            logger.info("Sincronización completada: %d partidos oficiales guardados.", saved_count)
+            logger.info("Temporada completa finalizada: %d partidos almacenados en Firestore.", total_guardados)
             return True
 
         except Exception as exc:
-            logger.error("Error en sincronización ETL: %s", exc)
+            logger.error("Fallo general en la descarga de temporada: %s", exc)
             return False
         finally:
             self.lock.release()
@@ -521,21 +538,21 @@ def create_app() -> Flask:
             logger.error("Error en pago manual: %s", exc)
             return jsonify({"success": False, "error": "Error al registrar el pago."}), 500
 
-        # Endpoint para disparar el ETL (desde navegador con ?secret= o con token)
+        # Disparador para sincronizar la temporada entera
     @app.route("/api/v1/admin/etl/trigger", methods=["GET", "POST"])
     def trigger_etl():
         secret = request.args.get("secret")
+        season = int(request.args.get("season", 2026))
         admin_key = os.getenv("ADMIN_SECRET", "predicxion2026")
-        
-        # Acceso directo por URL con clave secreta
+
         if secret and secret == admin_key:
-            threading.Thread(target=etl_service.run_sync).start()
+            threading.Thread(target=etl_service.run_sync_full_season, args=(season,)).start()
             return jsonify({
-                "success": True, 
-                "message": "Sincronización iniciada en segundo plano con éxito."
+                "success": True,
+                "message": f"Sincronización de la temporada entera {season} iniciada en segundo plano para las 10 ligas."
             }), 200
 
-        return jsonify({"error": "No autorizado. Agrega ?secret=predicxion2026 a la URL"}), 403
+        return jsonify({"error": "No autorizado. Pasa ?secret=predicxion2026 en la URL"}), 403
 
     # Health Check
     @app.route("/api/v1/health", methods=["GET"])
