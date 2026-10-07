@@ -145,13 +145,9 @@
 
             <div class="p-3 border-b border-cardBorder/60 bg-cardDark/40 space-y-2">
                 <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
-                <!-- Selector rápido de Mes (Octubre 2026 a Enero 2027) -->
-                <div class="flex items-center gap-1 overflow-x-auto no-scrollbar pt-1" id="sidebar-meses-bar">
-                    <button onclick="filtrarPorMes('todos')" id="btn-mes-todos" class="btn-filtro-mes px-2 py-1 rounded-lg text-[9px] font-black border border-accentGreen bg-emerald-950/80 text-accentGreen whitespace-nowrap transition">Todos (4 Meses)</button>
-                    <button onclick="filtrarPorMes('2026-10')" id="btn-mes-2026-10" class="btn-filtro-mes px-2 py-1 rounded-lg text-[9px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white whitespace-nowrap transition">Oct 26</button>
-                    <button onclick="filtrarPorMes('2026-11')" id="btn-mes-2026-11" class="btn-filtro-mes px-2 py-1 rounded-lg text-[9px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white whitespace-nowrap transition">Nov 26</button>
-                    <button onclick="filtrarPorMes('2026-12')" id="btn-mes-2026-12" class="btn-filtro-mes px-2 py-1 rounded-lg text-[9px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white whitespace-nowrap transition">Dic 26</button>
-                    <button onclick="filtrarPorMes('2027-01')" id="btn-mes-2027-01" class="btn-filtro-mes px-2 py-1 rounded-lg text-[9px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white whitespace-nowrap transition">Ene 27</button>
+                <div class="text-[10px] font-mono text-slate-300 bg-baseDark/90 px-3 py-1.5 rounded-xl border border-cardBorder/60 flex items-center justify-between">
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span> <strong class="text-white">Fase Activa:</strong></span>
+                    <span class="text-accentGreen font-bold font-mono">07 Oct – 30 Nov 2026</span>
                 </div>
             </div>
 
@@ -379,18 +375,10 @@
                             <span class="text-xs font-black uppercase tracking-wider text-slate-200">Pronósticos Destacados del Día</span>
                             <span id="destacados-count" class="text-xs text-slate-500 font-bold font-mono">(0)</span>
                         </div>
-                        <!-- Selector de fecha para ver destacados de un solo día -->
-                        <div class="flex items-center gap-1.5 flex-wrap" id="carrusel-fechas-bar">
-                            <button onclick="cambiarFechaDestacados('2026-10-06')" id="btn-fecha-2026-10-06" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-black border border-accentGreen bg-emerald-950/60 text-accentGreen transition">06 Oct (Hoy - UNL)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-07')" id="btn-fecha-2026-10-07" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">07 Oct (Mañana - Brasileirão)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-08')" id="btn-fecha-2026-10-08" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">08 Oct (Brasileirão)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-09')" id="btn-fecha-2026-10-09" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">09 Oct (Viernes Ligas)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-10')" id="btn-fecha-2026-10-10" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">10 Oct (Sábado Ligas)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-11')" id="btn-fecha-2026-10-11" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">11 Oct (Domingo Ligas)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-18')" id="btn-fecha-2026-10-18" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">18 Oct (Jornada 10)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-21')" id="btn-fecha-2026-10-21" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">21 Oct (Champions)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-26')" id="btn-fecha-2026-10-26" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">26 Oct (El Clásico)</button>
-                            <button onclick="cambiarFechaDestacados('2026-10-31')" id="btn-fecha-2026-10-31" class="btn-fecha-carrusel px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">31 Oct (Cierre de Mes)</button></div>
+                        <div class="flex items-center gap-2 text-[10px] font-mono text-accentGreen bg-emerald-950/80 border border-emerald-800/70 px-3 py-1.5 rounded-xl shadow-md">
+                            <span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span>
+                            <span id="destacados-fecha-label" class="font-bold">Partidos de Hoy • 07 Octubre 2026</span>
+                        </div>
                     </div>
                     <div id="carousel-cards" class="flex gap-3 overflow-x-auto no-scrollbar py-1 w-full scroll-smooth">
                         <div class="text-xs text-slate-500 py-3">Cargando pronósticos calculados...</div>
@@ -1697,11 +1685,7 @@
 
             for (const [liga, partidos] of Object.entries(ligas)) {
                 const lista = Array.isArray(partidos) ? partidos : [];
-                const filtrados = lista.filter(p => {
-                    const matchQ = !query || p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query);
-                    const matchM = (mesFiltroActivo === 'todos') || (p.fecha && p.fecha.startsWith(mesFiltroActivo));
-                    return matchQ && matchM;
-                });
+                const filtrados = query ? lista.filter(p => p.partido.toLowerCase().includes(query) || liga.toLowerCase().includes(query)) : lista;
                 if (filtrados.length === 0) continue;
                 total += filtrados.length;
                 const abierta = ligasAbiertas[liga] !== false;
@@ -2437,27 +2421,47 @@
                 cont.innerHTML = lista.map(p => `
                     <div class="bg-baseDark border border-cardBorder rounded-2xl p-4 space-y-3 hover:border-slate-600 transition shadow-lg flex flex-col justify-between">
                         <div>
-                            <!-- Cabecera de Jugador con Avatar y Equipo -->
+                            <!-- Cabecera de Jugador: Insignia Técnica sin imagen -->
                             <div class="flex items-center gap-3 border-b border-cardBorder/40 pb-2.5">
-                                <div class="relative flex-shrink-0">
-                                    <img src="${p.foto_url}" alt="${p.nombre}" class="w-12 h-12 rounded-xl object-cover bg-cardDark border border-cardBorder p-0.5 shadow-md" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(p.nombre)}&background=064e3b&color=34d399&bold=true';">
-                                    <span class="absolute -bottom-1 -right-1 bg-emerald-950 border border-emerald-700/80 text-lime-400 text-[8px] font-black px-1 rounded font-mono">#${p.dorsal || '10'}</span>
+                                <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-950 to-cardDark border border-emerald-700/50 flex flex-col items-center justify-center text-accentGreen flex-shrink-0 shadow-md">
+                                    <span class="text-[9px] font-black uppercase font-mono tracking-tighter text-slate-300">${(p.posicion || 'DEL').slice(0,3).toUpperCase()}</span>
+                                    <span class="text-xs font-black text-lime-400 font-mono">#${p.dorsal || '10'}</span>
                                 </div>
-                                <div class="truncate">
+                                <div class="truncate flex-1">
                                     <h4 class="text-sm font-black text-white m-0 truncate">${p.nombre}</h4>
                                     <div class="text-[10px] text-slate-400 font-bold truncate flex items-center gap-1.5 mt-0.5">
-                                        <span class="text-accentGreen">${p.equipo}</span> • <span>${p.posicion}</span>
+                                        <span class="text-accentGreen font-bold">${p.equipo}</span> • <span>${p.posicion}</span>
                                     </div>
                                     <span class="text-[9px] text-slate-500 font-mono block">${p.liga}</span>
                                 </div>
                             </div>
 
-                            <!-- Métricas de Temporada -->
-                            <div class="grid grid-cols-4 gap-1.5 text-center my-3 bg-cardDark/60 p-2 rounded-xl border border-cardBorder/30">
-                                <div><span class="text-[9px] text-slate-400 block">Goles</span><span class="text-xs font-black text-lime-400">${p.goles}</span></div>
-                                <div><span class="text-[9px] text-slate-400 block">Asist.</span><span class="text-xs font-black text-cyan-400">${p.asistencias}</span></div>
-                                <div><span class="text-[9px] text-slate-400 block">Tiros P.</span><span class="text-xs font-black text-amber-400">${p.tiros_puerta_prom}</span></div>
-                                <div><span class="text-[9px] text-slate-400 block">xG Prom.</span><span class="text-xs font-black text-emerald-400">${p.xg_prom}</span></div>
+                            <!-- Ficha Biométrica y Perfil Técnico -->
+                            <div class="grid grid-cols-4 gap-1 text-center my-2.5 bg-cardDark/80 p-2 rounded-xl border border-cardBorder/40 text-[10px]">
+                                <div class="border-r border-cardBorder/30">
+                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Edad</span>
+                                    <strong class="text-white font-mono text-[11px]">${p.edad || 25} años</strong>
+                                </div>
+                                <div class="border-r border-cardBorder/30">
+                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Altura</span>
+                                    <strong class="text-white font-mono text-[11px]">${p.altura || '1.80 m'}</strong>
+                                </div>
+                                <div class="border-r border-cardBorder/30">
+                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Peso</span>
+                                    <strong class="text-white font-mono text-[11px]">${p.peso || '75 kg'}</strong>
+                                </div>
+                                <div>
+                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Pierna</span>
+                                    <strong class="text-lime-400 font-mono text-[11px]">${p.pierna_buena || 'Diestro'}</strong>
+                                </div>
+                            </div>
+
+                            <!-- Métricas de Rendimiento -->
+                            <div class="grid grid-cols-4 gap-1.5 text-center mb-3 bg-baseDark/90 p-2 rounded-xl border border-cardBorder/30">
+                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">Goles</span><span class="text-xs font-black text-lime-400 font-mono">${p.goles}</span></div>
+                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">Asist.</span><span class="text-xs font-black text-cyan-400 font-mono">${p.asistencias}</span></div>
+                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">Tiros P.</span><span class="text-xs font-black text-amber-400 font-mono">${p.tiros_puerta_prom}</span></div>
+                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">xG Prom.</span><span class="text-xs font-black text-emerald-400 font-mono">${p.xg_prom}</span></div>
                             </div>
 
                             <!-- Mercados Prop Cuantitativos -->
@@ -2477,9 +2481,9 @@
                                 `).join('')}
                             </div>
                         </div>
-                        <div class="pt-2 border-t border-cardBorder/30 text-[9px] text-slate-500 flex justify-between font-mono">
-                            <span>Próx: vs ${p.proximo_rival}</span>
-                            <span class="text-emerald-400 font-bold">RADAR ACTIVO ⚡</span>
+                        <div class="pt-2 border-t border-cardBorder/30 text-[10px] text-slate-400 flex justify-between font-mono mt-3">
+                            <span>Próximo Rival: <strong class="text-white font-bold">vs ${p.proximo_rival}</strong></span>
+                            <span class="text-accentGreen font-bold flex items-center gap-1"><i class="fa-solid fa-bolt text-[9px]"></i> RADAR ACTIVO</span>
                         </div>
                     </div>
                 `).join('');
