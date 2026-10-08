@@ -284,25 +284,17 @@
                             <h2 class="text-3xl sm:text-4xl font-black text-white m-0 tracking-tight flex items-center gap-1.5">
                                 Top <span class="text-lime-400">3</span>
                             </h2>
-                            <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">The three daily match predictions with the strongest statistical signals, selected by the PredicXion IA engine.</p>
+                            <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">Las tres predicciones con mayor ventaja matemática del día, seleccionadas automáticamente por el motor de PredicXion IA.</p>
                         </div>
                         <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-950 to-baseDark border border-lime-500/40 flex items-center justify-center text-lime-400 text-xl font-black shadow-lg shadow-lime-950/40">
                             <i class="fa-solid fa-trophy"></i>
                         </div>
                     </div>
 
-                    <!-- Selector de fecha interactivo < 06.10.2026 > -->
-                    <div class="flex items-center justify-between bg-baseDark/90 border border-cardBorder rounded-2xl px-4 py-2.5">
-                        <button onclick="navegarFechaTop3(-1)" class="w-8 h-8 rounded-xl bg-cardDark border border-cardBorder text-slate-400 hover:text-white flex items-center justify-center transition">
-                            <i class="fa-solid fa-chevron-left text-xs"></i>
-                        </button>
-                        <div class="flex items-center gap-2 font-mono text-xs font-black text-white">
-                            <i class="fa-regular fa-calendar-days text-accentGreen"></i>
-                            <span id="top3-fecha-display">06.10.2026</span>
-                        </div>
-                        <button onclick="navegarFechaTop3(1)" class="w-8 h-8 rounded-xl bg-cardDark border border-cardBorder text-slate-400 hover:text-white flex items-center justify-center transition">
-                            <i class="fa-solid fa-chevron-right text-xs"></i>
-                        </button>
+                    <!-- Indicador de fecha oficial del Top 3 (Sin botones de cambio manual) -->
+                    <div class="flex items-center justify-center bg-baseDark/90 border border-emerald-800/40 rounded-2xl px-4 py-2.5 font-mono text-xs font-black text-white gap-2 shadow-inner">
+                        <i class="fa-regular fa-calendar-days text-lime-400"></i>
+                        <span>PRONÓSTICOS DE HOY</span> • <span id="top3-fecha-display" class="text-lime-400">07.10.2026</span>
                     </div>
 
                     <!-- Temporizador Countdown estilo Oddster -->
@@ -312,24 +304,24 @@
                                 <i class="fa-regular fa-clock"></i>
                             </div>
                             <div>
-                                <div class="text-xs font-black text-white">Next predictions in</div>
-                                <div class="text-[10px] text-slate-400 font-mono">New Top 3 at 00:00 • America/Lima</div>
+                                <div class="text-xs font-black text-white">Próxima actualización en</div>
+                                <div class="text-[10px] text-slate-400 font-mono">Nuevo Top 3 a las 00:00 • Rotación 24/7</div>
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 font-mono">
                             <div class="text-center bg-black/80 border border-emerald-900/80 rounded-xl px-2.5 py-1.5 min-w-[50px]">
                                 <div id="countdown-hours" class="text-base font-black text-lime-400">00</div>
-                                <div class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Hours</div>
+                                <div class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Horas</div>
                             </div>
                             <span class="text-lime-400 font-bold text-sm">:</span>
                             <div class="text-center bg-black/80 border border-emerald-900/80 rounded-xl px-2.5 py-1.5 min-w-[50px]">
                                 <div id="countdown-minutes" class="text-base font-black text-lime-400">43</div>
-                                <div class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Minutes</div>
+                                <div class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Minutos</div>
                             </div>
                             <span class="text-lime-400 font-bold text-sm">:</span>
                             <div class="text-center bg-black/80 border border-emerald-900/80 rounded-xl px-2.5 py-1.5 min-w-[50px]">
                                 <div id="countdown-seconds" class="text-base font-black text-lime-400">43</div>
-                                <div class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Seconds</div>
+                                <div class="text-[8px] text-slate-500 font-bold uppercase tracking-wider">Segundos</div>
                             </div>
                         </div>
                     </div>
@@ -1533,21 +1525,23 @@
 
         async function cargarAuditoria() {
             const cont = document.getElementById('contenedor-auditoria');
+            const badge = document.getElementById('auditoria-roi-badge');
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/auditoria`);
                 const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Fecha</th><th>Partido</th><th>Selección</th><th>Cuota</th><th>Score</th><th>Estado</th></tr></thead><tbody>';
-                const lista = (data.historial && data.historial.length > 0) ? data.historial : [
-                    {"fecha": "2026-10-03", "partido": "Arsenal vs PSG", "seleccion": "Doble Oportunidad 1X", "cuota": "1.38", "resultado": "2 - 0", "estado": "GANADA"},
-                    {"fecha": "2026-10-03", "partido": "Bayer Leverkusen vs AC Milan", "seleccion": "Más de 2.5 Tarjetas", "cuota": "1.52", "resultado": "1 - 0", "estado": "GANADA"},
-                    {"fecha": "2026-10-02", "partido": "Barcelona vs Young Boys", "seleccion": "Más de 7.5 Córners", "cuota": "1.44", "resultado": "5 - 0", "estado": "GANADA"},
-                    {"fecha": "2026-10-01", "partido": "Borussia Dortmund vs Celtic", "seleccion": "Más de 1.5 Goles", "cuota": "1.28", "resultado": "7 - 1", "estado": "GANADA"}
-                ];
+                if (data.metricas && badge) {
+                    badge.innerText = `${data.metricas.tasa_acierto_global} Acierto (${data.metricas.ganadas}G - ${data.metricas.perdidas}P)`;
+                }
+                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Fecha</th><th>Partido</th><th>Selección / Mercado</th><th>Cuota</th><th>Resultado / Datos</th><th>Estado</th></tr></thead><tbody>';
+                const lista = (data.historial && data.historial.length > 0) ? data.historial : [];
                 lista.forEach(h => {
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 text-slate-400 font-mono">${h.fecha}</td><td class="font-bold text-white">${h.partido}</td><td>${h.seleccion}</td><td class="font-mono">${h.cuota}</td><td class="font-mono text-white">${h.resultado}</td><td><span class="bg-emerald-950 text-accentGreen font-bold px-2 py-0.5 rounded font-mono">${h.estado}</span></td></tr>`;
+                    const badgeClass = (h.estado === 'GANADA')
+                        ? 'bg-emerald-950 text-accentGreen border border-emerald-800'
+                        : 'bg-rose-950 text-rose-400 border border-rose-800';
+                    html += `<tr class="border-b border-cardBorder/40 hover:bg-white/[0.02] transition"><td class="py-2.5 text-slate-400 font-mono">${h.fecha}</td><td class="font-bold text-white">${h.partido}</td><td class="text-slate-200">${h.seleccion}</td><td class="font-mono text-amber-300 font-bold">@${h.cuota}</td><td class="font-mono text-white">${h.resultado}</td><td><span class="${badgeClass} font-bold px-2 py-0.5 rounded text-[10px] font-mono tracking-wide">${h.estado}</span></td></tr>`;
                 });
                 cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión con auditoría.</p>'; }
+            } catch (e) { cont.innerHTML = '<p class="text-red-400 py-3">Error de conexión con auditoría.</p>'; }
         }
 
         async function cargarSmartMoney() {
@@ -1709,7 +1703,7 @@
                                     <div class="text-slate-400 font-medium truncate text-[11px]">${p.visitante}</div>
                                 </div>
                                 <div class="text-right">
-                                    <div class="text-[9px] text-accentGreen font-bold font-mono">${p.fecha.split(' ')[1] || ''}</div>
+                                    <div class="text-[9px] text-accentGreen font-bold font-mono">${p.fecha ? p.fecha.slice(5) : ''}</div>
                                     <span class="text-[8px] font-mono text-cyan-400 border border-cyan-900/40 rounded px-1">${prob1X2["1"] || 0}% / ${prob1X2["2"] || 0}%</span>
                                 </div>
                             </div>
@@ -2148,8 +2142,8 @@
         // =========================================================================
         // CONTROLADOR TOP 3 PRONÓSTICOS DEL DÍA (ESTILO BOTANALIST / ODDSTER)
         // =========================================================================
-        let fechaTop3Activa = "2026-10-06";
-        let FECHAS_DISPONIBLES_SISTEMA = ["2026-10-02", "2026-10-03", "2026-10-04", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-10", "2026-10-14", "2026-10-18", "2026-10-21", "2026-10-22", "2026-10-25", "2026-11-01", "2026-11-04", "2026-11-08", "2026-11-14", "2026-11-17", "2026-11-22", "2026-11-25", "2026-11-29", "2026-12-05", "2026-12-06", "2026-12-09", "2026-12-12", "2026-12-13", "2026-12-19", "2026-12-20", "2026-12-26", "2026-12-30", "2027-01-02", "2027-01-03", "2027-01-10", "2027-01-16", "2027-01-17", "2027-01-20", "2027-01-23", "2027-01-24", "2027-01-30", "2027-01-31"];
+        let fechaTop3Activa = "";
+        let _ultimaFechaRecargada = "";
 
         function iniciarCountdownTop3() {
             function actualizarTimer() {
@@ -2164,13 +2158,19 @@
                     medianocheLima.setHours(24, 0, 0, 0);
 
                     const diffMs = medianocheLima - fechaLima;
-                    if (diffMs <= 0) {
+                    if (diffMs <= 1000) {
                         const hEl = document.getElementById('countdown-hours');
                         const mEl = document.getElementById('countdown-minutes');
                         const sEl = document.getElementById('countdown-seconds');
                         if (hEl) hEl.innerText = "00";
                         if (mEl) mEl.innerText = "00";
                         if (sEl) sEl.innerText = "00";
+                        // A medianoche recargar automáticamente al nuevo día
+                        const hoyIso = fechaLima.toISOString().slice(0, 10);
+                        if (_ultimaFechaRecargada !== hoyIso) {
+                            _ultimaFechaRecargada = hoyIso;
+                            cargarTop3();
+                        }
                         return;
                     }
 
@@ -2194,28 +2194,31 @@
         }
 
         function navegarFechaTop3(delta) {
-            const idx = FECHAS_DISPONIBLES_SISTEMA.indexOf(fechaTop3Activa);
-            let nuevoIdx = idx + delta;
-            if (nuevoIdx < 0) nuevoIdx = 0;
-            if (nuevoIdx >= FECHAS_DISPONIBLES_SISTEMA.length) nuevoIdx = FECHAS_DISPONIBLES_SISTEMA.length - 1;
-            cargarTop3(FECHAS_DISPONIBLES_SISTEMA[nuevoIdx]);
+            // Deshabilitado: el Top 3 rota 24/7 de forma 100% automática a medianoche
+            cargarTop3();
         }
 
         async function cargarTop3(fecha = null) {
             if (fecha) fechaTop3Activa = fecha;
             const cont = document.getElementById('top3-cards-container');
             const displayFecha = document.getElementById('top3-fecha-display');
-            if (displayFecha) {
-                const partes = fechaTop3Activa.split('-');
-                displayFecha.innerText = `${partes[2]}.${partes[1]}.${partes[0]}`;
-            }
 
             if (!cont) return;
             cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando los Top 3 del día con mayor valor cuantitativo...</div>`;
 
             try {
-                const res = await fetch(`/api/v1/top3/daily?fecha=${fechaTop3Activa}`);
+                const url = fechaTop3Activa ? `/api/v1/top3/daily?fecha=${fechaTop3Activa}` : `/api/v1/top3/daily`;
+                const res = await fetch(url);
                 const data = await res.json();
+                if (data.fecha) {
+                    fechaTop3Activa = data.fecha;
+                    if (displayFecha) {
+                        const partes = data.fecha.split('-');
+                        if (partes.length === 3) {
+                            displayFecha.innerText = `${partes[2]}.${partes[1]}.${partes[0]}`;
+                        }
+                    }
+                }
                 if (data.fechas_disponibles && Array.isArray(data.fechas_disponibles) && data.fechas_disponibles.length > 0) {
                     FECHAS_DISPONIBLES_SISTEMA = data.fechas_disponibles;
                 }
