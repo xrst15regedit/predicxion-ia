@@ -11458,25 +11458,34 @@ def build_all_unl_fixtures():
 NATIONS_LEAGUE_FIXTURES = build_all_unl_fixtures()
 
 def build_multimonth_calendar():
-    """Genera el calendario activo oficial desde el 07 de Octubre de 2026 hasta el 30 de Noviembre de 2026."""
-    fixtures = []
+    """Genera el calendario activo oficial 100% real (07 de Octubre al 30 de Noviembre de 2026)
+    incorporando exactamente cada fecha y encuentro oficial provisto para las 9 ligas canónicas."""
+    calendar = []
+    count = 0
 
-    def add_f(mid, loc, vis, dt, jor, liga, cod):
-        fixtures.append({
-            "id_partido": mid,
-            "local": loc,
-            "visitante": vis,
+    def add(mid, loc, vis, dt, jor, liga, cod):
+        nonlocal count
+        count += 1
+        calendar.append({
+            "id_partido": mid or f"{cod.lower()}_{count:04d}",
+            "local": loc.strip(),
+            "visitante": vis.strip(),
             "fecha_utc": dt,
             "jornada": str(jor),
-            "liga": normalizar_nombre_liga(liga),
-            "codigo_liga": cod,
+            "liga": liga.strip(),
+            "codigo_liga": cod.strip(),
             "estado": "SCHEDULED",
             "temporada": "2026/2027"
         })
 
-    # PARTIDOS DE HOY - 07 DE OCTUBRE 2026 (BRASILEIRÃO J29)
+    # =========================================================================
+    # 1. CAMPEONATO BRASILEIRO SÉRIE A (BETANO)
+    # =========================================================================
     L_BSA = "Campeonato Brasileiro Série A"
-    today_matches = [
+    C_BSA = "BSA"
+
+    # Partidos de Ayer 07/10 (para auditoría e histórico)
+    bsa_j29_dia1 = [
         ("Red Bull Bragantino", "Mirassol", "2026-10-07T19:00:00Z", 29),
         ("Internacional", "Corinthians", "2026-10-07T19:00:00Z", 29),
         ("Clube do Remo", "Grêmio", "2026-10-07T20:00:00Z", 29),
@@ -11484,266 +11493,873 @@ def build_multimonth_calendar():
         ("Botafogo", "Vasco da Gama", "2026-10-07T21:30:00Z", 29),
         ("Cruzeiro", "São Paulo", "2026-10-07T21:30:00Z", 29),
     ]
-    for loc, vis, dt, jor in today_matches:
-        add_f(f"bsa-2026-j29-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, "BSA")
+    for loc, vis, dt, jor in bsa_j29_dia1:
+        add(f"bsa-2026-j29-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
 
-    # BUNDESLIGA - JORNADA 5 OFICIAL (09 AL 11 DE OCTUBRE 2026)
+    # JORNADA 29 (08/10 - HOY)
+    bsa_j29 = [
+        ("Santos", "Flamengo", "2026-10-08T19:00:00Z", 29),
+        ("Atlético PR", "Atlético Mineiro", "2026-10-08T20:00:00Z", 29),
+        ("Fluminense", "Coritiba", "2026-10-08T20:30:00Z", 29),
+        ("Palmeiras", "Bahia", "2026-10-08T21:30:00Z", 29),
+    ]
+    for loc, vis, dt, jor in bsa_j29:
+        add(f"bsa-2026-j29-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 30 (10/10 hasta 12/10)
+    bsa_j30 = [
+        ("Vasco da Gama", "Clube do Remo", "2026-10-10T19:00:00Z", 30),
+        ("São Paulo", "Vitória", "2026-10-10T20:00:00Z", 30),
+        ("Atlético Mineiro", "Santos", "2026-10-10T21:30:00Z", 30),
+        ("Flamengo", "Fluminense", "2026-10-11T19:00:00Z", 30),
+        ("Palmeiras", "Corinthians", "2026-10-11T20:00:00Z", 30),
+        ("Grêmio", "Internacional", "2026-10-11T21:30:00Z", 30),
+        ("Bahia", "Mirassol", "2026-10-11T22:00:00Z", 30),
+        ("Coritiba", "Botafogo", "2026-10-12T19:00:00Z", 30),
+        ("Chapecoense", "Atlético PR", "2026-10-12T20:00:00Z", 30),
+        ("Red Bull Bragantino", "Cruzeiro", "2026-10-12T21:30:00Z", 30),
+    ]
+    for loc, vis, dt, jor in bsa_j30:
+        add(f"bsa-2026-j30-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 31 (16/10 hasta 19/10)
+    bsa_j31 = [
+        ("Mirassol", "Internacional", "2026-10-16T19:00:00Z", 31),
+        ("Botafogo", "Chapecoense", "2026-10-16T21:30:00Z", 31),
+        ("Atlético Mineiro", "Coritiba", "2026-10-17T19:00:00Z", 31),
+        ("Atlético PR", "Palmeiras", "2026-10-17T20:00:00Z", 31),
+        ("São Paulo", "Vasco da Gama", "2026-10-17T21:30:00Z", 31),
+        ("Fluminense", "Santos", "2026-10-18T19:00:00Z", 31),
+        ("Grêmio", "Cruzeiro", "2026-10-18T20:00:00Z", 31),
+        ("Bahia", "Flamengo", "2026-10-18T21:30:00Z", 31),
+        ("Clube do Remo", "Red Bull Bragantino", "2026-10-19T19:00:00Z", 31),
+        ("Corinthians", "Vitória", "2026-10-19T21:30:00Z", 31),
+    ]
+    for loc, vis, dt, jor in bsa_j31:
+        add(f"bsa-2026-j31-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 32 (23/10 hasta 26/10)
+    bsa_j32 = [
+        ("Cruzeiro", "Clube do Remo", "2026-10-23T19:00:00Z", 32),
+        ("Mirassol", "São Paulo", "2026-10-23T21:30:00Z", 32),
+        ("Internacional", "Botafogo", "2026-10-24T19:00:00Z", 32),
+        ("Vitória", "Atlético PR", "2026-10-24T20:00:00Z", 32),
+        ("Vasco da Gama", "Corinthians", "2026-10-24T21:30:00Z", 32),
+        ("Palmeiras", "Red Bull Bragantino", "2026-10-25T19:00:00Z", 32),
+        ("Chapecoense", "Fluminense", "2026-10-25T20:00:00Z", 32),
+        ("Santos", "Bahia", "2026-10-25T21:30:00Z", 32),
+        ("Coritiba", "Grêmio", "2026-10-26T19:00:00Z", 32),
+        ("Flamengo", "Atlético Mineiro", "2026-10-26T21:30:00Z", 32),
+    ]
+    for loc, vis, dt, jor in bsa_j32:
+        add(f"bsa-2026-j32-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 33 (28/10 hasta 30/10)
+    bsa_j33 = [
+        ("Fluminense", "Internacional", "2026-10-28T19:00:00Z", 33),
+        ("Santos", "Palmeiras", "2026-10-28T20:00:00Z", 33),
+        ("Red Bull Bragantino", "Chapecoense", "2026-10-28T21:30:00Z", 33),
+        ("Bahia", "São Paulo", "2026-10-29T19:00:00Z", 33),
+        ("Clube do Remo", "Botafogo", "2026-10-29T20:00:00Z", 33),
+        ("Atlético Mineiro", "Cruzeiro", "2026-10-29T21:30:00Z", 33),
+        ("Coritiba", "Vitória", "2026-10-30T19:00:00Z", 33),
+        ("Vasco da Gama", "Flamengo", "2026-10-30T20:00:00Z", 33),
+        ("Grêmio", "Atlético PR", "2026-10-30T21:30:00Z", 33),
+        ("Corinthians", "Mirassol", "2026-10-30T22:00:00Z", 33),
+    ]
+    for loc, vis, dt, jor in bsa_j33:
+        add(f"bsa-2026-j33-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 34 (02/11 hasta 06/11)
+    bsa_j34 = [
+        ("Red Bull Bragantino", "Santos", "2026-11-02T19:00:00Z", 34),
+        ("Chapecoense", "Mirassol", "2026-11-02T21:30:00Z", 34),
+        ("Internacional", "Coritiba", "2026-11-03T19:00:00Z", 34),
+        ("Flamengo", "Grêmio", "2026-11-03T21:30:00Z", 34),
+        ("Atlético PR", "Vasco da Gama", "2026-11-04T19:00:00Z", 34),
+        ("Botafogo", "Atlético Mineiro", "2026-11-04T21:30:00Z", 34),
+        ("São Paulo", "Corinthians", "2026-11-05T19:00:00Z", 34),
+        ("Palmeiras", "Clube do Remo", "2026-11-05T21:30:00Z", 34),
+        ("Cruzeiro", "Bahia", "2026-11-06T19:00:00Z", 34),
+        ("Vitória", "Fluminense", "2026-11-06T21:30:00Z", 34),
+    ]
+    for loc, vis, dt, jor in bsa_j34:
+        add(f"bsa-2026-j34-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 35 (18/11)
+    bsa_j35 = [
+        ("Flamengo", "Atlético PR", "2026-11-18T18:00:00Z", 35),
+        ("Vasco da Gama", "Internacional", "2026-11-18T18:00:00Z", 35),
+        ("São Paulo", "Fluminense", "2026-11-18T19:00:00Z", 35),
+        ("Corinthians", "Botafogo", "2026-11-18T19:00:00Z", 35),
+        ("Mirassol", "Atlético Mineiro", "2026-11-18T20:00:00Z", 35),
+        ("Cruzeiro", "Palmeiras", "2026-11-18T20:00:00Z", 35),
+        ("Grêmio", "Bahia", "2026-11-18T21:00:00Z", 35),
+        ("Coritiba", "Santos", "2026-11-18T21:00:00Z", 35),
+        ("Vitória", "Red Bull Bragantino", "2026-11-18T21:30:00Z", 35),
+        ("Clube do Remo", "Chapecoense", "2026-11-18T21:30:00Z", 35),
+    ]
+    for loc, vis, dt, jor in bsa_j35:
+        add(f"bsa-2026-j35-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 36 (22/11)
+    bsa_j36 = [
+        ("Fluminense", "Mirassol", "2026-11-22T18:00:00Z", 36),
+        ("Botafogo", "São Paulo", "2026-11-22T18:00:00Z", 36),
+        ("Santos", "Grêmio", "2026-11-22T19:00:00Z", 36),
+        ("Palmeiras", "Flamengo", "2026-11-22T19:00:00Z", 36),
+        ("Red Bull Bragantino", "Vasco da Gama", "2026-11-22T20:00:00Z", 36),
+        ("Atlético Mineiro", "Corinthians", "2026-11-22T20:00:00Z", 36),
+        ("Internacional", "Vitória", "2026-11-22T21:00:00Z", 36),
+        ("Atlético PR", "Clube do Remo", "2026-11-22T21:00:00Z", 36),
+        ("Bahia", "Coritiba", "2026-11-22T21:30:00Z", 36),
+        ("Chapecoense", "Cruzeiro", "2026-11-22T21:30:00Z", 36),
+    ]
+    for loc, vis, dt, jor in bsa_j36:
+        add(f"bsa-2026-j36-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 37 (29/11)
+    bsa_j37 = [
+        ("Fluminense", "Cruzeiro", "2026-11-29T18:00:00Z", 37),
+        ("Botafogo", "Bahia", "2026-11-29T18:00:00Z", 37),
+        ("São Paulo", "Clube do Remo", "2026-11-29T18:00:00Z", 37),
+        ("Corinthians", "Grêmio", "2026-11-29T19:00:00Z", 37),
+        ("Mirassol", "Atlético PR", "2026-11-29T19:00:00Z", 37),
+        ("Atlético Mineiro", "Vasco da Gama", "2026-11-29T20:00:00Z", 37),
+        ("Internacional", "Red Bull Bragantino", "2026-11-29T20:00:00Z", 37),
+        ("Coritiba", "Flamengo", "2026-11-29T21:00:00Z", 37),
+        ("Vitória", "Santos", "2026-11-29T21:00:00Z", 37),
+        ("Chapecoense", "Palmeiras", "2026-11-29T21:30:00Z", 37),
+    ]
+    for loc, vis, dt, jor in bsa_j37:
+        add(f"bsa-2026-j37-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    print("1. Brasileirao Série A compilado.")
+
+    # =========================================================================
+    # 2. BUNDESLIGA (ALEMANIA)
+    # =========================================================================
     L_BL1 = "Bundesliga"
-    bl1_j5 = [
-        # Viernes 09 de Octubre 2026
-        ("Borussia Dortmund", "SV Werder Bremen", "2026-10-09T18:30:00Z", 5),
-        # Sábado 10 de Octubre 2026
-        ("Hamburger SV", "Bayern München", "2026-10-10T13:30:00Z", 5),
-        ("TSG 1899 Hoffenheim", "FC Augsburg", "2026-10-10T13:30:00Z", 5),
-        ("1. FSV Mainz 05", "Bayer 04 Leverkusen", "2026-10-10T13:30:00Z", 5),
-        ("SC Paderborn 07", "VfB Stuttgart", "2026-10-10T13:30:00Z", 5),
-        ("1. FC Union Berlin", "SV Elversberg", "2026-10-10T13:30:00Z", 5),
-        ("RB Leipzig", "Eintracht Frankfurt", "2026-10-10T16:30:00Z", 5),
-        # Domingo 11 de Octubre 2026
-        ("1. FC Köln", "Borussia Mönchengladbach", "2026-10-11T13:30:00Z", 5),
-        ("SC Freiburg", "FC Schalke 04", "2026-10-11T15:30:00Z", 5),
-    ]
-    for loc, vis, dt, jor in bl1_j5:
-        add_f(f"bl1-2026-j5-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BL1, "BL1")
+    C_BL1 = "BL1"
 
-    # Jueves 08 de Octubre 2026 (Jornada 29 - Cierre)
-    j29_thursday = [
-        ("Flamengo", "Fluminense", "2026-10-08T20:00:00Z", 29),
-        ("Palmeiras", "Bahia", "2026-10-08T20:30:00Z", 29),
-        ("Athletico Paranaense", "Atlético Mineiro", "2026-10-08T21:30:00Z", 29),
-        ("Santos", "Coritiba", "2026-10-08T21:30:00Z", 29),
-    ]
-    for loc, vis, dt, jor in j29_thursday:
-        add_f(f"bsa-2026-j29-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, "BSA")
+    bl1_schedule = [
+        # JORNADA 5 (09 al 11/10)
+        ("Borussia Dortmund", "Werder Bremen", "2026-10-09T18:30:00Z", 5),
+        ("Hoffenheim", "Hamburgo", "2026-10-10T13:30:00Z", 5),
+        ("Augsburgo", "Bayern Múnich", "2026-10-10T13:30:00Z", 5),
+        ("Mainz", "Bayer Leverkusen", "2026-10-10T13:30:00Z", 5),
+        ("Unión Berlín", "Elversberg", "2026-10-10T13:30:00Z", 5),
+        ("Paderborn", "Stuttgart", "2026-10-10T13:30:00Z", 5),
+        ("Leipzig", "Eintracht Frankfurt", "2026-10-10T16:30:00Z", 5),
+        ("Colonia", "Borussia Mönchengladbach", "2026-10-11T13:30:00Z", 5),
+        ("Friburgo", "Schalke", "2026-10-11T15:30:00Z", 5),
 
-    # UEFA NATIONS LEAGUE - NOVIEMBRE 2026 (JORNADAS 5 Y 6 OFICIALES)
+        # JORNADA 6 (16 al 18/10)
+        ("Eintracht Frankfurt", "Colonia", "2026-10-16T18:30:00Z", 6),
+        ("Unión Berlín", "Borussia Dortmund", "2026-10-17T13:30:00Z", 6),
+        ("Hamburgo", "Stuttgart", "2026-10-17T13:30:00Z", 6),
+        ("Werder Bremen", "Paderborn", "2026-10-17T13:30:00Z", 6),
+        ("Schalke", "Mainz", "2026-10-17T13:30:00Z", 6),
+        ("Elversberg", "Augsburgo", "2026-10-17T13:30:00Z", 6),
+        ("Bayern Múnich", "Leipzig", "2026-10-17T16:30:00Z", 6),
+        ("Bayer Leverkusen", "Friburgo", "2026-10-18T13:30:00Z", 6),
+        ("Borussia Mönchengladbach", "Hoffenheim", "2026-10-18T15:30:00Z", 6),
+
+        # JORNADA 7 (23 al 25/10)
+        ("Stuttgart", "Borussia Mönchengladbach", "2026-10-23T18:30:00Z", 7),
+        ("Leipzig", "Elversberg", "2026-10-24T13:30:00Z", 7),
+        ("Augsburgo", "Unión Berlín", "2026-10-24T13:30:00Z", 7),
+        ("Mainz", "Werder Bremen", "2026-10-24T13:30:00Z", 7),
+        ("Colonia", "Schalke", "2026-10-24T13:30:00Z", 7),
+        ("Paderborn", "Hamburgo", "2026-10-24T13:30:00Z", 7),
+        ("Borussia Dortmund", "Eintracht Frankfurt", "2026-10-24T16:30:00Z", 7),
+        ("Hoffenheim", "Bayer Leverkusen", "2026-10-25T13:30:00Z", 7),
+        ("Friburgo", "Bayern Múnich", "2026-10-25T15:30:00Z", 7),
+
+        # JORNADA 8 (30/10 al 01/11)
+        ("Elversberg", "Mainz", "2026-10-30T19:30:00Z", 8),
+        ("Bayer Leverkusen", "Stuttgart", "2026-10-31T14:30:00Z", 8),
+        ("Augsburgo", "Friburgo", "2026-10-31T14:30:00Z", 8),
+        ("Borussia Mönchengladbach", "Paderborn", "2026-10-31T14:30:00Z", 8),
+        ("Werder Bremen", "Hoffenheim", "2026-10-31T14:30:00Z", 8),
+        ("Schalke", "Leipzig", "2026-10-31T14:30:00Z", 8),
+        ("Bayern Múnich", "Borussia Dortmund", "2026-10-31T17:30:00Z", 8),
+        ("Unión Berlín", "Colonia", "2026-11-01T14:30:00Z", 8),
+        ("Eintracht Frankfurt", "Hamburgo", "2026-11-01T16:30:00Z", 8),
+
+        # JORNADA 9 (06 al 08/11)
+        ("Hamburgo", "Borussia Mönchengladbach", "2026-11-06T19:30:00Z", 9),
+        ("Borussia Dortmund", "Elversberg", "2026-11-07T14:30:00Z", 9),
+        ("Leipzig", "Hamburgo", "2026-11-07T14:30:00Z", 9),
+        ("Mainz", "Bayern Múnich", "2026-11-07T14:30:00Z", 9),
+        ("Paderborn", "Eintracht Frankfurt", "2026-11-07T14:30:00Z", 9),
+        ("Stuttgart", "Werder Bremen", "2026-11-07T14:30:00Z", 9),
+        ("Colonia", "Bayer Leverkusen", "2026-11-07T17:30:00Z", 9),
+        ("Friburgo", "Unión Berlín", "2026-11-08T14:30:00Z", 9),
+        ("Hoffenheim", "Schalke", "2026-11-08T16:30:00Z", 9),
+
+        # JORNADA 10 (20 al 22/11)
+        ("Bayer Leverkusen", "Colonia", "2026-11-20T19:30:00Z", 10),
+        ("Bayer Leverkusen", "Paderborn", "2026-11-21T14:30:00Z", 10),
+        ("Eintracht Frankfurt", "Hoffenheim", "2026-11-21T14:30:00Z", 10),
+        ("Unión Berlín", "Leipzig", "2026-11-21T14:30:00Z", 10),
+        ("Borussia Mönchengladbach", "Borussia Dortmund", "2026-11-21T14:30:00Z", 10),
+        ("Elversberg", "Friburgo", "2026-11-21T14:30:00Z", 10),
+        ("Schalke", "Stuttgart", "2026-11-21T17:30:00Z", 10),
+        ("Augsburgo", "Mainz", "2026-11-22T14:30:00Z", 10),
+        ("Werder Bremen", "Hamburgo", "2026-11-22T16:30:00Z", 10),
+
+        # JORNADA 11 (27 al 29/11)
+        ("Werder Bremen", "Borussia Mönchengladbach", "2026-11-27T19:30:00Z", 11),
+        ("Mainz", "Unión Berlín", "2026-11-28T14:30:00Z", 11),
+        ("Hamburgo", "Bayern Múnich", "2026-11-28T14:30:00Z", 11),
+        ("Colonia", "Elversberg", "2026-11-28T14:30:00Z", 11),
+        ("Paderborn", "Schalke", "2026-11-28T14:30:00Z", 11),
+        ("Stuttgart", "Eintracht Frankfurt", "2026-11-28T14:30:00Z", 11),
+        ("Friburgo", "Leipzig", "2026-11-28T17:30:00Z", 11),
+        ("Hoffenheim", "Augsburgo", "2026-11-29T14:30:00Z", 11),
+        ("Borussia Dortmund", "Bayer Leverkusen", "2026-11-29T16:30:00Z", 11),
+    ]
+    for loc, vis, dt, jor in bl1_schedule:
+        add(f"bl1-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BL1, C_BL1)
+
+    print("2. Bundesliga compilada.")
+
+    # =========================================================================
+    # 3. LIGUE 1 (FRANCIA)
+    # =========================================================================
+    L_FL1 = "Ligue 1"
+    C_FL1 = "FL1"
+
+    fl1_schedule = [
+        # JORNADA 6 (09 al 11/10)
+        ("Lens", "Lyon", "2026-10-09T19:00:00Z", 6),
+        ("Lille", "Le Havre", "2026-10-10T15:00:00Z", 6),
+        ("Brest", "Angers", "2026-10-10T17:00:00Z", 6),
+        ("Lorient", "Paris FC", "2026-10-10T19:00:00Z", 6),
+        ("Monaco", "Toulouse", "2026-10-11T13:00:00Z", 6),
+        ("PSG", "Le Mans", "2026-10-11T15:00:00Z", 6),
+        ("Niza", "Estrasburgo", "2026-10-11T15:00:00Z", 6),
+        ("Stade Rennais", "Auxerre", "2026-10-11T17:05:00Z", 6),
+        ("Troyes", "Marsella", "2026-10-11T18:45:00Z", 6),
+
+        # JORNADA 7 (16 al 18/10)
+        ("Le Mans", "Toulouse", "2026-10-16T19:00:00Z", 7),
+        ("Estrasburgo", "PSG", "2026-10-17T15:00:00Z", 7),
+        ("Lille", "Brest", "2026-10-17T17:00:00Z", 7),
+        ("Troyes", "Lens", "2026-10-17T19:00:00Z", 7),
+        ("Angers", "Marsella", "2026-10-18T13:00:00Z", 7),
+        ("Le Havre", "Auxerre", "2026-10-18T15:00:00Z", 7),
+        ("Lorient", "Monaco", "2026-10-18T15:00:00Z", 7),
+        ("Paris FC", "Stade Rennais", "2026-10-18T17:05:00Z", 7),
+        ("Lyon", "Niza", "2026-10-18T18:45:00Z", 7),
+
+        # JORNADA 8 (23 al 25/10)
+        ("Brest", "Niza", "2026-10-23T19:00:00Z", 8),
+        ("Toulouse", "Troyes", "2026-10-24T15:00:00Z", 8),
+        ("Lens", "Paris FC", "2026-10-24T17:00:00Z", 8),
+        ("Monaco", "Lille", "2026-10-24T19:00:00Z", 8),
+        ("Angers", "Lorient", "2026-10-25T13:00:00Z", 8),
+        ("Auxerre", "Le Mans", "2026-10-25T15:00:00Z", 8),
+        ("Marsella", "Le Havre", "2026-10-25T15:00:00Z", 8),
+        ("Stade Rennais", "Estrasburgo", "2026-10-25T17:05:00Z", 8),
+        ("PSG", "Lyon", "2026-10-25T18:45:00Z", 8),
+
+        # JORNADA 9 (30/10 al 01/11)
+        ("Le Havre", "PSG", "2026-10-30T20:00:00Z", 9),
+        ("Lille", "Lens", "2026-10-31T16:00:00Z", 9),
+        ("Niza", "Stade Rennais", "2026-10-31T18:00:00Z", 9),
+        ("Lorient", "Brest", "2026-10-31T20:00:00Z", 9),
+        ("Lyon", "Angers", "2026-11-01T14:00:00Z", 9),
+        ("Troyes", "Le Mans", "2026-11-01T16:00:00Z", 9),
+        ("Estrasburgo", "Auxerre", "2026-11-01T16:00:00Z", 9),
+        ("Paris FC", "Monaco", "2026-11-01T18:05:00Z", 9),
+        ("Marsella", "Toulouse", "2026-11-01T19:45:00Z", 9),
+
+        # JORNADA 10 (06 al 08/11)
+        ("Toulouse", "Estrasburgo", "2026-11-06T20:00:00Z", 10),
+        ("Auxerre", "Paris FC", "2026-11-07T16:00:00Z", 10),
+        ("PSG", "Troyes", "2026-11-07T18:00:00Z", 10),
+        ("Stade Rennais", "Lille", "2026-11-07T20:00:00Z", 10),
+        ("Angers", "Niza", "2026-11-08T14:00:00Z", 10),
+        ("Brest", "Lyon", "2026-11-08T16:00:00Z", 10),
+        ("Le Havre", "Lorient", "2026-11-08T16:00:00Z", 10),
+        ("Le Mans", "Monaco", "2026-11-08T18:05:00Z", 10),
+        ("Lens", "Marsella", "2026-11-08T19:45:00Z", 10),
+
+        # JORNADA 11 (20 al 22/11)
+        ("Troyes", "Le Havre", "2026-11-20T20:00:00Z", 11),
+        ("Niza", "PSG", "2026-11-21T16:00:00Z", 11),
+        ("Lille", "Lyon", "2026-11-21T18:00:00Z", 11),
+        ("Monaco", "Auxerre", "2026-11-21T20:00:00Z", 11),
+        ("Estrasburgo", "Brest", "2026-11-22T14:00:00Z", 11),
+        ("PSG", "Paris FC", "2026-11-22T16:00:00Z", 11),
+        ("Lorient", "Stade Rennais", "2026-11-22T18:05:00Z", 11),
+        ("Marsella", "Le Mans", "2026-11-22T19:45:00Z", 11),
+
+        # JORNADA 12 (27 al 29/11)
+        ("Brest", "Paris FC", "2026-11-27T20:00:00Z", 12),
+        ("Angers", "Lens", "2026-11-28T16:00:00Z", 12),
+        ("Le Havre", "Estrasburgo", "2026-11-28T18:00:00Z", 12),
+        ("Le Mans", "Lille", "2026-11-28T20:00:00Z", 12),
+        ("Niza", "Troyes", "2026-11-29T14:00:00Z", 12),
+        ("PSG", "Lorient", "2026-11-29T16:00:00Z", 12),
+        ("Auxerre", "Marsella", "2026-11-29T16:00:00Z", 12),
+        ("Toulouse", "Stade Rennais", "2026-11-29T18:05:00Z", 12),
+        ("Lyon", "Monaco", "2026-11-29T19:45:00Z", 12),
+    ]
+    for loc, vis, dt, jor in fl1_schedule:
+        add(f"fl1-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_FL1, C_FL1)
+
+    print("3. Ligue 1 compilada.")
+
+    # =========================================================================
+    # 4. PREMIER LEAGUE (INGLATERRA)
+    # =========================================================================
+    L_PL = "Premier League"
+    C_PL = "PL"
+
+    pl_schedule = [
+        # JORNADA 6 (10 al 12/10)
+        ("Arsenal", "Leeds United", "2026-10-10T11:30:00Z", 6),
+        ("Aston Villa", "Brentford", "2026-10-10T14:00:00Z", 6),
+        ("Chelsea", "AFC Bournemouth", "2026-10-10T14:00:00Z", 6),
+        ("Ipswich Town", "Fulham", "2026-10-10T14:00:00Z", 6),
+        ("Sunderland", "Brighton", "2026-10-10T14:00:00Z", 6),
+        ("Manchester United", "Tottenham Hotspur", "2026-10-10T16:30:00Z", 6),
+        ("Crystal Palace", "Nottingham Forest", "2026-10-11T13:00:00Z", 6),
+        ("Hull City", "Everton", "2026-10-11T15:30:00Z", 6),
+        ("Liverpool", "Manchester City", "2026-10-11T15:30:00Z", 6),
+        ("Coventry City", "Newcastle", "2026-10-12T19:00:00Z", 6),
+
+        # JORNADA 7 (17 al 19/10)
+        ("Everton", "Chelsea", "2026-10-17T11:30:00Z", 7),
+        ("Brentford", "Liverpool", "2026-10-17T14:00:00Z", 7),
+        ("Fulham", "Hull City", "2026-10-17T14:00:00Z", 7),
+        ("Manchester City", "Ipswich Town", "2026-10-17T14:00:00Z", 7),
+        ("Newcastle", "Aston Villa", "2026-10-17T14:00:00Z", 7),
+        ("AFC Bournemouth", "Sunderland", "2026-10-17T16:30:00Z", 7),
+        ("Brighton", "Crystal Palace", "2026-10-18T13:00:00Z", 7),
+        ("Leeds United", "Manchester United", "2026-10-18T15:30:00Z", 7),
+        ("Nottingham Forest", "Arsenal", "2026-10-18T15:30:00Z", 7),
+        ("Tottenham Hotspur", "Coventry City", "2026-10-19T19:00:00Z", 7),
+
+        # JORNADA 8 (23 al 25/10)
+        ("Ipswich Town", "Nottingham Forest", "2026-10-23T19:00:00Z", 8),
+        ("Aston Villa", "Manchester City", "2026-10-24T11:30:00Z", 8),
+        ("Arsenal", "Everton", "2026-10-24T14:00:00Z", 8),
+        ("Coventry City", "Fulham", "2026-10-24T14:00:00Z", 8),
+        ("Chelsea", "Tottenham Hotspur", "2026-10-24T16:30:00Z", 8),
+        ("Crystal Palace", "Newcastle", "2026-10-25T13:00:00Z", 8),
+        ("Hull City", "Brentford", "2026-10-25T13:00:00Z", 8),
+        ("Liverpool", "Brighton", "2026-10-25T15:30:00Z", 8),
+        ("Manchester United", "AFC Bournemouth", "2026-10-25T15:30:00Z", 8),
+        ("Sunderland", "Leeds United", "2026-10-25T17:30:00Z", 8),
+
+        # JORNADA 9 (31/10 al 02/11)
+        ("Chelsea", "Manchester United", "2026-10-31T12:30:00Z", 9),
+        ("AFC Bournemouth", "Leeds United", "2026-10-31T15:00:00Z", 9),
+        ("Brentford", "Nottingham Forest", "2026-10-31T15:00:00Z", 9),
+        ("Coventry City", "Sunderland", "2026-10-31T15:00:00Z", 9),
+        ("Hull City", "Ipswich Town", "2026-10-31T15:00:00Z", 9),
+        ("Manchester City", "Brighton", "2026-10-31T15:00:00Z", 9),
+        ("Tottenham Hotspur", "Crystal Palace", "2026-10-31T17:30:00Z", 9),
+        ("Aston Villa", "Fulham", "2026-11-01T14:00:00Z", 9),
+        ("Liverpool", "Arsenal", "2026-11-01T16:30:00Z", 9),
+        ("Newcastle", "Everton", "2026-11-02T20:00:00Z", 9),
+
+        # JORNADA 10 (06 al 08/11)
+        ("Everton", "Coventry City", "2026-11-06T20:00:00Z", 10),
+        ("Leeds United", "Tottenham Hotspur", "2026-11-07T12:30:00Z", 10),
+        ("Arsenal", "Hull City", "2026-11-07T15:00:00Z", 10),
+        ("Fulham", "Newcastle", "2026-11-07T15:00:00Z", 10),
+        ("Nottingham Forest", "Manchester City", "2026-11-07T15:00:00Z", 10),
+        ("Brighton", "Brentford", "2026-11-07T15:00:00Z", 10),
+        ("Crystal Palace", "Liverpool", "2026-11-07T17:30:00Z", 10),
+        ("Ipswich Town", "AFC Bournemouth", "2026-11-08T14:00:00Z", 10),
+        ("Sunderland", "Chelsea", "2026-11-08T14:00:00Z", 10),
+        ("Manchester United", "Aston Villa", "2026-11-08T16:30:00Z", 10),
+
+        # JORNADA 11 (21 al 23/11)
+        ("Manchester City", "Fulham", "2026-11-21T12:30:00Z", 11),
+        ("AFC Bournemouth", "Nottingham Forest", "2026-11-21T15:00:00Z", 11),
+        ("Aston Villa", "Sunderland", "2026-11-21T15:00:00Z", 11),
+        ("Chelsea", "Leeds United", "2026-11-21T15:00:00Z", 11),
+        ("Coventry City", "Crystal Palace", "2026-11-21T15:00:00Z", 11),
+        ("Tottenham Hotspur", "Ipswich Town", "2026-11-21T17:30:00Z", 11),
+        ("Newcastle", "Arsenal", "2026-11-22T14:00:00Z", 11),
+        ("Hull City", "Brighton", "2026-11-22T14:00:00Z", 11),
+        ("Liverpool", "Manchester United", "2026-11-22T16:30:00Z", 11),
+        ("Brentford", "Everton", "2026-11-23T20:00:00Z", 11),
+
+        # JORNADA 12 (27 al 29/11)
+        ("Nottingham Forest", "Chelsea", "2026-11-27T20:00:00Z", 12),
+        ("Leeds United", "Coventry City", "2026-11-28T12:30:00Z", 12),
+        ("Manchester United", "Brentford", "2026-11-28T15:00:00Z", 12),
+        ("Ipswich Town", "Aston Villa", "2026-11-28T15:00:00Z", 12),
+        ("Everton", "Liverpool", "2026-11-28T15:00:00Z", 12),
+        ("Brighton", "Newcastle", "2026-11-28T17:30:00Z", 12),
+        ("Crystal Palace", "Hull City", "2026-11-29T14:00:00Z", 12),
+        ("Fulham", "AFC Bournemouth", "2026-11-29T14:00:00Z", 12),
+        ("Sunderland", "Tottenham Hotspur", "2026-11-29T16:30:00Z", 12),
+        ("Arsenal", "Manchester City", "2026-11-29T16:30:00Z", 12),
+    ]
+    for loc, vis, dt, jor in pl_schedule:
+        add(f"pl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_PL, C_PL)
+
+    print("4. Premier League compilada.")
+
+    # =========================================================================
+    # 5. PRIMERA DIVISIÓN (LALIGA - ESPAÑA)
+    # =========================================================================
+    L_PD = "Primera División"
+    C_PD = "PD"
+
+    pd_schedule = [
+        # JORNADA 8 (09 al 12/10)
+        ("Málaga", "Espanyol", "2026-10-09T19:00:00Z", 8),
+        ("Rayo Vallecano", "Athletic Club", "2026-10-10T12:00:00Z", 8),
+        ("Deportivo Alavés", "Atlético de Madrid", "2026-10-10T14:15:00Z", 8),
+        ("Barcelona", "Getafe", "2026-10-10T16:30:00Z", 8),
+        ("Real Madrid", "Villarreal", "2026-10-10T19:00:00Z", 8),
+        ("Elche", "Celta de Vigo", "2026-10-11T12:00:00Z", 8),
+        ("Real Sociedad", "Deportivo de La Coruña", "2026-10-11T14:15:00Z", 8),
+        ("Real Betis", "Osasuna", "2026-10-11T16:30:00Z", 8),
+        ("Racing Club", "Valencia", "2026-10-11T19:00:00Z", 8),
+        ("Levante", "Sevilla", "2026-10-12T19:00:00Z", 8),
+
+        # JORNADA 9 (16 al 19/10)
+        ("Deportivo de La Coruña", "Levante", "2026-10-16T19:00:00Z", 9),
+        ("Espanyol", "Atlético de Madrid", "2026-10-17T12:00:00Z", 9),
+        ("Villarreal", "Elche", "2026-10-17T14:15:00Z", 9),
+        ("Real Betis", "Barcelona", "2026-10-17T16:30:00Z", 9),
+        ("Valencia", "Athletic Club", "2026-10-17T19:00:00Z", 9),
+        ("Osasuna", "Racing Club", "2026-10-18T12:00:00Z", 9),
+        ("Celta de Vigo", "Deportivo Alavés", "2026-10-18T14:15:00Z", 9),
+        ("Málaga", "Real Sociedad", "2026-10-18T16:30:00Z", 9),
+        ("Real Madrid", "Sevilla", "2026-10-18T19:00:00Z", 9),
+        ("Getafe", "Rayo Vallecano", "2026-10-19T19:00:00Z", 9),
+
+        # JORNADA 6 (Aplazado 21/10)
+        ("Levante", "Athletic Club", "2026-10-21T19:00:00Z", 6),
+
+        # JORNADA 10 (23 al 26/10)
+        ("Deportivo Alavés", "Málaga", "2026-10-23T19:00:00Z", 10),
+        ("Rayo Vallecano", "Elche", "2026-10-24T12:00:00Z", 10),
+        ("Racing Club", "Espanyol", "2026-10-24T14:15:00Z", 10),
+        ("Valencia", "Villarreal", "2026-10-24T16:30:00Z", 10),
+        ("Atlético de Madrid", "Deportivo de La Coruña", "2026-10-24T19:00:00Z", 10),
+        ("Athletic Club", "Getafe", "2026-10-25T12:00:00Z", 10),
+        ("Celta de Vigo", "Real Betis", "2026-10-25T14:15:00Z", 10),
+        ("Real Sociedad", "Levante", "2026-10-25T16:30:00Z", 10),
+        ("Barcelona", "Real Madrid", "2026-10-25T19:00:00Z", 10),
+        ("Sevilla", "Osasuna", "2026-10-26T19:00:00Z", 10),
+
+        # JORNADA 11 (30/10 al 02/11)
+        ("Villarreal", "Espanyol", "2026-10-30T20:00:00Z", 11),
+        ("Levante", "Atlético de Madrid", "2026-10-31T13:00:00Z", 11),
+        ("Rayo Vallecano", "Celta de Vigo", "2026-10-31T15:15:00Z", 11),
+        ("Real Betis", "Málaga", "2026-10-31T17:30:00Z", 11),
+        ("Barcelona", "Deportivo Alavés", "2026-10-31T20:00:00Z", 11),
+        ("Getafe", "Sevilla", "2026-11-01T13:00:00Z", 11),
+        ("Racing Club", "Real Madrid", "2026-11-01T15:15:00Z", 11),
+        ("Elche", "Valencia", "2026-11-01T17:30:00Z", 11),
+        ("Athletic Club", "Real Sociedad", "2026-11-01T20:00:00Z", 11),
+        ("Deportivo de La Coruña", "Osasuna", "2026-11-02T20:00:00Z", 11),
+
+        # JORNADA 12 (08/11)
+        ("Atlético de Madrid", "Barcelona", "2026-11-08T13:00:00Z", 12),
+        ("Celta de Vigo", "Levante", "2026-11-08T13:00:00Z", 12),
+        ("Elche", "Real Betis", "2026-11-08T15:15:00Z", 12),
+        ("Espanyol", "Deportivo de La Coruña", "2026-11-08T15:15:00Z", 12),
+        ("Málaga", "Racing Club", "2026-11-08T17:30:00Z", 12),
+        ("Osasuna", "Athletic Club", "2026-11-08T17:30:00Z", 12),
+        ("Real Sociedad", "Rayo Vallecano", "2026-11-08T19:00:00Z", 12),
+        ("Sevilla", "Deportivo Alavés", "2026-11-08T19:00:00Z", 12),
+        ("Valencia", "Real Madrid", "2026-11-08T20:00:00Z", 12),
+        ("Villarreal", "Getafe", "2026-11-08T20:00:00Z", 12),
+
+        # JORNADA 13 (22/11)
+        ("Deportivo Alavés", "Deportivo de La Coruña", "2026-11-22T13:00:00Z", 13),
+        ("Athletic Club", "Espanyol", "2026-11-22T13:00:00Z", 13),
+        ("Barcelona", "Villarreal", "2026-11-22T15:15:00Z", 13),
+        ("Getafe", "Atlético de Madrid", "2026-11-22T15:15:00Z", 13),
+        ("Levante", "Elche", "2026-11-22T17:30:00Z", 13),
+        ("Osasuna", "Málaga", "2026-11-22T17:30:00Z", 13),
+        ("Racing Club", "Real Sociedad", "2026-11-22T19:00:00Z", 13),
+        ("Rayo Vallecano", "Valencia", "2026-11-22T19:00:00Z", 13),
+        ("Real Madrid", "Celta de Vigo", "2026-11-22T20:00:00Z", 13),
+        ("Sevilla", "Real Betis", "2026-11-22T20:00:00Z", 13),
+
+        # JORNADA 14 (29/11)
+        ("Real Betis", "Rayo Vallecano", "2026-11-29T13:00:00Z", 14),
+        ("Celta de Vigo", "Villarreal", "2026-11-29T13:00:00Z", 14),
+        ("Deportivo de La Coruña", "Barcelona", "2026-11-29T15:15:00Z", 14),
+        ("Elche", "Atlético de Madrid", "2026-11-29T15:15:00Z", 14),
+        ("Espanyol", "Getafe", "2026-11-29T17:30:00Z", 14),
+        ("Levante", "Racing Club", "2026-11-29T17:30:00Z", 14),
+        ("Málaga", "Athletic Club", "2026-11-29T19:00:00Z", 14),
+        ("Real Madrid", "Deportivo Alavés", "2026-11-29T19:00:00Z", 14),
+        ("Real Sociedad", "Sevilla", "2026-11-29T20:00:00Z", 14),
+        ("Valencia", "Osasuna", "2026-11-29T20:00:00Z", 14),
+    ]
+    for loc, vis, dt, jor in pd_schedule:
+        add(f"pd-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_PD, C_PD)
+
+    print("5. Primera División compilada.")
+
+    # =========================================================================
+    # 6. PRIMEIRA LIGA (PORTUGAL)
+    # =========================================================================
+    L_PPL = "Primeira Liga"
+    C_PPL = "PPL"
+
+    ppl_schedule = [
+        # JORNADA 8 (09 al 12/10)
+        ("Moreirense", "Gil Vicente", "2026-10-09T19:15:00Z", 8),
+        ("SC Braga", "Sporting CP", "2026-10-10T14:30:00Z", 8),
+        ("Casa Pia", "Santa Clara", "2026-10-10T17:00:00Z", 8),
+        ("Marítimo", "FC Porto", "2026-10-10T19:30:00Z", 8),
+        ("Académico de Viseu", "Estoril", "2026-10-11T14:30:00Z", 8),
+        ("Rio Ave", "CD Nacional", "2026-10-11T17:00:00Z", 8),
+        ("Benfica", "Vitória de Guimarães", "2026-10-11T19:30:00Z", 8),
+        ("Arouca", "Estrela da Amadora", "2026-10-12T17:00:00Z", 8),
+        ("Famalicão", "Alverca", "2026-10-12T19:15:00Z", 8),
+
+        # JORNADA 2 (Aplazado 19/10)
+        ("SC Braga", "Gil Vicente", "2026-10-19T19:15:00Z", 2),
+
+        # JORNADA 9 (23 al 26/10)
+        ("Vitória de Guimarães", "Marítimo", "2026-10-23T19:15:00Z", 9),
+        ("Estrela da Amadora", "Casa Pia", "2026-10-24T14:30:00Z", 9),
+        ("Alverca", "Arouca", "2026-10-24T17:00:00Z", 9),
+        ("Gil Vicente", "FC Porto", "2026-10-24T19:30:00Z", 9),
+        ("Estoril", "Moreirense", "2026-10-25T14:30:00Z", 9),
+        ("CD Nacional", "SC Braga", "2026-10-25T17:00:00Z", 9),
+        ("Rio Ave", "Famalicão", "2026-10-25T17:00:00Z", 9),
+        ("Sporting CP", "Académico de Viseu", "2026-10-25T19:30:00Z", 9),
+        ("Santa Clara", "Benfica", "2026-10-26T19:15:00Z", 9),
+
+        # JORNADA 10 (30/10 al 02/11)
+        ("Casa Pia", "Sporting CP", "2026-10-30T20:15:00Z", 10),
+        ("Moreirense", "Estrela da Amadora", "2026-10-31T15:30:00Z", 10),
+        ("FC Porto", "Estoril", "2026-10-31T18:00:00Z", 10),
+        ("Arouca", "CD Nacional", "2026-10-31T20:30:00Z", 10),
+        ("Académico de Viseu", "Rio Ave", "2026-11-01T15:30:00Z", 10),
+        ("Marítimo", "Santa Clara", "2026-11-01T15:30:00Z", 10),
+        ("SC Braga", "Famalicão", "2026-11-01T18:00:00Z", 10),
+        ("Gil Vicente", "Vitória de Guimarães", "2026-11-01T20:30:00Z", 10),
+        ("Benfica", "Alverca", "2026-11-02T20:15:00Z", 10),
+
+        # JORNADA 11 (06 al 08/11)
+        ("Famalicão", "Arouca", "2026-11-06T20:15:00Z", 11),
+        ("CD Nacional", "Académico de Viseu", "2026-11-07T15:30:00Z", 11),
+        ("Alverca", "Casa Pia", "2026-11-07T15:30:00Z", 11),
+        ("Sporting CP", "Moreirense", "2026-11-07T18:00:00Z", 11),
+        ("Estoril", "Marítimo", "2026-11-07T20:30:00Z", 11),
+        ("Santa Clara", "Gil Vicente", "2026-11-08T15:30:00Z", 11),
+        ("Vitória de Guimarães", "FC Porto", "2026-11-08T18:00:00Z", 11),
+        ("Estrela da Amadora", "Benfica", "2026-11-08T20:30:00Z", 11),
+        ("Rio Ave", "SC Braga", "2026-11-08T20:30:00Z", 11),
+
+        # JORNADA 12 (27 al 30/11)
+        ("Marítimo", "CD Nacional", "2026-11-27T20:15:00Z", 12),
+        ("Arouca", "Rio Ave", "2026-11-28T15:30:00Z", 12),
+        ("Moreirense", "Santa Clara", "2026-11-28T18:00:00Z", 12),
+        ("Académico de Viseu", "Alverca", "2026-11-28T20:30:00Z", 12),
+        ("Vitória de Guimarães", "Estrela da Amadora", "2026-11-29T15:30:00Z", 12),
+        ("Gil Vicente", "Estoril", "2026-11-29T15:30:00Z", 12),
+        ("FC Porto", "Sporting CP", "2026-11-29T18:00:00Z", 12),
+        ("Casa Pia", "SC Braga", "2026-11-29T20:30:00Z", 12),
+        ("Benfica", "Famalicão", "2026-11-30T20:15:00Z", 12),
+    ]
+    for loc, vis, dt, jor in ppl_schedule:
+        add(f"ppl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_PPL, C_PPL)
+
+    print("6. Primeira Liga compilada.")
+
+    # =========================================================================
+    # 7. SERIE A (ITALIA)
+    # =========================================================================
+    L_SA = "Serie A"
+    C_SA = "SA"
+
+    sa_schedule = [
+        # JORNADA 6 (10 al 12/10)
+        ("Genoa", "Fiorentina", "2026-10-10T13:00:00Z", 6),
+        ("Inter", "Parma", "2026-10-10T16:00:00Z", 6),
+        ("Napoli", "Frosinone", "2026-10-10T18:45:00Z", 6),
+        ("Como 1907", "AS Roma", "2026-10-11T10:30:00Z", 6),
+        ("Lazio", "Monza", "2026-10-11T13:00:00Z", 6),
+        ("Lecce", "Bologna", "2026-10-11T13:00:00Z", 6),
+        ("Sassuolo", "AC Milan", "2026-10-11T16:00:00Z", 6),
+        ("Cagliari", "Juventus", "2026-10-11T18:45:00Z", 6),
+        ("Atalanta", "Venezia", "2026-10-12T16:30:00Z", 6),
+        ("Torino", "Udinese", "2026-10-12T18:45:00Z", 6),
+
+        # JORNADA 7 (16 al 19/10)
+        ("Frosinone", "Sassuolo", "2026-10-16T18:45:00Z", 7),
+        ("Venezia", "Napoli", "2026-10-17T13:00:00Z", 7),
+        ("Bologna", "Inter", "2026-10-17T16:00:00Z", 7),
+        ("AS Roma", "Genoa", "2026-10-17T18:45:00Z", 7),
+        ("Udinese", "Lecce", "2026-10-18T10:30:00Z", 7),
+        ("Fiorentina", "Como 1907", "2026-10-18T13:00:00Z", 7),
+        ("AC Milan", "Atalanta", "2026-10-18T16:00:00Z", 7),
+        ("Juventus", "Lazio", "2026-10-18T18:45:00Z", 7),
+        ("Monza", "Cagliari", "2026-10-19T16:30:00Z", 7),
+        ("Parma", "Torino", "2026-10-19T18:45:00Z", 7),
+
+        # JORNADA 8 (23 al 25/10)
+        ("Torino", "Monza", "2026-10-23T18:45:00Z", 8),
+        ("Cagliari", "Bologna", "2026-10-24T13:00:00Z", 8),
+        ("Como 1907", "Sassuolo", "2026-10-24T16:00:00Z", 8),
+        ("Napoli", "AS Roma", "2026-10-24T18:45:00Z", 8),
+        ("Lazio", "Parma", "2026-10-25T11:30:00Z", 8),
+        ("Inter", "Fiorentina", "2026-10-25T14:00:00Z", 8),
+        ("Atalanta", "Frosinone", "2026-10-25T14:00:00Z", 8),
+        ("Genoa", "Venezia", "2026-10-25T17:00:00Z", 8),
+        ("Lecce", "Juventus", "2026-10-25T17:00:00Z", 8),
+        ("Udinese", "AC Milan", "2026-10-25T19:45:00Z", 8),
+
+        # JORNADA 9 (27 al 29/10)
+        ("Sassuolo", "Lazio", "2026-10-27T17:30:00Z", 9),
+        ("AS Roma", "Cagliari", "2026-10-27T19:45:00Z", 9),
+        ("Torino", "Como 1907", "2026-10-28T17:30:00Z", 9),
+        ("AC Milan", "Bologna", "2026-10-28T17:30:00Z", 9),
+        ("Parma", "Udinese", "2026-10-28T19:45:00Z", 9),
+        ("Venezia", "Inter", "2026-10-28T19:45:00Z", 9),
+        ("Genoa", "Juventus", "2026-10-28T19:45:00Z", 9),
+        ("Monza", "Napoli", "2026-10-29T17:30:00Z", 9),
+        ("Frosinone", "Lecce", "2026-10-29T17:30:00Z", 9),
+        ("Fiorentina", "Atalanta", "2026-10-29T19:45:00Z", 9),
+
+        # JORNADA 10 (31/10 al 02/11)
+        ("Bologna", "Monza", "2026-10-31T14:00:00Z", 10),
+        ("Udinese", "AS Roma", "2026-10-31T17:00:00Z", 10),
+        ("AC Milan", "Inter", "2026-10-31T19:45:00Z", 10),
+        ("Como 1907", "Venezia", "2026-11-01T11:30:00Z", 10),
+        ("Frosinone", "Torino", "2026-11-01T14:00:00Z", 10),
+        ("Lazio", "Cagliari", "2026-11-01T14:00:00Z", 10),
+        ("Lecce", "Genoa", "2026-11-01T17:00:00Z", 10),
+        ("Juventus", "Napoli", "2026-11-01T19:45:00Z", 10),
+        ("Sassuolo", "Fiorentina", "2026-11-02T17:30:00Z", 10),
+        ("Atalanta", "Parma", "2026-11-02T19:45:00Z", 10),
+
+        # JORNADA 11 (06 al 08/11)
+        ("Udinese", "Venezia", "2026-11-06T19:45:00Z", 11),
+        ("Cagliari", "Frosinone", "2026-11-07T14:00:00Z", 11),
+        ("Torino", "Lecce", "2026-11-07T17:00:00Z", 11),
+        ("Parma", "Bologna", "2026-11-07T19:45:00Z", 11),
+        ("AS Roma", "Sassuolo", "2026-11-08T11:30:00Z", 11),
+        ("Napoli", "Lazio", "2026-11-08T14:00:00Z", 11),
+        ("Genoa", "AC Milan", "2026-11-08T14:00:00Z", 11),
+        ("Monza", "Atalanta", "2026-11-08T17:00:00Z", 11),
+        ("Inter", "Como 1907", "2026-11-08T19:45:00Z", 11),
+        ("Fiorentina", "Juventus", "2026-11-08T19:45:00Z", 11),
+
+        # JORNADA 12 (21 al 23/11)
+        ("Como 1907", "Cagliari", "2026-11-21T14:00:00Z", 12),
+        ("Lazio", "Lecce", "2026-11-21T17:00:00Z", 12),
+        ("Parma", "AS Roma", "2026-11-21T19:45:00Z", 12),
+        ("Napoli", "Torino", "2026-11-22T11:30:00Z", 12),
+        ("Juventus", "Venezia", "2026-11-22T14:00:00Z", 12),
+        ("Bologna", "Udinese", "2026-11-22T14:00:00Z", 12),
+        ("Sassuolo", "Genoa", "2026-11-22T17:00:00Z", 12),
+        ("AC Milan", "Frosinone", "2026-11-22T19:45:00Z", 12),
+        ("Atalanta", "Inter", "2026-11-23T17:30:00Z", 12),
+        ("Monza", "Fiorentina", "2026-11-23T19:45:00Z", 12),
+
+        # JORNADA 13 (27 al 30/11)
+        ("Venezia", "Bologna", "2026-11-27T19:45:00Z", 13),
+        ("Frosinone", "Parma", "2026-11-28T14:00:00Z", 13),
+        ("Torino", "Lazio", "2026-11-28T17:00:00Z", 13),
+        ("Inter", "Genoa", "2026-11-28T19:45:00Z", 13),
+        ("Udinese", "Fiorentina", "2026-11-29T11:30:00Z", 13),
+        ("Sassuolo", "Napoli", "2026-11-29T14:00:00Z", 13),
+        ("AS Roma", "Monza", "2026-11-29T14:00:00Z", 13),
+        ("Como 1907", "Juventus", "2026-11-29T17:00:00Z", 13),
+        ("Lecce", "Atalanta", "2026-11-29T19:45:00Z", 13),
+        ("Cagliari", "AC Milan", "2026-11-30T19:45:00Z", 13),
+    ]
+    for loc, vis, dt, jor in sa_schedule:
+        add(f"sa-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_SA, C_SA)
+
+    print("7. Serie A compilada.")
+
+    # =========================================================================
+    # 8. UEFA CHAMPIONS LEAGUE
+    # =========================================================================
+    L_UCL = "UEFA Champions League"
+    C_UCL = "CL"
+
+    ucl_schedule = [
+        # JORNADA 2 (13 al 14/10)
+        ("Lens", "Sporting CP", "2026-10-13T16:45:00Z", 2),
+        ("Sabah Baku", "Slavia Praga", "2026-10-13T16:45:00Z", 2),
+        ("Inter", "Club Brujas", "2026-10-13T19:00:00Z", 2),
+        ("Galatasaray", "Barcelona", "2026-10-13T19:00:00Z", 2),
+        ("Atlético de Madrid", "Manchester United", "2026-10-13T19:00:00Z", 2),
+        ("Arsenal", "RB Leipzig", "2026-10-13T19:00:00Z", 2),
+        ("Viking", "Bayern Múnich", "2026-10-13T19:00:00Z", 2),
+        ("LASK", "PSV", "2026-10-13T19:00:00Z", 2),
+        ("Villarreal", "Napoli", "2026-10-13T19:00:00Z", 2),
+        ("LASK", "Liverpool", "2026-10-14T16:45:00Z", 2),
+        ("Feyenoord", "Como 1907", "2026-10-14T16:45:00Z", 2),
+        ("Manchester City", "PSG", "2026-10-14T19:00:00Z", 2),
+        ("AS Roma", "Real Madrid", "2026-10-14T19:00:00Z", 2),
+        ("Real Betis", "FC Porto", "2026-10-14T19:00:00Z", 2),
+        ("Bodø/Glimt", "Borussia Dortmund", "2026-10-14T19:00:00Z", 2),
+        ("Aston Villa", "Fenerbahçe", "2026-10-14T19:00:00Z", 2),
+        ("Shakhtar Donetsk", "AEK Atenas", "2026-10-14T19:00:00Z", 2),
+        ("Slovan Bratislava", "VfB Stuttgart", "2026-10-14T19:00:00Z", 2),
+
+        # JORNADA 3 (20 al 21/10)
+        ("Sabah Baku", "Borussia Dortmund", "2026-10-20T16:45:00Z", 3),
+        ("Fenerbahçe", "Slavia Praga", "2026-10-20T16:45:00Z", 3),
+        ("PSG", "Barcelona", "2026-10-20T19:00:00Z", 3),
+        ("Manchester City", "AEK Atenas", "2026-10-20T19:00:00Z", 3),
+        ("VfB Stuttgart", "Atlético de Madrid", "2026-10-20T19:00:00Z", 3),
+        ("Liverpool", "Villarreal", "2026-10-20T19:00:00Z", 3),
+        ("FC Porto", "PSV", "2026-10-20T19:00:00Z", 3),
+        ("AS Roma", "Slovan Bratislava", "2026-10-20T19:00:00Z", 3),
+        ("Napoli", "Bodø/Glimt", "2026-10-20T19:00:00Z", 3),
+        ("Como 1907", "Manchester United", "2026-10-21T16:45:00Z", 3),
+        ("LASK", "Galatasaray", "2026-10-21T16:45:00Z", 3),
+        ("Bayern Múnich", "Arsenal", "2026-10-21T19:00:00Z", 3),
+        ("Real Madrid", "RB Leipzig", "2026-10-21T19:00:00Z", 3),
+        ("Inter", "Shakhtar Donetsk", "2026-10-21T19:00:00Z", 3),
+        ("Club Brujas", "Lens", "2026-10-21T19:00:00Z", 3),
+        ("Aston Villa", "Viking", "2026-10-21T19:00:00Z", 3),
+        ("Real Betis", "Feyenoord", "2026-10-21T19:00:00Z", 3),
+        ("Sporting CP", "LASK", "2026-10-21T19:00:00Z", 3),
+
+        # JORNADA 4 (03 al 04/11)
+        ("Shakhtar Donetsk", "Sporting CP", "2026-11-03T17:45:00Z", 4),
+        ("Galatasaray", "VfB Stuttgart", "2026-11-03T17:45:00Z", 4),
+        ("Atlético de Madrid", "Bayern Múnich", "2026-11-03T20:00:00Z", 4),
+        ("Feyenoord", "Inter", "2026-11-03T20:00:00Z", 4),
+        ("Barcelona", "Aston Villa", "2026-11-03T20:00:00Z", 4),
+        ("Villarreal", "PSG", "2026-11-03T20:00:00Z", 4),
+        ("Manchester United", "AS Roma", "2026-11-03T20:00:00Z", 4),
+        ("Bodø/Glimt", "LASK", "2026-11-03T20:00:00Z", 4),
+        ("Slovan Bratislava", "AEK Atenas", "2026-11-03T20:00:00Z", 4),
+        ("Real Madrid", "Fenerbahçe", "2026-11-04T17:45:00Z", 4),
+        ("Liverpool", "RB Leipzig", "2026-11-04T17:45:00Z", 4),
+        ("Manchester City", "Slavia Praga", "2026-11-04T20:00:00Z", 4),
+        ("Arsenal", "PSV", "2026-11-04T20:00:00Z", 4),
+        ("Club Brujas", "Borussia Dortmund", "2026-11-04T20:00:00Z", 4),
+        ("Real Betis", "FC Porto", "2026-11-04T20:00:00Z", 4),
+        ("Napoli", "Lens", "2026-11-04T20:00:00Z", 4),
+        ("Como 1907", "Viking", "2026-11-04T20:00:00Z", 4),
+        ("Sabah Baku", "Viking", "2026-11-04T20:00:00Z", 4),
+
+        # JORNADA 5 (24 al 25/11)
+        ("Galatasaray", "Aston Villa", "2026-11-24T17:45:00Z", 5),
+        ("Bodø/Glimt", "LASK", "2026-11-24T17:45:00Z", 5),
+        ("Real Madrid", "PSV", "2026-11-24T20:00:00Z", 5),
+        ("Manchester City", "Napoli", "2026-11-24T20:00:00Z", 5),
+        ("Arsenal", "Borussia Dortmund", "2026-11-24T20:00:00Z", 5),
+        ("Feyenoord", "FC Porto", "2026-11-24T20:00:00Z", 5),
+        ("Slovan Bratislava", "Real Betis", "2026-11-24T20:00:00Z", 5),
+        ("RB Leipzig", "Lens", "2026-11-24T20:00:00Z", 5),
+        ("Como 1907", "AEK Atenas", "2026-11-24T20:00:00Z", 5),
+        ("Sabah Baku", "Barcelona", "2026-11-25T17:45:00Z", 5),
+        ("Slavia Praga", "Villarreal", "2026-11-25T17:45:00Z", 5),
+        ("Inter", "VfB Stuttgart", "2026-11-25T20:00:00Z", 5),
+        ("Atlético de Madrid", "Viking", "2026-11-25T20:00:00Z", 5),
+        ("PSG", "AS Roma", "2026-11-25T20:00:00Z", 5),
+        ("Club Brujas", "Liverpool", "2026-11-25T20:00:00Z", 5),
+        ("Lazio", "Bayern Múnich", "2026-11-25T20:00:00Z", 5),
+        ("Sporting CP", "Manchester United", "2026-11-25T20:00:00Z", 5),
+        ("Shakhtar Donetsk", "Fenerbahçe", "2026-11-25T20:00:00Z", 5),
+    ]
+    for loc, vis, dt, jor in ucl_schedule:
+        add(f"ucl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_UCL, C_UCL)
+
+    print("8. UEFA Champions League compilada.")
+
+    # =========================================================================
+    # 9. UEFA NATIONS LEAGUE (LIGAS A, B, C, D)
+    # =========================================================================
     L_UNL = "UEFA Nations League"
-    unl_official_52 = [
-        # JORNADA 5 (12 al 14 de Noviembre)
+    C_UNL = "UNL"
+
+    unl_schedule = [
+        # LIGA A - JORNADA 5 (12 al 14/11)
         ("Turquía", "Bélgica", "2026-11-12T19:45:00Z", 5),
-        ("Armenia", "Chipre", "2026-11-12T17:00:00Z", 5),
-        ("Albania", "Finlandia", "2026-11-12T19:45:00Z", 5),
-        ("Inglaterra", "Croacia", "2026-11-12T19:45:00Z", 5),
-        ("Italia", "Francia", "2026-11-12T19:45:00Z", 5),
+        ("Francia", "Italia", "2026-11-12T19:45:00Z", 5),
         ("República Checa", "España", "2026-11-12T19:45:00Z", 5),
-        ("Montenegro", "Letonia", "2026-11-12T19:45:00Z", 5),
-        ("San Marino", "Bielorrusia", "2026-11-12T19:45:00Z", 5),
-        ("Moldavia", "Kazajistán", "2026-11-13T17:00:00Z", 5),
-        ("Bulgaria", "Islandia", "2026-11-13T19:45:00Z", 5),
-        ("Eslovaquia", "Islas Feroe", "2026-11-13T19:45:00Z", 5),
-        ("Luxemburgo", "Estonia", "2026-11-13T19:45:00Z", 5),
-        ("Países Bajos", "Grecia", "2026-11-13T19:45:00Z", 5),
+        ("Inglaterra", "Croacia", "2026-11-12T19:45:00Z", 5),
         ("Serbia", "Alemania", "2026-11-13T19:45:00Z", 5),
-        ("Escocia", "Macedonia del Norte", "2026-11-13T19:45:00Z", 5),
-        ("Eslovenia", "Suiza", "2026-11-13T19:45:00Z", 5),
-        ("Andorra", "Gibraltar", "2026-11-13T19:45:00Z", 5),
-        ("Liechtenstein", "Azerbaiyán", "2026-11-13T17:00:00Z", 5),
-        ("Kosovo", "Israel", "2026-11-14T19:45:00Z", 5),
-        ("Georgia", "Hungría", "2026-11-14T17:00:00Z", 5),
+        ("Países Bajos", "Grecia", "2026-11-13T19:45:00Z", 5),
         ("Noruega", "Gales", "2026-11-14T17:00:00Z", 5),
         ("Portugal", "Dinamarca", "2026-11-14T19:45:00Z", 5),
-        ("Austria", "Irlanda", "2026-11-14T19:45:00Z", 5),
+
+        # LIGA A - JORNADA 6 (15 al 17/11)
+        ("Francia", "Turquía", "2026-11-15T19:45:00Z", 6),
+        ("España", "Inglaterra", "2026-11-15T19:45:00Z", 6),
+        ("Croacia", "República Checa", "2026-11-15T19:45:00Z", 6),
+        ("Bélgica", "Italia", "2026-11-15T19:45:00Z", 6),
+        ("Alemania", "Países Bajos", "2026-11-16T19:45:00Z", 6),
+        ("Grecia", "Serbia", "2026-11-16T19:45:00Z", 6),
+        ("Gales", "Portugal", "2026-11-17T19:45:00Z", 6),
+        ("Dinamarca", "Noruega", "2026-11-17T19:45:00Z", 6),
+
+        # LIGA B - JORNADA 5 (13 al 14/11)
+        ("Escocia", "Macedonia del Norte", "2026-11-13T19:45:00Z", 5),
+        ("Eslovenia", "Suiza", "2026-11-13T19:45:00Z", 5),
+        ("Kosovo", "Israel", "2026-11-14T19:45:00Z", 5),
+        ("Georgia", "Hungría", "2026-11-14T17:00:00Z", 5),
         ("Irlanda del Norte", "Ucrania", "2026-11-14T19:45:00Z", 5),
+        ("Austria", "Irlanda", "2026-11-14T19:45:00Z", 5),
         ("Rumanía", "Polonia", "2026-11-14T19:45:00Z", 5),
         ("Suecia", "Bosnia y Herzegovina", "2026-11-14T19:45:00Z", 5),
-        # JORNADA 6 (15 al 17 de Noviembre)
+
+        # LIGA B - JORNADA 6 (16 al 17/11)
+        ("Macedonia del Norte", "Eslovenia", "2026-11-16T17:00:00Z", 6),
+        ("Suiza", "Escocia", "2026-11-16T19:45:00Z", 6),
+        ("Hungría", "Irlanda del Norte", "2026-11-16T19:45:00Z", 6),
+        ("Ucrania", "Georgia", "2026-11-16T19:45:00Z", 6),
+        ("Israel", "Austria", "2026-11-17T19:45:00Z", 6),
+        ("Irlanda", "Kosovo", "2026-11-17T19:45:00Z", 6),
+        ("Polonia", "Suecia", "2026-11-17T19:45:00Z", 6),
+        ("Bosnia y Herzegovina", "Rumanía", "2026-11-17T19:45:00Z", 6),
+
+        # LIGA C - JORNADA 5 (12 al 13/11)
+        ("Armenia", "Chipre", "2026-11-12T17:00:00Z", 5),
+        ("Albania", "Finlandia", "2026-11-12T19:45:00Z", 5),
+        ("San Marino", "Bielorrusia", "2026-11-12T19:45:00Z", 5),
+        ("Montenegro", "Letonia", "2026-11-12T19:45:00Z", 5),
+        ("Moldavia", "Kazajistán", "2026-11-13T17:00:00Z", 5),
+        ("Eslovaquia", "Islas Feroe", "2026-11-13T19:45:00Z", 5),
+        ("Bulgaria", "Islandia", "2026-11-13T19:45:00Z", 5),
+        ("Luxemburgo", "Estonia", "2026-11-13T19:45:00Z", 5),
+
+        # LIGA C - JORNADA 6 (15 al 16/11)
         ("Chipre", "Montenegro", "2026-11-15T17:00:00Z", 6),
         ("Letonia", "Armenia", "2026-11-15T14:00:00Z", 6),
         ("Bielorrusia", "Albania", "2026-11-15T19:45:00Z", 6),
         ("Finlandia", "San Marino", "2026-11-15T17:00:00Z", 6),
-        ("Bélgica", "Italia", "2026-11-15T19:45:00Z", 6),
-        ("Croacia", "República Checa", "2026-11-15T19:45:00Z", 6),
-        ("España", "Inglaterra", "2026-11-15T19:45:00Z", 6),
-        ("Francia", "Turquía", "2026-11-15T19:45:00Z", 6),
-        ("Islas Feroe", "Moldavia", "2026-11-16T17:00:00Z", 6),
         ("Kazajistán", "Eslovaquia", "2026-11-16T14:00:00Z", 6),
+        ("Islas Feroe", "Moldavia", "2026-11-16T17:00:00Z", 6),
         ("Estonia", "Bulgaria", "2026-11-16T19:45:00Z", 6),
         ("Islandia", "Luxemburgo", "2026-11-16T19:45:00Z", 6),
+
+        # LIGA D - JORNADA 5 (13/11)
+        ("Liechtenstein", "Azerbaiyán", "2026-11-13T17:00:00Z", 5),
+        ("Andorra", "Gibraltar", "2026-11-13T19:45:00Z", 5),
+
+        # LIGA D - JORNADA 6 (16/11)
         ("Lituania", "Liechtenstein", "2026-11-16T17:00:00Z", 6),
         ("Gibraltar", "Malta", "2026-11-16T19:45:00Z", 6),
-        ("Alemania", "Países Bajos", "2026-11-16T19:45:00Z", 6),
-        ("Grecia", "Serbia", "2026-11-16T19:45:00Z", 6),
-        ("Macedonia del Norte", "Eslovenia", "2026-11-16T17:00:00Z", 6),
-        ("Suiza", "Escocia", "2026-11-16T19:45:00Z", 6),
-        ("Dinamarca", "Noruega", "2026-11-17T19:45:00Z", 6),
-        ("Gales", "Portugal", "2026-11-17T19:45:00Z", 6),
-        ("Bosnia y Herzegovina", "Rumanía", "2026-11-17T19:45:00Z", 6),
-        ("Hungría", "Irlanda del Norte", "2026-11-17T19:45:00Z", 6),
-        ("Irlanda", "Kosovo", "2026-11-17T19:45:00Z", 6),
-        ("Israel", "Austria", "2026-11-17T19:45:00Z", 6),
-        ("Polonia", "Suecia", "2026-11-17T19:45:00Z", 6),
-        ("Ucrania", "Georgia", "2026-11-17T19:45:00Z", 6),
     ]
-    for idx, (loc, vis, dt, jor) in enumerate(unl_official_52):
-        add_f(f"unl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}-{idx:02d}", loc, vis, dt, jor, L_UNL, "UNL")
+    for loc, vis, dt, jor in unl_schedule:
+        add(f"unl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_UNL, C_UNL)
 
-    def generate_round_robin_pairings(teams):
-        n = len(teams)
-        pool = list(teams)
-        if n % 2 != 0:
-            pool.append("BYE")
-            n += 1
-        rounds = []
-        for r in range(n - 1):
-            round_matches = []
-            for i in range(n // 2):
-                t1 = pool[i]
-                t2 = pool[n - 1 - i]
-                if t1 != "BYE" and t2 != "BYE":
-                    if r % 2 == 0: round_matches.append((t1, t2))
-                    else: round_matches.append((t2, t1))
-            rounds.append(round_matches)
-            pool = [pool[0]] + [pool[-1]] + pool[1:-1]
-        return rounds
+    print("9. UEFA Nations League compilada.")
 
-    ligas_cfg = {
-        "Primera División": {
-            "codigo": "PD",
-            "teams": [
-                "Real Madrid", "Barcelona", "Atlético de Madrid", "Girona", "Athletic Club",
-                "Real Sociedad", "Real Betis", "Villarreal", "Valencia", "Deportivo Alavés",
-                "Osasuna", "Getafe", "Celta de Vigo", "Sevilla", "Mallorca",
-                "Las Palmas", "Rayo Vallecano", "Leganés", "Real Valladolid", "Espanyol"
-            ],
-            "dates": [
-                ("2026-10-18", 10), ("2026-10-25", 11),
-                ("2026-11-01", 12), ("2026-11-08", 13), ("2026-11-22", 14), ("2026-11-29", 15)
-            ],
-            "hours": ["13:00", "15:15", "17:30", "20:00"]
-        },
-        "Premier League": {
-            "codigo": "PL",
-            "teams": [
-                "Manchester City", "Arsenal", "Liverpool", "Aston Villa", "Tottenham Hotspur",
-                "Chelsea", "Newcastle", "Manchester United", "West Ham", "Crystal Palace",
-                "Brighton", "AFC Bournemouth", "Fulham", "Wolverhampton", "Everton",
-                "Brentford", "Nottingham Forest", "Leicester City", "Ipswich Town", "Southampton"
-            ],
-            "dates": [
-                ("2026-10-18", 9), ("2026-10-25", 10),
-                ("2026-11-01", 11), ("2026-11-08", 12), ("2026-11-22", 13), ("2026-11-29", 14)
-            ],
-            "hours": ["11:30", "14:00", "16:30", "19:00"]
-        },
-        "Bundesliga": {
-            "codigo": "BL1",
-            "teams": [
-                "Borussia Dortmund", "Bayern München", "SC Freiburg", "FC Augsburg", "Bayer 04 Leverkusen",
-                "1. FSV Mainz 05", "SV Elversberg", "SV Werder Bremen", "RB Leipzig", "Eintracht Frankfurt",
-                "FC Schalke 04", "SC Paderborn 07", "1. FC Köln", "TSG 1899 Hoffenheim", "VfB Stuttgart",
-                "Hamburger SV", "1. FC Union Berlin", "Borussia Mönchengladbach"
-            ],
-            "dates": [
-                ("2026-10-18", 6), ("2026-10-25", 7),
-                ("2026-11-01", 8), ("2026-11-08", 9), ("2026-11-22", 10), ("2026-11-29", 11)
-            ],
-            "hours": ["14:30", "16:30", "17:30", "19:30"]
-        },
-        "Ligue 1": {
-            "codigo": "FL1",
-            "teams": [
-                "Paris Saint-Germain", "AS Monaco", "Stade Brestois 29", "Lille", "OGC Nice",
-                "Olympique Lyonnais", "RC Lens", "Olympique de Marseille", "Stade Rennais", "Toulouse FC",
-                "Stade de Reims", "Montpellier HSC", "RC Strasbourg", "FC Nantes", "Le Havre AC",
-                "AJ Auxerre", "Angers SCO", "AS Saint-Étienne"
-            ],
-            "dates": [
-                ("2026-10-18", 9), ("2026-10-25", 10),
-                ("2026-11-01", 11), ("2026-11-08", 12), ("2026-11-22", 13), ("2026-11-29", 14)
-            ],
-            "hours": ["12:00", "14:00", "16:05", "19:45"]
-        },
-        "Serie A": {
-            "codigo": "SA",
-            "teams": [
-                "Inter", "AC Milan", "Juventus", "Atalanta", "Bologna",
-                "AS Roma", "Lazio", "Fiorentina", "Torino", "Napoli",
-                "Genoa", "Monza", "Hellas Verona", "Cagliari", "Udinese",
-                "Empoli", "Parma", "Como 1907", "Venezia", "Lecce"
-            ],
-            "dates": [
-                ("2026-10-18", 9), ("2026-10-25", 10),
-                ("2026-11-01", 11), ("2026-11-08", 12), ("2026-11-22", 13), ("2026-11-29", 14)
-            ],
-            "hours": ["11:30", "14:00", "17:00", "19:45"]
-        },
-        "Primeira Liga": {
-            "codigo": "PPL",
-            "teams": [
-                "Sporting CP", "Benfica", "FC Porto", "SC Braga", "Vitória de Guimarães",
-                "Moreirense FC", "FC Arouca", "FC Famalicão", "Casa Pia AC", "SC Farense",
-                "Rio Ave FC", "Gil Vicente FC", "GD Estoril Praia", "Estrela da Amadora", "Boavista FC",
-                "Santa Clara", "CD Nacional", "AVS Futebol SAD"
-            ],
-            "dates": [
-                ("2026-10-25", 9),
-                ("2026-11-01", 10), ("2026-11-08", 11), ("2026-11-29", 12)
-            ],
-            "hours": ["14:30", "17:00", "19:30"]
-        },
-        "Campeonato Brasileiro Série A": {
-            "codigo": "BSA",
-            "teams": [
-                "Flamengo", "Palmeiras", "Athletico Paranaense", "Cruzeiro", "Fluminense",
-                "Bahia", "Atlético Mineiro", "Santos", "Coritiba", "Red Bull Bragantino",
-                "São Paulo", "Vitória", "Botafogo", "Vasco da Gama", "Mirassol",
-                "Corinthians", "Internacional", "Grêmio", "Clube do Remo", "Chapecoense"
-            ],
-            "dates": [
-                ("2026-10-17", 30), ("2026-10-24", 31), ("2026-10-28", 32),
-                ("2026-11-04", 33), ("2026-11-11", 34), ("2026-11-21", 35), ("2026-11-25", 36),
-                ("2026-11-29", 37)
-            ],
-            "hours": ["18:30", "20:00", "22:30"]
-        }
-    }
-    for l_name, cfg in ligas_cfg.items():
-        tms = cfg["teams"]
-        rnds = generate_round_robin_pairings(tms)
-        n_rnds = len(rnds)
-        hrs = cfg["hours"]
-        c_cod = cfg["codigo"]
-        for idx, (dt_s, j_num) in enumerate(cfg["dates"]):
-            r_match = rnds[idx % n_rnds]
-            b_dt = datetime.strptime(dt_s, "%Y-%m-%d")
-            for m_idx, (loc, vis) in enumerate(r_match):
-                d_off = (m_idx % 3) - 1
-                m_dt = b_dt + timedelta(days=d_off)
-                iso_d = m_dt.strftime("%Y-%m-%d")
-                if iso_d < "2026-10-07" or iso_d > "2026-11-30":
-                    continue
-                h_str = hrs[m_idx % len(hrs)]
-                iso_val = f"{iso_d}T{h_str}:00Z"
-                m_id = f"{c_cod.lower()}-2026-j{j_num}-{loc[:3].lower()}-{vis[:3].lower()}-{m_idx}"
-                add_f(m_id, loc, vis, iso_val, j_num, l_name, c_cod)
+    return calendar
 
-    # UEFA Champions League (Jornadas 3, 4, 5)
-    ucl_rounds = [
-        (3, "2026-10-21", [
-            ("Real Madrid", "Borussia Dortmund"), ("Barcelona", "Bayern München"), ("Arsenal", "Paris Saint-Germain"),
-            ("Manchester City", "Inter"), ("Liverpool", "Bayer 04 Leverkusen"), ("Atlético de Madrid", "Lille"),
-            ("Juventus", "VfB Stuttgart"), ("AC Milan", "Club Brugge"), ("Sporting CP", "Manchester City"),
-            ("Aston Villa", "Bologna"), ("AS Monaco", "Crvena Zvezda"), ("Benfica", "Feyenoord")
-        ]),
-        (4, "2026-11-04", [
-            ("Real Madrid", "AC Milan"), ("Liverpool", "Bayer 04 Leverkusen"), ("Sporting CP", "Manchester City"),
-            ("Borussia Dortmund", "Sturm Graz"), ("Inter", "Arsenal"), ("Paris Saint-Germain", "Atlético de Madrid"),
-            ("Bayern München", "Benfica"), ("Crvena Zvezda", "Barcelona"), ("VfB Stuttgart", "Atalanta")
-        ]),
-        (5, "2026-11-25", [
-            ("Liverpool", "Real Madrid"), ("Bayern München", "Paris Saint-Germain"), ("Arsenal", "Sporting CP"),
-            ("Inter", "RB Leipzig"), ("Barcelona", "Stade Brestois 29"), ("Manchester City", "Feyenoord"),
-            ("Aston Villa", "Juventus"), ("Atlético de Madrid", "Sparta Prague"), ("Bayer 04 Leverkusen", "Red Bull Salzburg")
-        ])
-    ]
-    for j_num, b_dt, m_list in ucl_rounds:
-        for m_idx, (loc, vis) in enumerate(m_list):
-            h_str = "19:00:00Z" if m_idx % 2 == 0 else "21:00:00Z"
-            add_f(f"ucl-2026-j{j_num}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, f"{b_dt}T{h_str}", j_num, "UEFA Champions League", "CL")
-
-# (Partidos UNL Noviembre ya incluidos arriba en unl_official_52)
-
-    return fixtures
 
 def build_all_club_fixtures():
     fixtures = build_multimonth_calendar()
