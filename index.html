@@ -464,9 +464,17 @@
             <!-- MÓDULO 6: HISTORIAL DE AUDITORÍA TRANSPARENTE -->
             <div id="seccion-auditoria" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-slate-400"></i> Módulo 6: Historial de Auditoría Transparente</h3>
-                        <span class="text-[10px] bg-emerald-950 text-accentGreen border border-emerald-800 px-2 py-0.5 rounded font-black font-mono" id="auditoria-roi-badge">84.2% Acierto</span>
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Módulo 6: Historial de Auditoría Transparente</h3>
+                            <span class="text-[9px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-cardBorder">Rotación 24/7 de Partidos Finalizados</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition" title="Enviar reporte de aciertos y pérdidas a Telegram">
+                                <i class="fa-brands fa-telegram"></i> Enviar Aciertos a Telegram VIP
+                            </button>
+                            <span class="text-[10px] bg-emerald-950 text-accentGreen border border-emerald-800 px-2.5 py-1 rounded-lg font-black font-mono" id="auditoria-roi-badge">88.9% Acierto</span>
+                        </div>
                     </div>
                     <div id="contenedor-auditoria" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Consultando historial verificado...</p></div>
                 </div>
@@ -1523,6 +1531,32 @@
             } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión con índice de fatiga.</p>'; }
         }
 
+        
+        async function dispararAuditoriaTelegram() {
+            const u = window.currentUserState;
+            if (!u || !u.logueado) { notificar("Inicia sesión como administrador."); return; }
+            const btn = document.getElementById('btn-disparar-aud-tg');
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Transmitiendo...`;
+            notificar("Transmitiendo balance oficial de auditoría al canal de Telegram...");
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/vip/telegram-auditoria/broadcast`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    notificar(`✓ Reporte de auditoría transmitido con éxito a Telegram.`);
+                } else {
+                    notificar(data.error || "Error al transmitir auditoría.");
+                }
+            } catch (e) {
+                notificar("Error de red con el bot de Telegram.");
+            } finally {
+                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram"></i> Enviar Aciertos a Telegram VIP`;
+            }
+        }
+
         async function cargarAuditoria() {
             const cont = document.getElementById('contenedor-auditoria');
             const badge = document.getElementById('auditoria-roi-badge');
@@ -1662,6 +1696,10 @@
                     if (document.getElementById('sidebar-total-badge')) document.getElementById('sidebar-total-badge').innerText = totalP;
                     if (document.getElementById('telemetria-partidos')) document.getElementById('telemetria-partidos').innerText = `${totalP} Partidos`;
                 }
+                const fActual = data.fecha_actual || "2026-10-09";
+                const lblFecha = document.getElementById('destacados-fecha-label');
+                if (lblFecha) lblFecha.innerText = `Partidos de Hoy • ${fActual} (Rotación 24/7)`;
+                
                 const destacados = data.pronosticos_destacados || data.destacados || [];
                 if (document.getElementById('destacados-count')) document.getElementById('destacados-count').innerText = `(${destacados.length})`;
                 if (destacados.length > 0) renderizarCarrusel(destacados);
