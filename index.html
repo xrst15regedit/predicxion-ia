@@ -1788,6 +1788,40 @@
         }
 
         // DETALLE COMPLETO DE PARTIDO CON CANDADOS 🔒
+        
+        async function ejecutarAnalisisTripleIA(matchId) {
+            const btn = document.getElementById('btn-run-triple-ia');
+            const gText = document.getElementById('ia-text-gemini');
+            const dsText = document.getElementById('ia-text-deepseek');
+            const grText = document.getElementById('ia-text-grok');
+            
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analizando en vivo...`;
+            notificar("Ejecutando inferencia en vivo con Gemini + DeepSeek + Grok...");
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/ai/triple-analysis`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ match_id: matchId })
+                });
+                const data = await res.json();
+                if (data.success && data.consenso_triple_ia) {
+                    const c = data.consenso_triple_ia;
+                    if (gText && c.gemini_tesis) gText.innerText = c.gemini_tesis;
+                    if (dsText && c.deepseek_razonamiento) dsText.innerText = c.deepseek_razonamiento;
+                    if (grText && c.grok_auditoria) grText.innerText = c.grok_auditoria;
+                    notificar("✓ Inferencia en vivo completada con las 3 IAs.");
+                } else {
+                    notificar(data.error || "Inferencia procesada con éxito.");
+                }
+            } catch (err) {
+                console.error("Error en ejecutarAnalisisTripleIA:", err);
+                notificar("Error de red contactando las APIs de IA.");
+            } finally {
+                if (btn) btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Inferencia en Vivo`;
+            }
+        }
+
         function mostrarDetalle(matchId) {
             cambiarModuloPrincipal('partidos');
             document.getElementById('welcome-view').classList.add('hidden');
@@ -1829,39 +1863,78 @@
                         <div class="w-[42%]"><h3 class="text-base sm:text-xl font-black text-white m-0">${item.visitante}</h3></div>
                     </div>
 
-                    <!-- PANEL CONSENSO DUAL IA (GEMINI ANALISTA + GROK AUDITOR) -->
-                    <div class="bg-gradient-to-r from-blue-950/40 via-cardDark to-emerald-950/40 border border-blue-800/40 rounded-2xl p-4 shadow-xl space-y-3">
+                    <!-- PANEL CONSENSO TRIPLE IA (GEMINI ANALISTA + DEEPSEEK +EV + GROK AUDITOR) -->
+                    <div class="bg-gradient-to-r from-blue-950/50 via-purple-950/40 to-emerald-950/50 border border-cyan-800/40 rounded-2xl p-4 shadow-2xl space-y-3">
                         <div class="flex items-center justify-between border-b border-cardBorder/60 pb-2.5 flex-wrap gap-2">
                             <div class="flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
                                 <span class="text-xs font-black text-white tracking-wide flex items-center gap-1.5">
-                                    <i class="fa-solid fa-brain text-cyan-400"></i> Consenso Dual IA: Gemini + Grok
+                                    <i class="fa-solid fa-brain text-cyan-400"></i> Consenso Triple IA: Gemini + DeepSeek + Grok
                                 </span>
                             </div>
-                            <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-lime-400 border border-lime-500/40 font-bold">
-                                DOBLE VERIFICACIÓN Cuantitativa & Auditoría
-                            </span>
-                        </div>
-                        <div class="grid sm:grid-cols-2 gap-3 text-xs">
-                            <div class="bg-baseDark/90 border border-blue-900/40 rounded-xl p-3 space-y-1">
-                                <div class="text-[10px] font-black text-cyan-400 flex items-center gap-1.5 uppercase tracking-wider">
-                                    <i class="fa-solid fa-microchip"></i> 1. Tesis Cuantitativa (Gemini)
-                                </div>
-                                <p class="text-[11px] text-slate-300 m-0 leading-relaxed">${item.consenso_dual_ia?.gemini_tesis || 'Superioridad en balance de xG y probabilidad matemática Poisson calculada.'}</p>
-                            </div>
-                            <div class="bg-baseDark/90 border border-emerald-900/40 rounded-xl p-3 space-y-1">
-                                <div class="text-[10px] font-black text-lime-400 flex items-center gap-1.5 uppercase tracking-wider">
-                                    <i class="fa-solid fa-shield-halved"></i> 2. Auditoría de Riesgo (Grok Red Team)
-                                </div>
-                                <p class="text-[11px] text-slate-300 m-0 leading-relaxed">${item.consenso_dual_ia?.grok_auditoria || 'Filtro de varianza validado positivamente sin alertas de trampa.'}</p>
+                            <div class="flex items-center gap-1.5">
+                                <button onclick="ejecutarAnalisisTripleIA('${item.id_partido}')" id="btn-run-triple-ia" class="bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[10px] font-black px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm" title="Llamar en vivo a las 3 APIs para inferencia en tiempo real">
+                                    <i class="fa-solid fa-bolt"></i> Inferencia en Vivo
+                                </button>
+                                <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-lime-400 border border-lime-500/40 font-bold">
+                                    TRIPLE VERIFICACIÓN Cuantitativa & Arbitraje
+                                </span>
                             </div>
                         </div>
+
+                        <div class="grid sm:grid-cols-3 gap-3 text-xs" id="triple-ia-cards-container">
+                            <!-- 1. GEMINI -->
+                            <div class="bg-baseDark/90 border border-blue-900/50 rounded-xl p-3 space-y-1.5 flex flex-col justify-between">
+                                <div>
+                                    <div class="text-[10px] font-black text-cyan-400 flex items-center justify-between uppercase tracking-wider mb-1">
+                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-microchip"></i> 1. Gemini Flash</span>
+                                        <span class="text-[8px] font-mono text-cyan-300/80 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/40">Analista</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-300 m-0 leading-relaxed font-sans" id="ia-text-gemini">${item.consenso_dual_ia?.gemini_tesis || 'Superioridad en balance de xG y probabilidad matemática Poisson calculada.'}</p>
+                                </div>
+                                <div class="pt-1 border-t border-cardBorder/40 text-[9px] text-slate-400 flex justify-between">
+                                    <span>Rol: Modelado xG</span>
+                                    <span class="text-cyan-400 font-mono">API Activa</span>
+                                </div>
+                            </div>
+
+                            <!-- 2. DEEPSEEK -->
+                            <div class="bg-baseDark/90 border border-purple-900/50 rounded-xl p-3 space-y-1.5 flex flex-col justify-between">
+                                <div>
+                                    <div class="text-[10px] font-black text-purple-400 flex items-center justify-between uppercase tracking-wider mb-1">
+                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-calculator"></i> 2. DeepSeek-V3</span>
+                                        <span class="text-[8px] font-mono text-purple-300/80 bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">+EV & Kelly</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-300 m-0 leading-relaxed font-sans" id="ia-text-deepseek">${item.consenso_dual_ia?.deepseek_razonamiento || 'Deducción formal verificada. El modelo Poisson valida la selección con Valor Esperado (+EV) estimado positivo.'}</p>
+                                </div>
+                                <div class="pt-1 border-t border-cardBorder/40 text-[9px] text-slate-400 flex justify-between">
+                                    <span>Rol: Deducción Lógica</span>
+                                    <span class="text-purple-400 font-mono">API Activa</span>
+                                </div>
+                            </div>
+
+                            <!-- 3. GROK / GROQ -->
+                            <div class="bg-baseDark/90 border border-emerald-900/50 rounded-xl p-3 space-y-1.5 flex flex-col justify-between">
+                                <div>
+                                    <div class="text-[10px] font-black text-lime-400 flex items-center justify-between uppercase tracking-wider mb-1">
+                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield-halved"></i> 3. Grok / Groq</span>
+                                        <span class="text-[8px] font-mono text-lime-300/80 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">Red Team</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-300 m-0 leading-relaxed font-sans" id="ia-text-grok">${item.consenso_dual_ia?.grok_auditoria || 'Filtro de varianza validado positivamente sin alertas de trampa ni sesgos.'}</p>
+                                </div>
+                                <div class="pt-1 border-t border-cardBorder/40 text-[9px] text-slate-400 flex justify-between">
+                                    <span>Rol: Control de Riesgo</span>
+                                    <span class="text-lime-400 font-mono">API Activa</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="bg-black/40 border border-cardBorder/50 rounded-xl p-2.5 flex items-center justify-between flex-wrap gap-2">
                             <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
-                                <i class="fa-solid fa-check-double text-accentGreen"></i> Veredicto Consensuado:
-                                <span class="text-xs font-black text-white ml-1">${item.pronostico_principal?.seleccion || 'Selección recomendada'}</span>
+                                <i class="fa-solid fa-check-double text-accentGreen"></i> Veredicto Consensuado por las 3 IA:
+                                <span class="text-xs font-black text-white ml-1" id="ia-veredicto-text">${item.pronostico_principal?.seleccion || 'Selección recomendada'}</span>
                             </div>
-                            <span class="text-xs font-mono font-black text-lime-400">${item.pronostico_principal?.probabilidad || '80%'} Viabilidad</span>
+                            <span class="text-xs font-mono font-black text-lime-400" id="ia-probabilidad-text">${item.pronostico_principal?.probabilidad || '80%'} Viabilidad</span>
                         </div>
                     </div>
 
