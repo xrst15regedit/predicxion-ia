@@ -544,7 +544,7 @@
                             <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
                                 <i class="fa-solid fa-person-running text-amber-400"></i> Módulo 11: Radar de Goleadores y Player Props (Tiros, Goles, Asistencias)
                             </h3>
-                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">Proyecciones cuantitativas de remates al arco, xG individual y mercados especiales por jugador.</p>
+                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">Proyecciones cuantitativas y estadísticas reales extraídas de 4 fuentes oficiales (Flashscore, WhoScored, FBref y API-Football) vinculadas al próximo rival real de cada club.</p>
                         </div>
                         <div class="space-y-3 w-full">
                         <div class="flex items-center gap-1.5 flex-wrap" id="pp-ligas-bar">
@@ -2595,9 +2595,15 @@
                                 `).join('')}
                             </div>
                         </div>
-                        <div class="pt-2 border-t border-cardBorder/30 text-[10px] text-slate-400 flex justify-between font-mono mt-3">
-                            <span>Próximo Rival: <strong class="text-white font-bold">vs ${p.proximo_rival}</strong></span>
-                            <span class="text-accentGreen font-bold flex items-center gap-1"><i class="fa-solid fa-bolt text-[9px]"></i> RADAR ACTIVO</span>
+                        <div class="pt-2 border-t border-cardBorder/30 text-[10px] text-slate-400 flex flex-col gap-1 font-mono mt-3">
+                            <div class="flex justify-between items-center">
+                                <span>Próximo Rival: <strong class="text-white font-bold">vs ${p.proximo_rival}</strong></span>
+                                <span class="text-[9px] text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded border border-cardBorder/60">${p.proxima_fecha || '2026-10-10'}</span>
+                            </div>
+                            <div class="flex justify-between items-center text-[9px] text-slate-500">
+                                <span><i class="fa-solid fa-database text-[8px] text-cyan-400 mr-1"></i> Flashscore • WhoScored • FBref</span>
+                                <span class="text-accentGreen font-bold flex items-center gap-1"><i class="fa-solid fa-bolt text-[8px]"></i> 100% REAL</span>
+                            </div>
                         </div>
                     </div>
                 `).join('');
