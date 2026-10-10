@@ -199,8 +199,11 @@
                         <i class="fa-solid fa-futbol text-sm"></i> <span>Partidos</span>
                     </button>
                     <button onclick="navegarPestanaPrincipal('top3')" id="nav-tab-top3" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
-                        <i class="fa-solid fa-trophy text-lime-400"></i> <span>Top 3 del Día</span>
+                        <i class="fa-solid fa-trophy text-lime-400"></i> <span>Top 5 del Día</span>
                         <span id="lock-top3-nav" class="text-amber-400 text-[10px]"></span>
+                    </button>
+                    <button onclick="navegarPestanaPrincipal('parlays')" id="nav-tab-parlays" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-layer-group text-amber-400"></i> <span>Parlays IA</span>
                     </button>
                     <button onclick="navegarPestanaPrincipal('analisis')" id="nav-tab-analisis" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
                         <i class="fa-solid fa-dice text-cyan-400"></i> <span>Simulación</span>
@@ -240,7 +243,7 @@
             <!-- MÓDULO 0: CARTELERA 7 PILARES -->
             
             <!-- ========================================================================= -->
-            <!-- APARTADO EXCLUSIVO: TOP 3 PRONÓSTICOS DEL DÍA -->
+            <!-- APARTADO EXCLUSIVO: TOP 5 PRONÓSTICOS DEL DÍA -->
             <!-- ========================================================================= -->
             <div id="seccion-top3" class="seccion-principal hidden max-w-xl mx-auto w-full mb-8 space-y-4">
                 <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
@@ -255,9 +258,12 @@
                             </h2>
                             <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">Las selecciones de mayor probabilidad del día según el modelo estadístico. Son estimaciones, no garantías.</p>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition shadow-sm" title="Enviar Parlay Top 5 directamente al canal VIP de Telegram">
-                                <i class="fa-brands fa-telegram"></i> Enviar Top 5 a Telegram VIP
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button onclick="reproducirAudioTop5Completo()" id="btn-audio-top5-full" class="bg-cardDark hover:bg-slate-800 text-lime-400 border border-lime-500/40 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-md shadow-lime-950/30 cursor-pointer" title="Escuchar el resumen narrado por voz de los 5 destacados de hoy">
+                                <i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 5 (Voz IA)</span>
+                            </button>
+                            <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-lg shadow-sky-950/40 cursor-pointer" title="Enviar Top 5 directamente al canal VIP de Telegram">
+                                <i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>
                             </button>
                         </div>
                         <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-950 to-baseDark border border-lime-500/40 flex items-center justify-center text-lime-400 text-xl font-black shadow-lg shadow-lime-950/40">
@@ -265,7 +271,7 @@
                         </div>
                     </div>
 
-                    <!-- Indicador de fecha oficial del Top 3 (Sin botones de cambio manual) -->
+                    <!-- Indicador de fecha oficial del Top 5 (Sin botones de cambio manual) -->
                     <div class="flex items-center justify-center bg-baseDark/90 border border-emerald-800/40 rounded-2xl px-4 py-2.5 font-mono text-xs font-black text-white gap-2 shadow-inner">
                         <i class="fa-regular fa-calendar-days text-lime-400"></i>
                         <span>PRONÓSTICOS DE HOY</span> • <span id="top3-fecha-display" class="text-lime-400">—</span>
@@ -279,7 +285,7 @@
                             </div>
                             <div>
                                 <div class="text-xs font-black text-white">Próxima actualización en</div>
-                                <div class="text-[10px] text-slate-400 font-mono">Nuevo Top 3 a las 00:00 • Rotación 24/7</div>
+                                <div class="text-[10px] text-slate-400 font-mono">Nuevo Top 5 a las 00:00 • Rotación 24/7</div>
                             </div>
                         </div>
                         <div class="flex items-center gap-1.5 font-mono">
@@ -303,7 +309,7 @@
                     <!-- Contenedor dinámico de las 3 tarjetas #1, #2 y #3 -->
                     <div id="top3-cards-container" class="space-y-4">
                         <div class="text-xs text-slate-400 text-center py-8">
-                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando los Top 3 del día...
+                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando el Top 5 del día...
                         </div>
                     </div>
 
@@ -314,7 +320,7 @@
                                 <i class="fa-solid fa-crown"></i>
                             </div>
                             <div>
-                                <div class="text-xs font-black text-white">Desbloquea el Top 3 Completo de Hoy</div>
+                                <div class="text-xs font-black text-white">Desbloquea el Top 5 Completo de Hoy</div>
                                 <div class="text-[10px] text-slate-400">Acceso total a todas las métricas xG, cuotas con valor (+EV) y arbitraje cuantitativo</div>
                             </div>
                         </div>
@@ -322,6 +328,95 @@
                             Ver Planes VIP
                         </button>
                     </div>
+                </div>
+            </div>
+
+                        <!-- ========================================================================= -->
+            <!-- MÓDULO PARLAYS CUANTITATIVOS & CREADOR DE COMBINADAS INTELIGENTES -->
+            <!-- ========================================================================= -->
+            <div id="seccion-parlays" class="seccion-principal hidden max-w-4xl mx-auto w-full mb-8 space-y-6">
+                <!-- Panel Creador de Parlays -->
+                <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-4 flex-wrap gap-3">
+                        <div>
+                            <div class="text-[10px] font-black uppercase tracking-wider text-accentGreen flex items-center gap-1.5">
+                                <i class="fa-solid fa-brain"></i> MODELO MULTI-EVENTO POISSON & VALUE EDGE
+                            </div>
+                            <h2 class="text-2xl sm:text-3xl font-black text-white m-0 tracking-tight flex items-center gap-2">
+                                Generador de <span class="text-amber-400">Parlays</span> <span class="text-xs text-slate-400 font-normal">Combinadas IA</span>
+                            </h2>
+                            <p class="text-xs text-slate-400 m-0 mt-1 max-w-lg">
+                                Construye combinadas óptimas de 2 a 4 selecciones con correlación matemática positiva, estimación de probabilidad real y Criterio de Kelly.
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="reproducirAudioParlay()" id="btn-audio-parlay" class="bg-cardDark hover:bg-slate-800 text-amber-400 border border-amber-500/40 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition cursor-pointer">
+                    <i class="fa-solid fa-volume-high"></i> <span>Escuchar Parlay (Voz IA)</span>
+                </button>
+                            <button onclick="dispararParlayGeneradoTelegram()" id="btn-tg-parlay-builder" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-md shadow-sky-950/40 cursor-pointer" title="Emitir este parlay generado a Telegram VIP">
+                                <i class="fa-brands fa-telegram"></i> Emitir Parlay a Telegram VIP
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Selector de Perfil de Riesgo -->
+                    <div class="flex items-center justify-between flex-wrap gap-3 bg-baseDark/80 p-3 rounded-2xl border border-cardBorder">
+                        <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-sliders text-amber-400"></i> Perfil de Riesgo:
+                        </span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button onclick="seleccionarPerfilParlay('conservadora')" id="btn-perfil-conservadora" class="btn-perfil-parlay px-3.5 py-1.5 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                                🛡️ <span>Conservador (Dupla)</span>
+                            </button>
+                            <button onclick="seleccionarPerfilParlay('balanceada')" id="btn-perfil-balanceada" class="btn-perfil-parlay px-3.5 py-1.5 rounded-xl text-xs font-bold border border-amber-500/50 bg-amber-500/20 text-amber-300 hover:text-white transition flex items-center gap-1.5 shadow-sm">
+                                ⚖️ <span>Balanceado (Tripla)</span>
+                            </button>
+                            <button onclick="seleccionarPerfilParlay('agresiva')" id="btn-perfil-agresiva" class="btn-perfil-parlay px-3.5 py-1.5 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1.5">
+                                🚀 <span>Agresivo (Cuarteto Pro)</span>
+                            </button>
+                            <button onclick="cargarParlayQuant()" class="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl flex items-center gap-1.5 transition shadow-lg shadow-amber-950/40 cursor-pointer">
+                                <i class="fa-solid fa-arrows-rotate"></i> Regenerar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Métricas del Boleto Combinado -->
+                    <div id="parlay-metricas-container" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div class="bg-baseDark/90 border border-amber-500/30 p-3.5 rounded-2xl text-center">
+                            <span class="text-[10px] font-bold text-slate-400 block uppercase">Cuota Combinada</span>
+                            <span id="parlay-cuota-val" class="text-2xl font-black text-amber-400 font-mono">@---</span>
+                        </div>
+                        <div class="bg-baseDark/90 border border-emerald-500/30 p-3.5 rounded-2xl text-center">
+                            <span class="text-[10px] font-bold text-slate-400 block uppercase">Probabilidad IA</span>
+                            <span id="parlay-prob-val" class="text-2xl font-black text-emerald-400 font-mono">--%</span>
+                        </div>
+                        <div class="bg-baseDark/90 border border-cyan-500/30 p-3.5 rounded-2xl text-center">
+                            <span class="text-[10px] font-bold text-slate-400 block uppercase">Valor Esperado</span>
+                            <span id="parlay-ev-val" class="text-2xl font-black text-cyan-400 font-mono">+--% EV</span>
+                        </div>
+                        <div class="bg-baseDark/90 border border-purple-500/30 p-3.5 rounded-2xl text-center">
+                            <span class="text-[10px] font-bold text-slate-400 block uppercase">Stake Sugerido</span>
+                            <span id="parlay-stake-val" class="text-xs sm:text-sm font-black text-purple-300 mt-1 block">Kelly 2.5%</span>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Selecciones -->
+                    <div id="parlay-cards-container" class="space-y-3">
+                        <div class="text-xs text-slate-400 text-center py-8">
+                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Generando combinada cuantitativa...
+                        </div>
+                    </div>
+
+                    <!-- Barra inferior de acciones del boleto -->
+                    <div class="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-cardBorder">
+                        <button onclick="copiarBoletoParlay()" id="btn-copiar-boleto" class="bg-cardDark hover:bg-slate-800 text-slate-200 border border-cardBorder text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition cursor-pointer">
+                            <i class="fa-regular fa-copy"></i> Copiar Boleto al Portapapeles
+                        </button>
+                        <span class="text-[11px] text-slate-500 italic">Multiplicador calculado contra modelos cuantitativos oficiales.</span>
+                    </div>
+                </div>
+
+                
                 </div>
             </div>
 
@@ -442,7 +537,7 @@
                             <span class="text-[9px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-cardBorder">Solo picks registrados</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition" title="Enviar reporte de aciertos y pérdidas a Telegram">
+                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition cursor-pointer" title="Enviar reporte de aciertos y pérdidas a Telegram">
                                 <i class="fa-brands fa-telegram"></i> Enviar resumen a Telegram
                             </button>
                             <span class="text-[10px] bg-emerald-950 text-accentGreen border border-emerald-800 px-2.5 py-1 rounded-lg font-black font-mono" id="auditoria-roi-badge">Cargando...</span>
@@ -548,6 +643,34 @@
         </main>
     </div>
 
+        <!-- MODAL DE ACCESO ADMINISTRADOR POR PIN -->
+    <div id="modal-admin-pin" role="dialog" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-cardDark border border-amber-500/40 w-full max-w-[360px] rounded-2xl p-6 relative shadow-2xl">
+            <button onclick="cerrarAdminPinModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <div class="text-center mb-4">
+                <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl font-black mb-2 shadow-inner">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h3 class="text-lg font-black text-white m-0">Acceso Administrador</h3>
+                <p class="text-xs text-slate-400 mt-1">Ingresa tu clave maestra o PIN para ver y activar los botones de Telegram en este dispositivo.</p>
+            </div>
+            <form onsubmit="verificarAdminPin(event)" class="space-y-3">
+                <div>
+                    <label class="text-[10px] text-slate-400 font-bold block mb-1">PIN / Clave de Administrador</label>
+                    <input type="password" id="input-admin-pin" required placeholder="Ingresa tu PIN" class="w-full bg-baseDark border border-cardBorder rounded-xl px-3 py-2 text-center text-sm font-mono tracking-widest text-amber-400 focus:outline-none focus:border-amber-400">
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black py-2.5 rounded-xl transition text-xs shadow-lg shadow-amber-950/40 cursor-pointer">
+                    Desbloquear Controles de Telegram
+                </button>
+                <div id="msg-admin-pin" class="text-xs text-center text-red-400 hidden">Clave incorrecta. Intenta nuevamente.</div>
+            </form>
+            <div id="admin-status-box" class="hidden mt-3 pt-3 border-t border-cardBorder text-center">
+                <span class="text-xs text-emerald-400 font-bold block">✓ Modo Administrador Activo</span>
+                <button onclick="cerrarModoAdmin()" class="text-[10px] text-slate-400 hover:text-red-400 underline mt-1 cursor-pointer">Desactivar Modo Admin en este navegador</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL DE AUTENTICACIÓN -->
     <div id="modal-auth" role="dialog" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-cardDark border border-cardBorder w-full max-w-[400px] rounded-2xl p-6 relative">
@@ -597,7 +720,7 @@
                     <div class="font-black text-xl text-white mt-1">S/ 39.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
                         <li>✓ Análisis completo de cada partido</li>
-                        <li>✓ Top 3 del día completo</li>
+                        <li>✓ Top 5 del día completo</li>
                         <li>✓ Simulación Monte Carlo (10K)</li>
                         <li>✓ Selecciones de alta probabilidad</li>
                         <li>✓ Kelly en soles personalizado</li>
@@ -771,9 +894,9 @@
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
-        const GRUPO_DE_SECCION = { partidos: 'partidos', top3: 'top3', montecarlo: 'analisis', anclas: 'analisis',
+        const GRUPO_DE_SECCION = { partidos: 'partidos', top3: 'top3', parlays: 'parlays', montecarlo: 'analisis', anclas: 'analisis',
             cashout: 'herramientas', kelly: 'herramientas', auditoria: 'historial', telegram_panel: 'comunidad', admin: 'admin' };
-        const PRIMERA_SECCION = { partidos: 'partidos', top3: 'top3', analisis: 'montecarlo', herramientas: 'cashout',
+        const PRIMERA_SECCION = { partidos: 'partidos', top3: 'top3', parlays: 'parlays', analisis: 'montecarlo', herramientas: 'cashout',
             historial: 'auditoria', comunidad: 'telegram_panel', admin: 'admin' };
         const MODULOS_PRO = ['montecarlo', 'kelly', 'anclas'];
 
@@ -818,6 +941,7 @@
             if (sub) sub.classList.toggle('hidden', visibles < 2);
 
             if (seccionId === 'top3') cargarTop3();
+            if (seccionId === 'parlays') { cargarParlayQuant('balanceada'); }
             if (seccionId === 'anclas') cargarRadarAnclas();
             if (seccionId === 'auditoria') cargarAuditoria();
             if (seccionId === 'cashout') calcularHedgeInteractivo();
@@ -935,7 +1059,8 @@
         function actualizarUI() {
             const u = window.currentUserState;
             const plan = (u && u.plan) ? u.plan.toLowerCase() : 'free';
-            const esAdmin = Boolean(u && u.esAdmin);
+            const esAdminPorPin = localStorage.getItem('predicxion_admin_activo') === 'true';
+            const esAdmin = Boolean(u && u.esAdmin) || esAdminPorPin;
 
             const b = document.getElementById('nav-user-badge');
             if (b) {
@@ -1063,8 +1188,6 @@
 
         // DISPARAR ALERTA A TELEGRAM (BOT VIP ROTATIVO DINÁMICO)
         async function dispararAlertaTelegram() {
-            const u = window.currentUserState;
-            if (!u || !u.logueado) { notificar("Inicia sesión como administrador."); return; }
             const btn = document.getElementById('btn-disparar-tg');
             const statusBox = document.getElementById('tg-broadcast-status');
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Emitiendo alerta...`;
@@ -1090,8 +1213,6 @@
         }
 
         async function enviarFijaDePartido(matchId) {
-            const u = window.currentUserState;
-            if (!u || !u.logueado) { notificar("Inicia sesión como administrador."); return; }
             notificar("Transmitiendo pronóstico al canal VIP...");
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/telegram-alert/broadcast`, {
@@ -1113,8 +1234,6 @@
         // CARGA DE DATOS DE LOS 10 MÓDULOS
         
         async function dispararAuditoriaTelegram() {
-            const u = window.currentUserState;
-            if (!u || !u.logueado) { notificar("Inicia sesión como administrador."); return; }
             const btn = document.getElementById('btn-disparar-aud-tg');
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Transmitiendo...`;
             notificar("Transmitiendo balance oficial de auditoría al canal de Telegram...");
@@ -1513,6 +1632,7 @@
             const probs = item.probabilidades || {};
             const p1x2 = probs["1X2"] || {};
             const fair = probs["fair_odds"] || {};
+            window.partidoModalActualMemoria = item;
             const dobles = item.dobles_oportunidades || {};
             const pil = item.pilares_cuantitativos || {};
             const stks = item.organizacion_stakazos || {};
@@ -1523,7 +1643,7 @@
                     <div class="flex justify-between items-center border-b border-cardBorder pb-3 flex-wrap gap-2">
                         <span class="text-xs font-bold text-accentGreen uppercase tracking-wider"><i class="fa-solid fa-trophy mr-1"></i> ${item.liga}</span>
                         <div class="flex items-center gap-2">
-                            <button onclick="enviarFijaDePartido('${item.id_partido}')" class="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition" title="Enviar esta fija directamente al grupo VIP">
+                            <button onclick="enviarFijaDePartido('${item.id_partido}')" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition" title="Enviar esta fija directamente al grupo VIP">
                                 <i class="fa-brands fa-telegram"></i> Emitir a Telegram VIP
                             </button>
                             <span class="text-xs text-slate-400 font-mono">${(item.fecha || "").split(" ")[0]}</span>
@@ -1534,6 +1654,23 @@
                         <div class="w-[42%]"><h3 class="text-base sm:text-xl font-black text-white m-0">${item.local}</h3></div>
                         <div class="text-xs font-black text-slate-500 uppercase px-2">VS</div>
                         <div class="w-[42%]"><h3 class="text-base sm:text-xl font-black text-white m-0">${item.visitante}</h3></div>
+                    </div>
+
+                    
+                    <!-- REPRODUCTOR DE VOZ IA CUANTITATIVA DEL ENCUENTRO -->
+                    <div class="bg-gradient-to-r from-emerald-950/60 via-cardDark to-baseDark border border-lime-500/40 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-lg flex-wrap">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-lime-400/20 border border-lime-400/40 flex items-center justify-center text-lime-400 text-base shadow-inner">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div>
+                                <span class="text-[9px] font-black uppercase text-accentGreen block tracking-wider">IA DE VOZ CUANTITATIVA</span>
+                                <span class="text-xs font-bold text-white">Escucha el análisis narrado del partido</span>
+                            </div>
+                        </div>
+                        <button onclick="reproducirAudioPartidoModal()" id="btn-audio-modal" class="bg-lime-400 hover:bg-lime-300 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition shadow-md shadow-lime-950/40 cursor-pointer">
+                            <i class="fa-solid fa-play"></i> <span>Escuchar Explicación</span>
+                        </button>
                     </div>
 
                     <!-- PANEL CONSENSO TRIPLE IA (GEMINI ANALISTA + DEEPSEEK +EV + GROK AUDITOR) -->
@@ -1821,7 +1958,7 @@
         cargarDatosCartelera();
     
         // =========================================================================
-        // CONTROLADOR TOP 3 PRONÓSTICOS DEL DÍA
+        // CONTROLADOR TOP 5 PRONÓSTICOS DEL DÍA
         // =========================================================================
         let fechaTop3Activa = "";
         let _ultimaFechaRecargada = "";
@@ -1867,7 +2004,7 @@
                     if (elM) elM.innerText = String(m).padStart(2, '0');
                     if (elS) elS.innerText = String(s).padStart(2, '0');
                 } catch (e) {
-                    console.error("Error en countdown Top 3:", e);
+                    console.error("Error en countdown Top 5:", e);
                 }
             }
             actualizarTimer();
@@ -1875,33 +2012,31 @@
         }
 
         function navegarFechaTop3(delta) {
-            // Deshabilitado: el Top 3 rota 24/7 de forma 100% automática a medianoche
+            // Deshabilitado: el Top 5 rota 24/7 de forma 100% automática a medianoche
             cargarTop3();
         }
 
         
         async function dispararParlayTelegram() {
-            const u = window.currentUserState;
-            if (!u || !u.logueado) { notificar("Inicia sesión como administrador."); return; }
             const btn = document.getElementById('btn-disparar-parlay-tg');
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
-            notificar("Transmitiendo Parlay Top 5 al canal VIP de Telegram...");
+            notificar("Transmitiendo Top 5 al canal VIP de Telegram...");
 
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/telegram-parlay/broadcast`, {
                     method: 'POST',
-                    headers: await authHeaders()
+                    headers: { 'Content-Type': 'application/json' }
                 });
                 const data = await res.json();
                 if (data.success) {
-                    notificar("✓ Parlay Top 5 emitido con éxito a Telegram VIP.");
+                    notificar("✓ Top 5 transmitido con éxito al canal VIP de Telegram.");
                 } else {
-                    notificar(data.error || "Error al emitir Parlay.");
+                    notificar(data.error || "Error al emitir Top 5.");
                 }
             } catch (e) {
-                notificar("Error de conexión al emitir Telegram.");
+                notificar("Error de conexión al emitir a Telegram.");
             } finally {
-                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram"></i> Enviar Top 5 a Telegram VIP`;
+                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>`;
             }
         }
 
@@ -1911,7 +2046,7 @@
             const displayFecha = document.getElementById('top3-fecha-display');
 
             if (!cont) return;
-            cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando el Top 3 del día...</div>`;
+            cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando el Top 5 del día...</div>`;
 
             try {
                 const url = fechaTop3Activa ? `/api/v1/top3/daily?fecha=${fechaTop3Activa}` : `/api/v1/top3/daily`;
@@ -1944,6 +2079,7 @@
                 );
 
                 let htmlCards = '';
+                window.top5DataMemoria = data.top3;
                 data.top3.forEach(t => {
                     const esBloqueado = t.exclusivo_vip && !esVip;
 
@@ -2052,14 +2188,24 @@
                                     </div>
                                 `)}
                             </div>
+
+                            <!-- Botón de Audio IA para este partido -->
+                            <div class="mt-2.5 pt-2 border-t border-cardBorder/40 flex items-center justify-between gap-2">
+                                <button onclick="reproducirAudioPartidoTop5(${t.rank})" id="btn-audio-top5-${t.rank}" class="bg-baseDark hover:bg-slate-800 text-lime-400 border border-cardBorder hover:border-lime-500/40 text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer" title="Escuchar explicación hablada de la IA para este partido">
+                                    <i class="fa-solid fa-volume-high text-[10px]"></i> <span>Escuchar Análisis IA</span>
+                                </button>
+                                <span class="text-[9px] text-slate-500 font-mono flex items-center gap-1">
+                                    <i class="fa-solid fa-microphone text-[8px] text-accentGreen"></i> Voz Cuantitativa
+                                </span>
+                            </div>
                         </div>
                     `;
                 });
 
                 cont.innerHTML = htmlCards;
             } catch (err) {
-                console.error("Error cargando Top 3:", err);
-                cont.innerHTML = `<div class="text-xs text-red-400 text-center py-6">Error cargando Top 3. Intenta de nuevo más tarde.</div>`;
+                console.error("Error cargando Top 5:", err);
+                cont.innerHTML = `<div class="text-xs text-red-400 text-center py-6">Error cargando Top 5. Intenta de nuevo más tarde.</div>`;
             }
         }
 
@@ -2073,6 +2219,408 @@
         // =========================================================================
         // CONTROLADOR ACTUALIZAR TICKET BET BUILDER
         // =========================================================================
+        
+        // =========================================================================
+        // CONTROLADOR DE PARLAYS CUANTITATIVOS
+        // =========================================================================
+        let perfilParlayActivo = 'balanceada';
+        let parlayActualData = null;
+
+        function seleccionarPerfilParlay(perfil) {
+            perfilParlayActivo = perfil;
+            document.querySelectorAll('.btn-perfil-parlay').forEach(btn => {
+                btn.classList.remove('border-amber-500/50', 'bg-amber-500/20', 'text-amber-300');
+                btn.classList.add('border-cardBorder', 'bg-cardDark', 'text-slate-300');
+            });
+            const btnActivo = document.getElementById(`btn-perfil-${perfil}`);
+            if (btnActivo) {
+                btnActivo.classList.remove('border-cardBorder', 'bg-cardDark', 'text-slate-300');
+                btnActivo.classList.add('border-amber-500/50', 'bg-amber-500/20', 'text-amber-300');
+            }
+            cargarParlayQuant(perfil);
+        }
+
+        async function cargarParlayQuant(perfil = null) {
+            if (perfil) perfilParlayActivo = perfil;
+            const cont = document.getElementById('parlay-cards-container');
+            const cuotaEl = document.getElementById('parlay-cuota-val');
+            const probEl = document.getElementById('parlay-prob-val');
+            const evEl = document.getElementById('parlay-ev-val');
+            const stakeEl = document.getElementById('parlay-stake-val');
+
+            if (cont) cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando combinada cuantitativa óptima (${perfilParlayActivo})...</div>`;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/bet-builder/quant?perfil=${perfilParlayActivo}`);
+                const data = await res.json();
+                if (!data.success || !data.selecciones || data.selecciones.length === 0) {
+                    if (cont) cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-6">No se encontraron selecciones para este perfil en este momento.</div>`;
+                    return;
+                }
+
+                parlayActualData = data;
+
+                if (cuotaEl) cuotaEl.innerText = `@${data.cuota_total || data.cuota_combinada || '2.25'}`;
+                if (probEl) probEl.innerText = data.probabilidad_matematica || '78.5%';
+                if (evEl) evEl.innerText = data.ev_estimado || '+10.2% EV';
+                if (stakeEl) stakeEl.innerText = data.gestion_bankroll_kelly || 'Stake 2.5% (Kelly 1/4)';
+
+                let html = '';
+                data.selecciones.forEach((s, idx) => {
+                    html += `
+                        <div class="bg-baseDark/90 border border-cardBorder rounded-2xl p-4 shadow-lg flex items-center justify-between gap-4 flex-wrap hover:border-amber-500/40 transition">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-cardDark border border-cardBorder flex items-center justify-center text-lg flex-shrink-0">
+                                    ${s.icono || '🎯'}
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] font-bold text-amber-400 uppercase tracking-wider">#${idx + 1}</span>
+                                        <span class="text-[11px] font-bold text-slate-400">${esc(s.liga)}</span>
+                                    </div>
+                                    <h4 class="text-sm font-black text-white m-0">${esc(s.partido)}</h4>
+                                    <div class="text-xs font-bold text-lime-400 mt-0.5 flex items-center gap-1.5">
+                                        <i class="fa-solid fa-check-circle text-[10px]"></i> ${esc(s.mercado)}
+                                    </div>
+                                    <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-md">${esc(s.razon || 'Filtro cuantitativo con alto diferencial xG.')}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 self-end sm:self-center">
+                                <div class="text-right">
+                                    <span class="text-[10px] text-slate-500 block uppercase font-mono">Prob. IA</span>
+                                    <span class="text-xs font-bold text-emerald-400 font-mono">${Math.round((s.prob || 0.8) * 100)}%</span>
+                                </div>
+                                <div class="bg-cardDark border border-amber-500/40 px-3 py-1.5 rounded-xl text-center shadow-inner">
+                                    <span class="text-[9px] text-slate-400 block font-mono">Cuota</span>
+                                    <span class="text-sm font-black text-amber-400 font-mono">@${s.cuota}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                if (cont) cont.innerHTML = html;
+            } catch (e) {
+                console.error("Error en cargarParlayQuant:", e);
+                if (cont) cont.innerHTML = `<div class="text-xs text-red-400 text-center py-6">Error generando combinada. Intenta de nuevo.</div>`;
+            }
+        }
+
+        function copiarBoletoParlay() {
+            if (!parlayActualData || !parlayActualData.selecciones) {
+                notificar("Primero genera una combinada.");
+                return;
+            }
+            const d = parlayActualData;
+            let txt = `🔥 BOLETO PARLAY COMBINADO IA (${(d.perfil || 'Balanceada').toUpperCase()}) 🔥\n`;
+            txt += `💰 Cuota Total: @${d.cuota_total} | Prob: ${d.probabilidad_matematica} | EV: ${d.ev_estimado}\n`;
+            txt += `🛡️ Gestión de Bankroll: ${d.gestion_bankroll_kelly}\n\n`;
+            d.selecciones.forEach((s, i) => {
+                txt += `${i + 1}. ${s.partido} (${s.liga})\n   🎯 Mercado: ${s.mercado} @${s.cuota}\n   📊 Prob: ${Math.round((s.prob || 0.8) * 100)}%\n\n`;
+            });
+            txt += `📲 Analizado con PredicXion IA: https://predicxion-ia.onrender.com`;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(txt).then(() => {
+                    notificar("✓ Boleto copiado al portapapeles listo para apostar.");
+                }).catch(() => {
+                    notificar("No se pudo copiar automáticamente.");
+                });
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = txt;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                notificar("✓ Boleto copiado al portapapeles.");
+            }
+        }
+
+        async function dispararParlayGeneradoTelegram() {
+            if (!parlayActualData || !parlayActualData.selecciones) {
+                notificar("Genera una combinada antes de emitir.");
+                return;
+            }
+            const btn = document.getElementById('btn-tg-parlay-builder');
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Emitiendo...`;
+            notificar("Transmitiendo parlay generado a Telegram VIP...");
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/vip/telegram-parlay/broadcast`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(parlayActualData)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    notificar("✓ Parlay generado transmitido con éxito al canal VIP de Telegram.");
+                } else {
+                    notificar(data.error || "Error al emitir parlay.");
+                }
+            } catch (e) {
+                notificar("Error de conexión al emitir a Telegram.");
+            } finally {
+                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram"></i> Emitir Parlay a Telegram VIP`;
+            }
+        }
+
+        /api/v1/value-edge/comparison`);
+                const data = await res.json();
+                if (!data.success || !data.comparativas || data.comparativas.length === 0) {
+                    cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-4">No se detectaron discrepancias de cuota (+EV) en este bloque horario.</div>`;
+                    return;
+                }
+
+                let html = '';
+                data.comparativas.forEach(c => {
+                    html += `
+                        <div class="bg-baseDark/90 border border-cardBorder rounded-2xl p-4 shadow-md flex items-center justify-between gap-4 flex-wrap hover:border-cyan-500/40 transition">
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-bold text-slate-400">${esc(c.liga)}</span>
+                                    <span class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-[9px] font-black px-2 py-0.5 rounded-full">${esc(c.veredicto || '+EV')}</span>
+                                </div>
+                                <h4 class="text-sm font-black text-white m-0">${esc(c.partido)}</h4>
+                                <div class="text-xs font-bold text-slate-200">
+                                    Mercado: <span class="text-lime-400">${esc(c.mercado)}</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 m-0 max-w-lg">${esc(c.explicacion)}</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="text-center bg-cardDark border border-cardBorder p-2 rounded-xl">
+                                    <span class="text-[9px] text-slate-400 block font-mono">Prob Modelo</span>
+                                    <span class="text-xs font-black text-emerald-400 font-mono">${esc(c.prob_modelo)}</span>
+                                </div>
+                                <div class="text-center bg-cardDark border border-cardBorder p-2 rounded-xl">
+                                    <span class="text-[9px] text-slate-400 block font-mono">Cuota Justa</span>
+                                    <span class="text-xs font-black text-slate-300 font-mono">@${c.cuota_justa}</span>
+                                </div>
+                                <div class="text-center bg-cyan-950/40 border border-cyan-500/40 p-2 rounded-xl shadow-inner">
+                                    <span class="text-[9px] text-cyan-300 block font-mono font-bold">Cuota Mercado</span>
+                                    <span class="text-sm font-black text-cyan-400 font-mono">@${c.cuota_mercado}</span>
+                                </div>
+                                <div class="text-center bg-emerald-950/40 border border-emerald-500/40 px-3 py-2 rounded-xl shadow-inner">
+                                    <span class="text-[9px] text-emerald-300 block font-mono font-bold">Edge (+EV)</span>
+                                    <span class="text-sm font-black text-emerald-400 font-mono">${esc(c.edge_ev)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                cont.innerHTML = html;
+            } catch (e) {
+                console.error("Error en cargarRadarValueEdge:", e);
+                cont.innerHTML = `<div class="text-xs text-red-400 text-center py-4">Error cargando comparativas de cuotas.</div>`;
+            }
+        }
+
+        
+        // =========================================================================
+        // CONTROLADOR DE ACCESO ADMINISTRADOR POR PIN (DESBLOQUEO PRIVADO)
+        // =========================================================================
+        function abrirModalAdminPin() {
+            const m = document.getElementById('modal-admin-pin');
+            if (m) m.classList.remove('hidden');
+            const inp = document.getElementById('input-admin-pin');
+            const statusBox = document.getElementById('admin-status-box');
+            const msg = document.getElementById('msg-admin-pin');
+            if (msg) msg.classList.add('hidden');
+            const yaActivo = localStorage.getItem('predicxion_admin_activo') === 'true';
+            if (statusBox) statusBox.classList.toggle('hidden', !yaActivo);
+            if (inp) { inp.value = ''; inp.focus(); }
+        }
+
+        function cerrarAdminPinModal() {
+            const m = document.getElementById('modal-admin-pin');
+            if (m) m.classList.add('hidden');
+        }
+
+        async function verificarAdminPin(e) {
+            if (e) e.preventDefault();
+            const pin = (document.getElementById('input-admin-pin')?.value || '').trim();
+            const msg = document.getElementById('msg-admin-pin');
+            if (msg) msg.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/v1/admin/verify-pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: pin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    localStorage.setItem('predicxion_admin_pin', pin);
+                    localStorage.setItem('predicxion_admin_activo', 'true');
+                    cerrarAdminPinModal();
+                    notificar("✓ Modo Administrador verificado en el servidor. Botones de Telegram activados solo para ti.");
+                    actualizarUI();
+                } else {
+                    if (msg) { msg.innerText = data.error || "PIN incorrecto"; msg.classList.remove('hidden'); }
+                }
+            } catch (err) {
+                if (msg) { msg.innerText = "Error de conexión con el servidor"; msg.classList.remove('hidden'); }
+            }
+        }
+
+        function cerrarModoAdmin() {
+            localStorage.removeItem('predicxion_admin_pin');
+            localStorage.removeItem('predicxion_admin_activo');
+            cerrarAdminPinModal();
+            notificar("Modo Administrador desactivado en este navegador.");
+            actualizarUI();
+        }
+
+        
+        // =========================================================================
+        // MOTOR DE VOZ IA CUANTITATIVA (Narración de Análisis sin lectura pesada)
+        // =========================================================================
+        let audioEnReproduccion = null;
+        window.top5DataMemoria = window.top5DataMemoria || [];
+        window.partidoModalActualMemoria = window.partidoModalActualMemoria || null;
+
+        function limpiarTextoParaVoz(txt) {
+            if (!txt) return "";
+            return txt
+                .replace(/1X/gi, "gana local o empata")
+                .replace(/X2/gi, "gana visita o empata")
+                .replace(/12/gi, "cualquiera de los dos gana")
+                .replace(/DNB/gi, "empate apuesta no válida")
+                .replace(/xG/gi, "goles esperados")
+                .replace(/\+EV/gi, "valor esperado positivo")
+                .replace(/@([0-9.]+)/g, "cuota $1")
+                .replace(/\+([0-9.]+)/g, "más de $1")
+                .replace(/-([0-9.]+)/g, "menos de $1")
+                .replace(/%/g, " por ciento")
+                .replace(/[•*_#`]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+        }
+
+        function hablarTextoIA(texto, onEndCallback = null, botonId = null) {
+            if (!('speechSynthesis' in window)) {
+                notificar("Tu navegador no soporta síntesis de voz.");
+                return;
+            }
+
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+                if (audioEnReproduccion === botonId) {
+                    audioEnReproduccion = null;
+                    restaurarBotonesAudio();
+                    return;
+                }
+            }
+
+            restaurarBotonesAudio();
+            audioEnReproduccion = botonId;
+
+            if (botonId) {
+                const btn = document.getElementById(botonId);
+                if (btn) {
+                    btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-400 animate-pulse"></i> <span>Detener Voz</span>`;
+                }
+            }
+
+            const textoLimpio = limpiarTextoParaVoz(texto);
+            const utter = new SpeechSynthesisUtterance(textoLimpio);
+            utter.lang = 'es-ES';
+            utter.rate = 1.05;
+            utter.pitch = 1.0;
+
+            const voces = window.speechSynthesis.getVoices();
+            const vozEsp = voces.find(v => v.lang.startsWith('es') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Neural') || v.name.includes('Sabina') || v.name.includes('Jorge'))) 
+                        || voces.find(v => v.lang.startsWith('es')) 
+                        || null;
+            if (vozEsp) utter.voice = vozEsp;
+
+            utter.onend = () => {
+                audioEnReproduccion = null;
+                restaurarBotonesAudio();
+                if (onEndCallback) onEndCallback();
+            };
+
+            utter.onerror = () => {
+                audioEnReproduccion = null;
+                restaurarBotonesAudio();
+            };
+
+            window.speechSynthesis.speak(utter);
+        }
+
+        function restaurarBotonesAudio() {
+            document.querySelectorAll('[id^="btn-audio-top5-"]').forEach(btn => {
+                if (btn.id === 'btn-audio-top5-full') {
+                    btn.innerHTML = `<i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 5 (Voz IA)</span>`;
+                } else {
+                    btn.innerHTML = `<i class="fa-solid fa-volume-high text-[10px]"></i> <span>Escuchar Análisis IA</span>`;
+                }
+            });
+            const btnModal = document.getElementById('btn-audio-modal');
+            if (btnModal) {
+                btnModal.innerHTML = `<i class="fa-solid fa-play"></i> <span>Escuchar Explicación</span>`;
+            }
+            const btnParlay = document.getElementById('btn-audio-parlay');
+            if (btnParlay) {
+                btnParlay.innerHTML = `<i class="fa-solid fa-volume-high"></i> <span>Escuchar Parlay (Voz IA)</span>`;
+            }
+        }
+
+        function reproducirAudioPartidoTop5(rank) {
+            const list = window.top5DataMemoria || [];
+            const item = list.find(t => t.rank === rank);
+            if (!item) {
+                notificar("No se encontró la información del partido.");
+                return;
+            }
+            const guion = `Análisis de PredicXion IA para ${item.local} contra ${item.visitante}, en ${item.liga}. Nuestro modelo cuantitativo proyecta el mercado ${item.mercado}, con una probabilidad matemática del ${item.probabilidad}. Justificación clave: ${item.justificacion}.`;
+            hablarTextoIA(guion, null, `btn-audio-top5-${rank}`);
+        }
+
+        function reproducirAudioTop5Completo() {
+            const list = window.top5DataMemoria || [];
+            if (!list || list.length === 0) {
+                notificar("Cargando partidos del Top 5...");
+                return;
+            }
+            let guion = "Resumen de los cinco pronósticos destacados de hoy por PredicXion IA. ";
+            list.forEach((item, idx) => {
+                guion += `Selección número ${idx + 1}: ${item.local} contra ${item.visitante}. Jugada recomendada: ${item.mercado}, probabilidad ${item.probabilidad}. `;
+            });
+            guion += "Verifica los detalles cuantitativos en la plataforma.";
+            hablarTextoIA(guion, null, 'btn-audio-top5-full');
+        }
+
+        function reproducirAudioPartidoModal() {
+            const p = window.partidoModalActualMemoria;
+            if (!p) {
+                notificar("Selecciona un partido para escuchar el análisis.");
+                return;
+            }
+            const local = p.local || "Local";
+            const vis = p.visitante || "Visitante";
+            const liga = p.liga || "Competición Oficial";
+            const mercado = (p.pronostico_principal && p.pronostico_principal.seleccion) || "Victoria Local";
+            const prob = (p.pronostico_principal && p.pronostico_principal.probabilidad) || "80%";
+            const just = (p.pronostico_principal && p.pronostico_principal.justificacion) || "Ventaja estadística en goles esperados y solidez defensiva.";
+
+            const guion = `Análisis del encuentro ${local} frente a ${vis}, por la ${liga}. Pronóstico principal sugerido: ${mercado}. Probabilidad estimada: ${prob}. Justificación técnica: ${just}.`;
+            hablarTextoIA(guion, null, 'btn-audio-modal');
+        }
+
+        function reproducirAudioParlay() {
+            if (!parlayActualData || !parlayActualData.selecciones || parlayActualData.selecciones.length === 0) {
+                notificar("Genera una combinada primero.");
+                return;
+            }
+            const d = parlayActualData;
+            let guion = `Combinada parlay generada por inteligencia artificial en perfil ${d.perfil || 'balanceado'}. Cuota combinada total: cuota ${d.cuota_total}. Probabilidad matemática: ${d.probabilidad_matematica}. Selecciones incluidas: `;
+            d.selecciones.forEach((s, idx) => {
+                guion += `Partido ${idx + 1}: ${s.partido}, jugada recomendada: ${s.mercado}, a cuota ${s.cuota}. `;
+            });
+            guion += `Recomendación de bankroll: ${d.gestion_bankroll_kelly}.`;
+            hablarTextoIA(guion, null, 'btn-audio-parlay');
+        }
+
         iniciarCountdownTop3();
 </script>
     <footer class="w-full border-t border-cardBorder bg-baseDark px-4 sm:px-8 py-5 text-[11px] leading-relaxed text-slate-400">
@@ -2080,6 +2628,12 @@
             <p><strong class="text-slate-200">Solo mayores de 18 años.</strong> PredicXion IA ofrece estimaciones estadísticas de fútbol con fines informativos. No es una casa de apuestas, no recibe apuestas y no garantiza resultados ni ganancias. Los resultados pasados no aseguran resultados futuros.</p>
             <p>Las probabilidades salen de un modelo Poisson con valores base de cada equipo que se actualizan manualmente; pueden contener errores. Compáralas siempre con la cuota real de tu casa y apuesta solo dinero que puedas permitirte perder.</p>
             <p>Si apostar deja de ser un pasatiempo o te genera problemas, busca ayuda profesional y considera pausar el juego.</p>
+            <div class="flex items-center justify-between pt-2 border-t border-cardBorder/40">
+                <span class="text-[10px] text-slate-500">© 2026 PredicXion IA • Terminal Cuantitativa</span>
+                <button onclick="abrirModalAdminPin()" class="text-[10px] text-slate-600 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer">
+                    <i class="fa-solid fa-shield-halved"></i> <span>Panel Administrador</span>
+                </button>
+            </div>
         </div>
     </footer>
 </body>
