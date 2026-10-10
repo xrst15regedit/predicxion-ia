@@ -814,6 +814,71 @@ Tu misión:
             }
         }
 
+
+# --------------------------------------------------------------------------------------
+# SERVICIO THE ODDS API (CUOTAS REALES DE CASAS DE APUESTAS)
+# --------------------------------------------------------------------------------------
+class TheOddsAPIService:
+    BASE_URL = "https://api.the-odds-api.com/v4"
+
+    @classmethod
+    def get_api_key(cls):
+        return (os.getenv("ODDS_API_KEY") or os.getenv("THE_ODDS_API_KEY") or "").strip()
+
+    @classmethod
+    def get_sport_key(cls, liga: str) -> str:
+        l = (liga or "").lower()
+        if "premier league" in l: return "soccer_epl"
+        if "primera divisi" in l or "laliga" in l: return "soccer_spain_la_liga"
+        if "bundesliga" in l: return "soccer_germany_bundesliga"
+        if "serie a" in l and "brasil" not in l: return "soccer_italy_serie_a"
+        if "ligue 1" in l: return "soccer_france_ligue_one"
+        if "primeira liga" in l: return "soccer_portugal_primeira_liga"
+        if "brasileir" in l: return "soccer_brazil_campeonato"
+        if "champions" in l: return "soccer_uefa_champs_league"
+        if "nations" in l: return "soccer_uefa_nations_league"
+        return "soccer_epl"
+
+    @classmethod
+    def fetch_live_odds(cls, liga: str, local: str, visita: str) -> dict:
+        key = cls.get_api_key()
+        if not key:
+            return {}
+        try:
+            sport = cls.get_sport_key(liga)
+            url = f"{cls.BASE_URL}/sports/{sport}/odds/?apiKey={key}&regions=eu&markets=h2h,totals&oddsFormat=decimal"
+            resp = requests.get(url, timeout=6)
+            if resp.status_code == 200:
+                events = resp.json()
+                loc_clean = re.sub(r'[^a-z0-9]', '', local.lower())
+                vis_clean = re.sub(r'[^a-z0-9]', '', visita.lower())
+                for ev in events:
+                    h = re.sub(r'[^a-z0-9]', '', ev.get("home_team", "").lower())
+                    a = re.sub(r'[^a-z0-9]', '', ev.get("away_team", "").lower())
+                    if (loc_clean in h or h in loc_clean) and (vis_clean in a or a in vis_clean):
+                        # Extraer mejores cuotas
+                        best_odds = {}
+                        for book in ev.get("bookmakers", []):
+                            b_name = book.get("title")
+                            for mkt in book.get("markets", []):
+                                if mkt.get("key") == "h2h":
+                                    for out in mkt.get("outcomes", []):
+                                        o_name = out.get("name")
+                                        price = out.get("price")
+                                        if o_name == ev.get("home_team"):
+                                            if price > best_odds.get("1", {}).get("cuota", 0):
+                                                best_odds["1"] = {"cuota": price, "casa": b_name}
+                                        elif o_name == ev.get("away_team"):
+                                            if price > best_odds.get("2", {}).get("cuota", 0):
+                                                best_odds["2"] = {"cuota": price, "casa": b_name}
+                                        elif out.get("name") == "Draw":
+                                            if price > best_odds.get("X", {}).get("cuota", 0):
+                                                best_odds["X"] = {"cuota": price, "casa": b_name}
+                        return {"disponible": True, "evento": ev.get("id"), "cuotas": best_odds}
+        except Exception as e:
+            logger.warning("Fallo consultando The Odds API: %s", e)
+        return {}
+
 class SportsAnalyticsEngine:
     # BASE DE DATOS HISTÓRICA INSTITUCIONAL (ÚLTIMOS PARTIDOS, ESTADÍSTICAS REALES Y ELO)
     TEAM_HISTORICAL_DATABASE = {
@@ -13744,8 +13809,25 @@ def create_app() -> Flask:
             for k in todos:
                 todos[k] = sorted(todos[k], key=lambda x: str(x.get("fecha") or ""))
 
+            # FILTRO DE DESTACADOS DEL DÍA: ORDENADOS POR VALOR/PROBABILIDAD Y LIMITADOS ESTRICTAMENTE A MÁXIMO 12
+            def _extract_prob(p_item):
+                p_raw = p_item.get("pronostico_principal", {}).get("probabilidad", "50%")
+                return float(re.sub(r'[^0-9.]', '', str(p_raw)) or 50.0)
+
+            # Si hay partidos del día, ordenarlos de mayor a menor probabilidad y limitar al Top 12
+            if destacados:
+                destacados.sort(key=_extract_prob, reverse=True)
+                destacados = destacados[:12]
+            else:
+                # Si la fecha exacta no tiene partidos, extraer los mejores del pool de la fecha más próxima (máximo 12)
+                pool_proximos = []
+                for k, lista in todos.items():
+                    pool_proximos.extend(lista)
+                pool_proximos.sort(key=_extract_prob, reverse=True)
+                destacados = pool_proximos[:12]
+
             total_partidos = sum(len(v) for v in todos.values())
-            logger.info("Retornando %d partidos totales en %d ligas oficiales (Rango activo: %s a 2026-11-30). Destacados hoy: %d", total_partidos, len(todos), today_str, len(destacados))
+            logger.info("Retornando %d partidos totales en %d ligas oficiales (Rango activo: %s a 2026-11-30). Destacados hoy (Top 12): %d", total_partidos, len(todos), today_str, len(destacados))
 
             return jsonify({
                 "success": True,
@@ -14018,14 +14100,16 @@ def create_app() -> Flask:
                 })
 
             ranked.sort(key=lambda x: x["prob_num"], reverse=True)
+            # Solicitud de usuario: Top 5 del día en lugar de solo 3
+            limite_top = int(request.args.get("limit", 5))
             top3_list = []
-            for idx, item in enumerate(ranked[:3]):
+            for idx, item in enumerate(ranked[:limite_top]):
                 rank = idx + 1
                 top3_list.append({
                     **item,
                     "rank": rank,
-                    "exclusivo_vip": rank in [1, 2],
-                    "es_gratis_telegram": rank == 3
+                    "exclusivo_vip": rank in [1, 2, 3, 4],
+                    "es_gratis_telegram": rank == 5
                 })
 
             avail_dates = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= today_str)))[:7]
@@ -14284,6 +14368,66 @@ def create_app() -> Flask:
             },
             "historial": historial_activo
         })
+
+    # EMISIÓN DE PARLAY COMBINADA / TOP 5 DIRECTO A TELEGRAM VIP
+    @app.route("/api/v1/vip/telegram-parlay/broadcast", methods=["POST"])
+    @require_auth
+    def broadcast_telegram_parlay():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso restringido al administrador."}), 403
+
+        bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+        channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
+        if "t.me/" in channel_id:
+            channel_id = "@" + channel_id.split("t.me/")[-1].replace("+", "").strip().rstrip("/")
+        elif channel_id and not channel_id.startswith("@") and not channel_id.startswith("-") and not channel_id.isdigit():
+            channel_id = "@" + channel_id
+
+        if not bot_token or not channel_id:
+            return jsonify({"success": False, "error": "Falta configurar TELEGRAM_BOT_TOKEN o TELEGRAM_CHANNEL_ID en Render."}), 400
+
+        try:
+            today_str = get_current_operational_date()
+            t_res = get_daily_top3().get_json()
+            items = t_res.get("top3", [])[:5]
+
+            if not items:
+                return jsonify({"success": False, "error": "No hay selecciones disponibles hoy."}), 400
+
+            cuota_total = 1.0
+            lineas = [
+                "🔥 <b>PARLAY TOP 5 DESTACADOS DEL DÍA • PREDICXION IA</b> 🔥\n",
+                f"📅 <b>Fecha Operativa:</b> {today_str}",
+                "⚡️ <b>Filtro Cuantitativo:</b> Mayor Probabilidad Matemática (Poisson & xG)\n"
+            ]
+
+            for i, p in enumerate(items, 1):
+                cuota_p = float(p.get("cuota_justa", 1.45))
+                cuota_total *= cuota_p
+                lineas.append(f"<b>{i}. {p.get('partido')}</b> ({p.get('liga')})")
+                lineas.append(f"   🎯 Mercado: <b>{p.get('mercado')}</b>")
+                lineas.append(f"   📊 Probabilidad: <code>{p.get('probabilidad')}</code> | Cuota Justa: <code>@{cuota_p:.2f}</code>\n")
+
+            lineas.append(f"💰 <b>Cuota Total Estimada:</b> <code>@{cuota_total:.2f}</code>")
+            lineas.append("🛡 <b>Gestión de Capital:</b> 1.5% - 2.0% del Bankroll (Kelly S/)")
+            lineas.append("\n📲 <i>Verifica el análisis completo en <a href='https://predicxion-ia.onrender.com'>predicxion-ia.onrender.com</a></i>")
+
+            mensaje = chr(10).join(lineas)
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            resp = requests.post(url, json={
+                "chat_id": channel_id,
+                "text": mensaje,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }, timeout=10)
+
+            if resp.status_code == 200:
+                return jsonify({"success": True, "mensaje": "Parlay Top 5 enviado exitosamente al canal VIP."}), 200
+            return jsonify({"success": False, "error": f"Error de Telegram: {resp.text}"}), 500
+        except Exception as err:
+            logger.error("Error transmitiendo parlay: %s", err)
+            return jsonify({"success": False, "error": str(err)}), 500
 
     @app.route("/api/v1/vip/telegram-auditoria/broadcast", methods=["POST"])
     def broadcast_telegram_auditoria():
