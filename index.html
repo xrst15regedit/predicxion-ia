@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PredicXion IA - Terminal Cuantitativa & Ecosistema VIP</title>
-    <meta name="description" content="Terminal con 10 Módulos VIP Cuantitativos, Simulación Monte Carlo, Kelly en Soles, Arbitraje y Alertas Telegram.">
+    <meta name="description" content="Probabilidades de fútbol con modelo Poisson, simulación Monte Carlo, calculadora Kelly y de cobertura. Estimaciones estadísticas sin garantías. Solo mayores de 18.">
     <link rel="manifest" href="/static/manifest.json">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080e1a'/><text x='50%' y='68%' font-size='55' font-weight='bold' fill='%2300d084' text-anchor='middle'>P</text></svg>">
     
@@ -62,6 +62,7 @@
                             email: user.email,
                             token: token,
                             esVip: false,
+                            esAdmin: false,
                             plan: "free"
                         };
                         try {
@@ -73,6 +74,7 @@
                             const syncData = await syncRes.json();
                             if (syncData.success) {
                                 window.currentUserState.esVip = syncData.es_vip || false;
+                                window.currentUserState.esAdmin = syncData.es_admin || false;
                                 window.currentUserState.plan = syncData.plan || "free";
                             }
                         } catch (e) {}
@@ -95,6 +97,7 @@
         .toast-notification { visibility: hidden; min-width: 280px; background-color: #00d084; color: #022c22; text-align: center; border-radius: 14px; padding: 14px 22px; position: fixed; z-index: 200; left: 50%; bottom: 30px; font-size: 13px; font-weight: 800; transform: translateX(-50%); opacity: 0; transition: all 0.3s; }
         .toast-notification.show { visibility: visible; opacity: 1; bottom: 45px; }
         .tab-active { background-color: #1e293b; color: #00d084; border-color: #00d084; }
+        .nav-tab-main.nav-activo { background-color: rgba(2, 44, 34, 0.8); color: #00d084; border-color: #00d084; font-weight: 900; }
     </style>
 </head>
 
@@ -108,7 +111,7 @@
                 PredicXion<span class="text-accentGreen"> IA</span>
                 <span id="nav-user-badge" class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">Free Tier</span>
             </h1>
-            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Terminal Cuantitativa • 10 Módulos VIP</p>
+            <p class="text-[10px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Probabilidades de fútbol • Poisson & Monte Carlo</p>
         </div>
 
         <div class="flex items-center gap-2.5">
@@ -147,7 +150,7 @@
                 <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
                 <div class="text-[10px] font-mono text-slate-300 bg-baseDark/90 px-3 py-1.5 rounded-xl border border-cardBorder/60 flex items-center justify-between">
                     <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span> <strong class="text-white">Fase Activa:</strong></span>
-                    <span class="text-accentGreen font-bold font-mono">07 Oct – 30 Nov 2026</span>
+                    <span class="text-accentGreen font-bold font-mono">Hasta 30 Nov 2026</span>
                 </div>
             </div>
 
@@ -164,7 +167,7 @@
                 <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-3">
                     <div class="flex items-center gap-2">
                         <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
-                        <span class="text-xs font-black uppercase tracking-wider text-slate-200">Arquitectura Cuantitativa • 10 Módulos Operacionales</span>
+                        <span class="text-xs font-black uppercase tracking-wider text-slate-200">Modelo estadístico • Poisson & Monte Carlo</span>
                     </div>
                     <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-accentGreen border border-emerald-500/30">Poisson & Monte Carlo 10K</span>
                 </div>
@@ -189,102 +192,68 @@
                 </div>
             </div>
 
-            <!-- NAVEGACIÓN PRINCIPAL: PESTAÑAS INDEPENDIENTES -->
-            <div class="max-w-5xl mx-auto w-full mb-4 flex items-center justify-between gap-2 border-b border-cardBorder pb-3 flex-wrap">
+            <!-- NAVEGACIÓN PRINCIPAL -->
+            <div class="max-w-5xl mx-auto w-full mb-3 flex items-center justify-between gap-2 border-b border-cardBorder pb-3 flex-wrap">
                 <div class="flex items-center gap-2 flex-wrap" id="main-nav-tabs">
-                    <button onclick="navegarPestanaPrincipal('partidos')" id="nav-tab-partidos" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 border border-accentGreen bg-emerald-950/80 text-accentGreen shadow-lg shadow-emerald-950/40">
-                        <i class="fa-solid fa-futbol text-sm"></i> <span>Cartelera & 7 Pilares</span>
+                    <button onclick="navegarPestanaPrincipal('partidos')" id="nav-tab-partidos" class="nav-tab-main nav-activo px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-futbol text-sm"></i> <span>Partidos</span>
                     </button>
                     <button onclick="navegarPestanaPrincipal('top3')" id="nav-tab-top3" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
                         <i class="fa-solid fa-trophy text-lime-400"></i> <span>Top 3 del Día</span>
-                        <span id="lock-top3-nav" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
+                        <span id="lock-top3-nav" class="text-amber-400 text-[10px]"></span>
                     </button>
-                    <button onclick="navegarPestanaPrincipal('playerprops')" id="nav-tab-playerprops" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
-                        <i class="fa-solid fa-person-running text-amber-400"></i> <span>Player Props VIP</span>
-                        <span id="lock-playerprops-nav" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
+                    <button onclick="navegarPestanaPrincipal('analisis')" id="nav-tab-analisis" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-dice text-cyan-400"></i> <span>Simulación</span>
+                        <span id="lock-analisis-nav" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
                     </button>
-                    <button onclick="navegarPestanaPrincipal('modulos')" id="nav-tab-modulos" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
-                        <i class="fa-solid fa-layer-group text-cyan-400"></i> <span>Módulos Cuantitativos</span>
+                    <button onclick="navegarPestanaPrincipal('herramientas')" id="nav-tab-herramientas" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-calculator text-amber-400"></i> <span>Herramientas</span>
                     </button>
-                </div>
-                <div class="text-[11px] font-mono text-slate-400 hidden sm:flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span>
-                    <span>Oddster Engine • Live</span>
+                    <button onclick="navegarPestanaPrincipal('historial')" id="nav-tab-historial" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-clock-rotate-left text-slate-300"></i> <span>Historial</span>
+                    </button>
+                    <button onclick="navegarPestanaPrincipal('comunidad')" id="nav-tab-comunidad" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-brands fa-telegram text-sky-400"></i> <span>Telegram</span>
+                    </button>
+                    <button onclick="navegarPestanaPrincipal('admin')" id="nav-tab-admin" class="nav-tab-main hidden px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
+                        <i class="fa-solid fa-user-shield text-rose-400"></i> <span>Admin</span>
+                    </button>
                 </div>
             </div>
 
-            <!-- SELECTOR DE HERRAMIENTAS & MÓDULOS VIP CON CANDADOS 🔒 -->
-            <div id="sub-bar-modulos" class="max-w-5xl mx-auto w-full mb-5 flex flex-wrap gap-2 border-b border-cardBorder/60 pb-3">
-                <button onclick="intentarAccesoModulo('top3')" id="tab-mod-top3" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1.5">
-                    <i class="fa-solid fa-trophy text-lime-400"></i> Top 3 del Día <span id="lock-top3" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="cambiarModuloPrincipal('partidos')" id="tab-mod-partidos" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition tab-active">
-                    <i class="fa-solid fa-futbol mr-1 text-accentGreen"></i> 7 Pilares
-                </button>
-                <button onclick="intentarAccesoModulo('montecarlo')" id="tab-mod-montecarlo" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
+            <!-- SUB-PESTAÑAS (solo se muestran las del grupo activo) -->
+            <div id="sub-bar-modulos" class="hidden max-w-5xl mx-auto w-full mb-5 flex flex-wrap gap-2 border-b border-cardBorder/60 pb-3">
+                <button onclick="intentarAccesoModulo('montecarlo')" id="tab-mod-montecarlo" data-grupo="analisis" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
                     <i class="fa-solid fa-dice text-cyan-400"></i> Monte Carlo <span id="lock-montecarlo" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
                 </button>
-                <button onclick="intentarAccesoModulo('kelly')" id="tab-mod-kelly" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-calculator text-amber-400"></i> Kelly Soles <span id="lock-kelly" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
+                <button onclick="intentarAccesoModulo('anclas')" id="tab-mod-anclas" data-grupo="analisis" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
+                    <i class="fa-solid fa-anchor text-emerald-400"></i> Alta probabilidad <span id="lock-anclas" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
                 </button>
-                <button onclick="intentarAccesoModulo('anclas')" id="tab-mod-anclas" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-anchor text-emerald-400"></i> Anclas (&gt;80%) <span id="lock-anclas" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
+                <button onclick="intentarAccesoModulo('cashout')" id="tab-mod-cashout" data-grupo="herramientas" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
+                    <i class="fa-solid fa-hand-holding-dollar text-green-400"></i> Calculadora de cobertura
                 </button>
-                <button onclick="intentarAccesoModulo('micromercados')" id="tab-mod-micromercados" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-flag text-yellow-400"></i> Micromercados <span id="lock-micromercados" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('fatiga')" id="tab-mod-fatiga" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-heart-pulse text-red-400"></i> Fatiga <span id="lock-fatiga" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="cambiarModuloPrincipal('auditoria')" id="tab-mod-auditoria" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-clock-rotate-left text-slate-400"></i> Auditoría
-                </button>
-                <button onclick="intentarAccesoModulo('valuebets')" id="tab-mod-valuebets" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-chart-line text-blue-400"></i> +EV <span id="lock-valuebets" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('surebets')" id="tab-mod-surebets" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-bolt text-purple-400"></i> Surebets <span id="lock-surebets" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('smartmoney')" id="tab-mod-smartmoney" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-money-bill-trend-up text-pink-400"></i> Smart Money <span id="lock-smartmoney" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="cambiarModuloPrincipal('telegram_panel')" id="tab-mod-telegram_panel" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-brands fa-telegram text-sky-400"></i> Bot VIP
-                </button>
-                <button onclick="intentarAccesoModulo('playerprops')" id="tab-mod-playerprops" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-person-running text-amber-400"></i> Player Props <span id="lock-playerprops" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('streaks')" id="tab-mod-streaks" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-fire text-orange-400"></i> Radar Rachas <span id="lock-streaks" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('betbuilder')" id="tab-mod-betbuilder" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i> Bet Builder Quant <span id="lock-betbuilder" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('valueedge')" id="tab-mod-valueedge" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-scale-balanced text-cyan-400"></i> Comparador Cuotas <span id="lock-valueedge" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
-                </button>
-                <button onclick="intentarAccesoModulo('cashout')" id="tab-mod-cashout" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
-                    <i class="fa-solid fa-hand-holding-dollar text-green-400"></i> Calculadora Cobertura <span id="lock-cashout" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
+                <button onclick="intentarAccesoModulo('kelly')" id="tab-mod-kelly" data-grupo="herramientas" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
+                    <i class="fa-solid fa-calculator text-amber-400"></i> Kelly en soles <span id="lock-kelly" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
                 </button>
             </div>
 
             <!-- MÓDULO 0: CARTELERA 7 PILARES -->
             
             <!-- ========================================================================= -->
-            <!-- APARTADO EXCLUSIVO: TOP 3 PRONÓSTICOS DEL DÍA (ESTILO BOTANALIST / ODDSTER) -->
+            <!-- APARTADO EXCLUSIVO: TOP 3 PRONÓSTICOS DEL DÍA -->
             <!-- ========================================================================= -->
             <div id="seccion-top3" class="seccion-principal hidden max-w-xl mx-auto w-full mb-8 space-y-4">
                 <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
-                    <!-- Cabecera estilo Oddster -->
+                    <!-- Cabecera -->
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
                         <div>
                             <div class="text-[10px] font-black uppercase tracking-wider text-accentGreen flex items-center gap-1.5">
-                                <i class="fa-solid fa-crosshairs"></i> ODDSTER ENGINE • PREDICXION IA
+                                <i class="fa-solid fa-crosshairs"></i> PREDICXION IA
                             </div>
                             <h2 class="text-3xl sm:text-4xl font-black text-white m-0 tracking-tight flex items-center gap-1.5">
                                 Top <span class="text-lime-400">3</span>
                             </h2>
-                            <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">Las tres predicciones con mayor ventaja matemática del día, seleccionadas automáticamente por el motor de PredicXion IA.</p>
+                            <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">Las tres selecciones de mayor probabilidad del día según el modelo estadístico de PredicXion IA. Son estimaciones, no garantías.</p>
                         </div>
                         <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-950 to-baseDark border border-lime-500/40 flex items-center justify-center text-lime-400 text-xl font-black shadow-lg shadow-lime-950/40">
                             <i class="fa-solid fa-trophy"></i>
@@ -294,10 +263,10 @@
                     <!-- Indicador de fecha oficial del Top 3 (Sin botones de cambio manual) -->
                     <div class="flex items-center justify-center bg-baseDark/90 border border-emerald-800/40 rounded-2xl px-4 py-2.5 font-mono text-xs font-black text-white gap-2 shadow-inner">
                         <i class="fa-regular fa-calendar-days text-lime-400"></i>
-                        <span>PRONÓSTICOS DE HOY</span> • <span id="top3-fecha-display" class="text-lime-400">07.10.2026</span>
+                        <span>PRONÓSTICOS DE HOY</span> • <span id="top3-fecha-display" class="text-lime-400">—</span>
                     </div>
 
-                    <!-- Temporizador Countdown estilo Oddster -->
+                    <!-- Temporizador Countdown -->
                     <div class="bg-gradient-to-r from-emerald-950/80 via-cardDark to-baseDark border border-emerald-800/60 rounded-2xl p-4 flex items-center justify-between shadow-inner flex-wrap gap-3">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl bg-emerald-900/50 border border-emerald-700/60 flex items-center justify-center text-lime-400 text-base">
@@ -378,23 +347,11 @@
                 </div>
             </div>
 
-            <!-- MÓDULO 1: +EV SCANNER -->
-            <div id="seccion-valuebets" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-chart-line text-blue-400"></i> Módulo 1: Escáner de Valor Esperado Positivo (+EV)</h3>
-                        <span class="text-[10px] bg-blue-950 text-blue-300 border border-blue-800 px-2 py-0.5 rounded font-black uppercase">Plan Élite</span>
-                    </div>
-                    <p class="text-xs text-slate-400">Rastrea desajustes matemáticos donde la probabilidad real supera la cuota implícita de las casas.</p>
-                    <div id="contenedor-valuebets" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Cargando apuestas con valor esperado...</p></div>
-                </div>
-            </div>
-
             <!-- MÓDULO 2: ANCLAS (>80%) -->
             <div id="seccion-anclas" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-anchor text-emerald-400"></i> Módulo 2: Generador de Anclas Seguras (&gt;80% Viabilidad)</h3>
+                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-anchor text-emerald-400"></i> Generador de Anclas Seguras (&gt;80% Viabilidad)</h3>
                         <span class="text-[10px] bg-emerald-950 text-accentGreen border border-emerald-800 px-2 py-0.5 rounded font-black uppercase">Plan Pro & Élite</span>
                     </div>
                     <div id="contenedor-anclas-radar" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Consultando anclas en base de datos...</p></div>
@@ -405,7 +362,7 @@
             <div id="seccion-kelly" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-calculator text-amber-400"></i> Módulo 3: Criterio de Kelly Personalizado (en Soles S/)</h3>
+                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-calculator text-amber-400"></i> Criterio de Kelly Personalizado (en Soles S/)</h3>
                         <span class="text-[10px] bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded font-black uppercase">Plan Pro & Élite</span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -422,38 +379,48 @@
                 </div>
             </div>
 
-            <!-- MÓDULO 4: MICROMERCADOS (TARJETAS Y CÓRNERS) -->
-            <div id="seccion-micromercados" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-flag text-yellow-400"></i> Módulo 4: Micromercados (Tarjetas & Córners)</h3>
-                        <span class="text-[10px] bg-yellow-950 text-yellow-300 border border-yellow-800 px-2 py-0.5 rounded font-black uppercase">Plan Pro & Élite</span>
+            <!-- ADMINISTRACIÓN (solo dueño; el servidor lo vuelve a verificar) -->
+            <div id="seccion-admin" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
+                        <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-money-check-dollar text-emerald-400"></i> Pagos Yape / Plin pendientes</h3>
+                        <p class="text-[11px] text-slate-400">Verifica cada abono en tu app antes de aprobar. Al aprobar se activan 30 días del plan.</p>
+                        <div id="admin-pagos" class="space-y-2 text-xs"><p class="text-slate-500">Cargando...</p></div>
                     </div>
-                    <p class="text-xs text-slate-400">Pronósticos cuantitativos en mercados alternativos basados en fricción y estilo de juego.</p>
-                    <div id="contenedor-micromercados" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Cargando micromercados...</p></div>
+                    <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
+                        <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-cyan-400"></i> Registrar un pick</h3>
+                        <p class="text-[11px] text-slate-400">Regístralo ANTES del partido: queda guardado con la hora del servidor y luego se liquida como ganado o perdido.</p>
+                        <input id="pick-partido" type="text" maxlength="120" placeholder="Partido (ej. Real Madrid vs Getafe)" class="w-full bg-baseDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white">
+                        <input id="pick-seleccion" type="text" maxlength="120" placeholder="Selección (ej. Gana Real Madrid)" class="w-full bg-baseDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white">
+                        <div class="grid grid-cols-2 gap-2">
+                            <input id="pick-cuota" type="number" step="0.01" min="1.01" placeholder="Cuota real" class="bg-baseDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white">
+                            <input id="pick-fecha" type="date" class="bg-baseDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white">
+                        </div>
+                        <button onclick="registrarPick()" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black py-2.5 rounded-xl text-xs">Registrar pick</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- MÓDULO 5: PANEL TELEGRAM BOT VIP -->
+            <!-- PANEL TELEGRAM -->
             <div id="seccion-telegram_panel" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-brands fa-telegram text-sky-400"></i> Módulo 5: Alertas Instantáneas por Bot de Telegram</h3>
+                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-brands fa-telegram text-sky-400"></i> Comunidad y avisos por Telegram</h3>
                         <span class="text-[10px] bg-sky-950 text-sky-300 border border-sky-800 px-2 py-0.5 rounded font-black uppercase">Comunidad & Alertas</span>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="bg-baseDark border border-cardBorder p-4 rounded-xl space-y-3">
-                            <h4 class="text-xs font-black uppercase text-slate-200">Unirse al Grupo VIP</h4>
-                            <p class="text-xs text-slate-400">Recibe las anclas y alertas +EV en tiempo real directo en tu celular.</p>
+                            <h4 class="text-xs font-black uppercase text-slate-200">Unirse al canal</h4>
+                            <p class="text-xs text-slate-400">Recibe los pronósticos y avisos del analista directo en tu celular.</p>
                             <a href="https://t.me/predicxionIA" target="_blank" class="w-full bg-sky-500 hover:bg-sky-400 text-slate-950 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition">
                                 <i class="fa-brands fa-telegram"></i> Entrar al Grupo de Telegram
                             </a>
                         </div>
-                        <div id="panel-admin-telegram" class="bg-baseDark border border-cardBorder p-4 rounded-xl space-y-3">
-                            <h4 class="text-xs font-black uppercase text-amber-400 flex items-center gap-1.5"><i class="fa-solid fa-tower-broadcast"></i> Emisión de Pronóstico VIP</h4>
+                        <div id="panel-admin-telegram" class="solo-admin hidden bg-baseDark border border-cardBorder p-4 rounded-xl space-y-3">
+                            <h4 class="text-xs font-black uppercase text-amber-400 flex items-center gap-1.5"><i class="fa-solid fa-tower-broadcast"></i> Emisión de pronóstico</h4>
                             <p class="text-xs text-slate-400">Dispara la jugada cuantitativa seleccionada directamente al canal VIP de Telegram con tu bot.</p>
                             <button onclick="dispararAlertaTelegram()" id="btn-disparar-tg" class="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition">
-                                <i class="fa-solid fa-paper-plane"></i> Enviar Fija al Grupo VIP
+                                <i class="fa-solid fa-paper-plane"></i> Enviar pronóstico al canal
                             </button>
                             <div id="tg-broadcast-status" class="text-[11px] font-mono text-center"></div>
                         </div>
@@ -466,39 +433,17 @@
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
                         <div class="flex items-center gap-2">
-                            <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Módulo 6: Historial de Auditoría Transparente</h3>
-                            <span class="text-[9px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-cardBorder">Rotación 24/7 de Partidos Finalizados</span>
+                            <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Historial de picks (auditoría transparente)</h3>
+                            <span class="text-[9px] bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-cardBorder">Solo picks registrados</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition" title="Enviar reporte de aciertos y pérdidas a Telegram">
-                                <i class="fa-brands fa-telegram"></i> Enviar Aciertos a Telegram VIP
+                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition" title="Enviar reporte de aciertos y pérdidas a Telegram">
+                                <i class="fa-brands fa-telegram"></i> Enviar resumen a Telegram
                             </button>
-                            <span class="text-[10px] bg-emerald-950 text-accentGreen border border-emerald-800 px-2.5 py-1 rounded-lg font-black font-mono" id="auditoria-roi-badge">88.9% Acierto</span>
+                            <span class="text-[10px] bg-emerald-950 text-accentGreen border border-emerald-800 px-2.5 py-1 rounded-lg font-black font-mono" id="auditoria-roi-badge">Cargando...</span>
                         </div>
                     </div>
-                    <div id="contenedor-auditoria" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Consultando historial verificado...</p></div>
-                </div>
-            </div>
-
-            <!-- MÓDULO 7: SUREBETS / ARBITRAJE -->
-            <div id="seccion-surebets" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-bolt text-purple-400"></i> Módulo 7: Escáner de Arbitraje Deportivo (Surebets)</h3>
-                        <span class="text-[10px] bg-purple-950 text-purple-300 border border-purple-800 px-2 py-0.5 rounded font-black uppercase">Exclusivo Élite</span>
-                    </div>
-                    <div id="contenedor-surebets-radar" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Escaneando arbitrajes...</p></div>
-                </div>
-            </div>
-
-            <!-- MÓDULO 8: ÍNDICE DE FATIGA -->
-            <div id="seccion-fatiga" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-heart-pulse text-red-400"></i> Módulo 8: Índice de Fatiga y Congestión de Calendario</h3>
-                        <span class="text-[10px] bg-red-950 text-red-300 border border-red-800 px-2 py-0.5 rounded font-black uppercase">Plan Pro & Élite</span>
-                    </div>
-                    <div id="contenedor-fatiga" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Analizando días de descanso de plantilla...</p></div>
+                    <div id="contenedor-auditoria" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Consultando historial...</p></div>
                 </div>
             </div>
 
@@ -506,7 +451,7 @@
             <div id="seccion-montecarlo" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-dice text-cyan-400"></i> Módulo 9: Simulación Estocástica Monte Carlo (10,000 Partidos)</h3>
+                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-dice text-cyan-400"></i> Simulación Estocástica Monte Carlo (10,000 Partidos)</h3>
                         <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded font-black uppercase">Plan Pro & Élite</span>
                     </div>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -525,132 +470,12 @@
                 </div>
             </div>
 
-            <!-- MÓDULO 10: SMART MONEY & DROPPING ODDS -->
-            <div id="seccion-smartmoney" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
-                        <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-money-bill-trend-up text-pink-400"></i> Módulo 10: Rastreador de Dinero Inteligente (Dropping Odds)</h3>
-                        <span class="text-[10px] bg-pink-950 text-pink-300 border border-pink-800 px-2 py-0.5 rounded font-black uppercase">Exclusivo Élite</span>
-                    </div>
-                    <div id="contenedor-smartmoney" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Rastreando caídas bruscas de cuotas...</p></div>
-                </div>
-            </div>
-
-            <!-- MÓDULO 11: PLAYER PROPS (ESTADÍSTICAS Y RENDIMIENTO DE JUGADORES) -->
-            <div id="seccion-playerprops" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-5">
-                    <div class="flex flex-wrap items-center justify-between border-b border-cardBorder pb-3 gap-2">
-                        <div>
-                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
-                                <i class="fa-solid fa-person-running text-amber-400"></i> Módulo 11: Radar de Goleadores y Player Props (Tiros, Goles, Asistencias)
-                            </h3>
-                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">Proyecciones cuantitativas y estadísticas reales extraídas de 4 fuentes oficiales (Flashscore, WhoScored, FBref y API-Football) vinculadas al próximo rival real de cada club.</p>
-                        </div>
-                        <div class="space-y-3 w-full">
-                        <div class="flex items-center gap-1.5 flex-wrap" id="pp-ligas-bar">
-                            <button onclick="filtrarPlayerProps('todas')" id="btn-pp-todas" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-black border border-accentGreen bg-emerald-950/60 text-accentGreen transition">Todas (7 Ligas)</button>
-                            <button onclick="filtrarPlayerProps('Primera División')" id="btn-pp-primeradivisin" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Primera División (España)</button>
-                            <button onclick="filtrarPlayerProps('Premier League')" id="btn-pp-premierleague" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Premier League (Inglaterra)</button>
-                            <button onclick="filtrarPlayerProps('Bundesliga')" id="btn-pp-bundesliga" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Bundesliga (Alemania)</button>
-                            <button onclick="filtrarPlayerProps('Ligue 1')" id="btn-pp-ligue1" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Ligue 1 (Francia)</button>
-                            <button onclick="filtrarPlayerProps('Serie A')" id="btn-pp-seriea" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Serie A (Italia)</button>
-                            <button onclick="filtrarPlayerProps('Primeira Liga')" id="btn-pp-primeiraliga" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Primeira Liga (Portugal)</button>
-                            <button onclick="filtrarPlayerProps('Campeonato Brasileiro Série A')" id="btn-pp-campeonatobrasileirosriea" class="btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition">Campeonato Brasileiro (Brasil)</button>
-                        </div>
-                        <!-- Selector de equipos dinámico -->
-                        <div class="flex items-center gap-2 pt-1 border-t border-cardBorder/40">
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-shield mr-1"></i> Filtrar Equipo:</span>
-                            <div class="flex items-center gap-1.5 flex-wrap overflow-x-auto no-scrollbar py-1" id="pp-equipos-container">
-                                <span class="text-[10px] text-slate-500 italic">Selecciona una liga para explorar sus clubes...</span>
-                            </div>
-                        </div>
-                        <!-- Buscador en tiempo real de jugadores -->
-                        <div class="pt-2 border-t border-cardBorder/40">
-                            <div class="relative">
-                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
-                                <input type="text" id="pp-search" oninput="buscarPlayerPropsEnVivo()" placeholder="Buscar jugador por nombre o club (ej. Gabriel Jesus, Gordon, Mbappé, Rodri, Kvaratskhelia, Dembélé, Ferran Torres, Doué, Haaland)..." class="w-full bg-baseDark border border-cardBorder focus:border-accentGreen rounded-xl pl-8 pr-3 py-2 text-xs text-white focus:outline-none">
-                            </div>
-                        </div>
-                    </div>
-                    </div>
-                    <div id="contenedor-playerprops" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
-                        <div class="text-slate-400 py-6 text-center col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando métricas individuales de jugadores...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MÓDULO 12: RADAR DE RACHAS (STREAK FINDER) -->
-            <div id="seccion-streaks" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-5">
-                    <div class="flex flex-wrap items-center justify-between border-b border-cardBorder pb-3 gap-2">
-                        <div>
-                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
-                                <i class="fa-solid fa-fire text-orange-400"></i> Módulo 12: Radar de Rachas y Tendencias Activas (Streak Finder)
-                            </h3>
-                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">Detecta patrones estadísticos recurrentes con alto porcentaje de cumplimiento (Hit Rate &gt;80%).</p>
-                        </div>
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                            <button onclick="cargarStreaks('todas')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 transition">Todas</button>
-                            <button onclick="cargarStreaks('over_goles')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-950 text-accentGreen border border-emerald-800/40 hover:bg-emerald-900 transition">Goles (+2.5)</button>
-                            <button onclick="cargarStreaks('valla_invicta')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/40 hover:bg-cyan-900 transition">Vallas Invictas</button>
-                            <button onclick="cargarStreaks('corners')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800/40 hover:bg-amber-900 transition">Córners (9.5+)</button>
-                            <button onclick="cargarStreaks('tarjetas')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-yellow-950 text-yellow-300 border border-yellow-800/40 hover:bg-yellow-900 transition">Tarjetas (4.5+)</button>
-                            <button onclick="cargarStreaks('victorias')" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-950 text-purple-300 border border-purple-800/40 hover:bg-purple-900 transition">Invictos</button>
-                        </div>
-                    </div>
-                    <div id="contenedor-streaks" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
-                        <div class="text-slate-400 py-6 text-center col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Rastreando rachas en todas las ligas...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MÓDULO 13: CREADOR DE COMBINADAS INTELIGENTES (BET BUILDER QUANT) -->
-            <div id="seccion-betbuilder" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-5">
-                    <div class="flex flex-wrap items-center justify-between border-b border-cardBorder pb-3 gap-2">
-                        <div>
-                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
-                                <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i> Módulo 13: Creador de Combinadas Inteligentes (Bet Builder Quant)
-                            </h3>
-                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">Combina selecciones con viabilidad superior al 80% calculando cuota conjunta y probabilidad matemática real.</p>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button onclick="generarBetBuilder('conservadora')" id="btn-bb-conservadora" class="px-3 py-1.5 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition">2 Anclas (x1.80-2.00)</button>
-                            <button onclick="generarBetBuilder('balanceada')" id="btn-bb-balanceada" class="px-3 py-1.5 rounded-xl text-xs font-bold border border-accentGreen bg-emerald-950/60 text-accentGreen transition font-black">3 Selecciones (x2.10-2.80)</button>
-                            <button onclick="generarBetBuilder('agresiva')" id="btn-bb-agresiva" class="px-3 py-1.5 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition">4 Selecciones (x3.00+)</button>
-                            <button onclick="actualizarTicketBetBuilder()" id="btn-bb-refresh" class="px-3.5 py-1.5 rounded-xl text-xs font-black border border-accentGreen bg-emerald-950/80 text-accentGreen hover:bg-accentGreen hover:text-slate-950 transition flex items-center gap-1.5 shadow-lg"><i class="fa-solid fa-arrows-rotate"></i> Actualizar Ticket / Generar Nuevo</button>
-                        </div>
-                    </div>
-                    <div id="contenedor-betbuilder" class="space-y-4 text-xs">
-                        <div class="text-slate-400 py-6 text-center"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Generando combinada con valor esperado (+EV)...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- MÓDULO 14: COMPARADOR DE CUOTAS JUSTAS VS CASAS (+EV DETECTOR) -->
-            <div id="seccion-valueedge" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-5">
-                    <div class="flex flex-wrap items-center justify-between border-b border-cardBorder pb-3 gap-2">
-                        <div>
-                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
-                                <i class="fa-solid fa-scale-balanced text-cyan-400"></i> Módulo 14: Comparador de Cuotas Justas vs Casas (+EV Detector)
-                            </h3>
-                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">Contrasta la probabilidad matemática calculada por el modelo institucional contra las cuotas de Betano, Bet365 y Te Apuesto.</p>
-                        </div>
-                        <span class="text-[10px] font-mono font-bold px-2.5 py-1 rounded bg-slate-800 text-cyan-400 border border-cyan-500/30">Fórmula: Cuota Mercado &gt; 1 / Prob</span>
-                    </div>
-                    <div id="contenedor-valueedge" class="overflow-x-auto text-xs">
-                        <div class="text-slate-400 py-6 text-center"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Auditando cuotas de mercado...</div>
-                    </div>
-                </div>
-            </div>
-
             <!-- MÓDULO 15: CALCULADORA DE COBERTURA Y CIERRE (CASHOUT & HEDGE TOOL) -->
             <div id="seccion-cashout" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-5">
                     <div class="border-b border-cardBorder pb-3">
                         <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
-                            <i class="fa-solid fa-hand-holding-dollar text-green-400"></i> Módulo 15: Calculadora Cuantitativa de Cobertura y Cierre (Cashout & Hedge)
+                            <i class="fa-solid fa-hand-holding-dollar text-green-400"></i> Calculadora Cuantitativa de Cobertura y Cierre (Cashout & Hedge)
                         </h3>
                         <p class="text-[11px] text-slate-400 m-0 mt-0.5">Calcula el monto óptimo para cubrir tu apuesta en vivo y compara matemáticamente si conviene aceptar el Cashout de la casa o hacer la cobertura manual.</p>
                     </div>
@@ -756,8 +581,8 @@
                     <div class="font-black text-xl text-white mt-1">Gratis</div>
                     <ul class="text-[10px] text-slate-400 space-y-1.5 mt-3 text-left">
                         <li>✓ Cartelera completa del mes</li>
-                        <li>✓ Probabilidades 1X2 base</li>
-                        <li>✓ Historial de auditoría público</li>
+                        <li>✓ Probabilidades 1X2 y goles del modelo</li>
+                        <li>✓ Historial de picks público</li>
                     </ul>
                 </div>
 
@@ -766,25 +591,22 @@
                     <span class="text-[9px] font-black text-accentGreen uppercase block">Pase Pro</span>
                     <div class="font-black text-xl text-white mt-1">S/ 39.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
-                        <li>✓ Los 7 Pilares Analíticos</li>
-                        <li>✓ Monte Carlo (10K Sims)</li>
-                        <li>✓ Anclas Nivel 1 (&gt;80% viab.)</li>
-                        <li>✓ Kelly en Soles personalizado</li>
-                        <li>✓ Micromercados (Tarjetas & Córners)</li>
-                        <li>✓ Índice de Fatiga de Plantilla</li>
+                        <li>✓ Análisis completo de cada partido</li>
+                        <li>✓ Top 3 del día completo</li>
+                        <li>✓ Simulación Monte Carlo (10K)</li>
+                        <li>✓ Selecciones de alta probabilidad</li>
+                        <li>✓ Kelly en soles personalizado</li>
                     </ul>
                 </div>
 
                 <!-- Pase Quant Élite -->
-                <div onclick="seleccionarPlan(79.90, 'Pase Quant Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500">
+                <div onclick="seleccionarPlan(79.90, 'Pase Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500">
                     <span class="text-[9px] font-black text-amber-400 uppercase block">Pase Élite</span>
                     <div class="font-black text-xl text-white mt-1">S/ 79.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
-                        <li>✓ Los 10 Módulos VIP Desbloqueados</li>
-                        <li>✓ Escáner de Arbitraje (Surebets)</li>
-                        <li>✓ Escáner +EV (Valor Matemático)</li>
-                        <li>✓ Smart Money & Dropping Odds</li>
-                        <li>✓ Grupo Telegram VIP Alertas 1 a 1</li>
+                        <li>✓ Todo lo del Pase Pro</li>
+                        <li>✓ Canal de Telegram con los picks del analista</li>
+                        <li>✓ Análisis de partido con IA (uso moderado)</li>
                     </ul>
                 </div>
             </div>
@@ -901,6 +723,7 @@
         let authModoActual = 'login';
         let planMontoActual = 39.90;
         let planNombreActual = 'Pase Pro';
+        let planIdActual = 'pro';
         let metodoSeleccionado = 'mp';
         let chartMcPartido = null;
         let chartMcCustom = null;
@@ -927,49 +750,45 @@
         function cerrarVipModal() { document.getElementById('modal-vip').classList.add('hidden'); }
 
         // Control de Candados por Plan 🔒
+        // =========================================================================
+        // Sesión: el token de Firebase se renueva solo; lo pedimos en cada llamada
+        // =========================================================================
+        async function authHeaders(extra) {
+            const h = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+            try {
+                const cu = window.fbAuth && window.fbAuth.currentUser;
+                if (cu) h['Authorization'] = `Bearer ${await cu.getIdToken()}`;
+            } catch (e) {}
+            return h;
+        }
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        const GRUPO_DE_SECCION = { partidos: 'partidos', top3: 'top3', montecarlo: 'analisis', anclas: 'analisis',
+            cashout: 'herramientas', kelly: 'herramientas', auditoria: 'historial', telegram_panel: 'comunidad', admin: 'admin' };
+        const PRIMERA_SECCION = { partidos: 'partidos', top3: 'top3', analisis: 'montecarlo', herramientas: 'cashout',
+            historial: 'auditoria', comunidad: 'telegram_panel', admin: 'admin' };
+        const MODULOS_PRO = ['montecarlo', 'kelly', 'anclas'];
+
+        // Candados (solo experiencia de usuario: el servidor es quien realmente protege cada módulo)
         function intentarAccesoModulo(moduloId) {
             const u = window.currentUserState;
-            const plan = (u && u.plan) ? u.plan.toLowerCase() : "free";
-            const esVip = Boolean(u && (u.esVip || plan === 'pro' || plan === 'elite' || u.email === 'fabiancermaz@gmail.com'));
-
-            // Requisitos Élite
-            if (['surebets', 'valuebets', 'smartmoney'].includes(moduloId)) {
-                if (plan !== 'elite' && !esVip) {
-                    notificar("🔒 Este módulo cuantitativo es exclusivo del Plan ÉLITE.");
-                    abrirVipModal();
-                    seleccionarPlan(79.90, 'Pase Quant Élite');
-                    return;
-                }
-            } else if (['montecarlo', 'kelly', 'anclas', 'micromercados', 'fatiga', 'playerprops', 'streaks', 'betbuilder', 'valueedge', 'cashout', 'top3'].includes(moduloId)) {
-                if (plan === 'free' && !esVip) {
-                    notificar("🔒 Este módulo cuantitativo requiere Membresía PRO o ÉLITE.");
-                    abrirVipModal();
-                    seleccionarPlan(39.90, 'Pase Pro');
-                    return;
-                }
+            const plan = (u && u.plan) ? u.plan.toLowerCase() : 'free';
+            if (MODULOS_PRO.includes(moduloId) && plan === 'free') {
+                notificar('🔒 Esta herramienta requiere el Pase Pro.');
+                abrirVipModal();
+                seleccionarPlan(39.90, 'Pase Pro');
+                return;
             }
-
             cambiarModuloPrincipal(moduloId);
         }
 
         function navegarPestanaPrincipal(tabId) {
-            document.querySelectorAll('.nav-tab-main').forEach(b => {
-                b.className = "nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white";
-            });
-            const activeBtn = document.getElementById(`nav-tab-${tabId}`);
-            if (activeBtn) {
-                activeBtn.className = "nav-tab-main px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 border border-accentGreen bg-emerald-950/80 text-accentGreen shadow-lg shadow-emerald-950/40";
-            }
-
-            if (tabId === 'partidos') {
-                cambiarModuloPrincipal('partidos');
-            } else if (tabId === 'top3') {
-                cambiarModuloPrincipal('top3');
-            } else if (tabId === 'playerprops') {
-                intentarAccesoModulo('playerprops');
-            } else if (tabId === 'modulos') {
-                intentarAccesoModulo('montecarlo');
-            }
+            const destino = PRIMERA_SECCION[tabId] || 'partidos';
+            if (MODULOS_PRO.includes(destino)) intentarAccesoModulo(destino);
+            else cambiarModuloPrincipal(destino);
         }
 
         function cambiarModuloPrincipal(seccionId) {
@@ -981,201 +800,28 @@
             const btn = document.getElementById(`tab-mod-${seccionId}`);
             if (btn) btn.classList.add('tab-active');
 
-            // Sincronizar pestañas principales
-            document.querySelectorAll('.nav-tab-main').forEach(b => {
-                b.className = "nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white";
+            const grupo = GRUPO_DE_SECCION[seccionId] || 'partidos';
+            document.querySelectorAll('.nav-tab-main').forEach(b => b.classList.toggle('nav-activo', b.id === `nav-tab-${grupo}`));
+
+            let visibles = 0;
+            document.querySelectorAll('#sub-bar-modulos .tab-mod').forEach(ch => {
+                const mostrar = ch.dataset.grupo === grupo;
+                ch.classList.toggle('hidden', !mostrar);
+                if (mostrar) visibles++;
             });
-            let mainTarget = 'modulos';
-            if (seccionId === 'partidos') mainTarget = 'partidos';
-            else if (seccionId === 'top3') mainTarget = 'top3';
-            else if (seccionId === 'playerprops') mainTarget = 'playerprops';
-            const navBtn = document.getElementById(`nav-tab-${mainTarget}`);
-            if (navBtn) {
-                navBtn.className = "nav-tab-main px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 border border-accentGreen bg-emerald-950/80 text-accentGreen shadow-lg shadow-emerald-950/40";
-            }
+            const sub = document.getElementById('sub-bar-modulos');
+            if (sub) sub.classList.toggle('hidden', visibles < 2);
 
             if (seccionId === 'top3') cargarTop3();
             if (seccionId === 'anclas') cargarRadarAnclas();
-            if (seccionId === 'surebets') cargarEscanerSurebets();
-            if (seccionId === 'valuebets') cargarValueBets();
-            if (seccionId === 'micromercados') cargarMicromercados();
-            if (seccionId === 'fatiga') cargarFatiga();
             if (seccionId === 'auditoria') cargarAuditoria();
-            if (seccionId === 'smartmoney') cargarSmartMoney();
-            if (seccionId === 'playerprops') cargarPlayerProps();
-            if (seccionId === 'streaks') cargarStreaks();
-            if (seccionId === 'betbuilder') generarBetBuilder('balanceada');
-            if (seccionId === 'valueedge') cargarValueEdge();
             if (seccionId === 'cashout') calcularHedgeInteractivo();
+            if (seccionId === 'admin') cargarAdmin();
         }
 
         // =========================================================================
         // CONTROLADORES DE LOS 5 NUEVOS MÓDULOS
         // =========================================================================
-        function filtrarPlayerProps(liga) { cargarPlayerProps(liga, "todos"); }
-
-        async function cargarStreaks(categoria = "todas") {
-            const cont = document.getElementById('contenedor-streaks');
-            if (!cont) return;
-            try {
-                const res = await fetch(`/api/v1/streaks/finder?categoria=${categoria}`);
-                const data = await res.json();
-                const streaks = data.rachas || [];
-                if (streaks.length === 0) {
-                    cont.innerHTML = `<div class="text-slate-400 py-6 text-center col-span-full">No hay rachas activas en esta categoría.</div>`;
-                    return;
-                }
-                cont.innerHTML = streaks.map(s => `
-                    <div class="bg-baseDark border border-cardBorder rounded-xl p-4 space-y-2.5 hover:border-slate-700 transition">
-                        <div class="flex items-center justify-between border-b border-cardBorder pb-2">
-                            <span class="font-black text-sm text-white">${s.icono} ${s.equipo}</span>
-                            <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-orange-950 text-orange-300 border border-orange-800/40">${s.hit_rate} Acierto</span>
-                        </div>
-                        <div class="text-xs text-amber-300 font-bold">${s.racha}</div>
-                        <div class="text-[10px] text-slate-400">Promedio: <span class="font-mono text-slate-200">${s.promedio}</span> • ${s.liga}</div>
-                        <div class="text-[10px] text-slate-400">Próximo: <span class="font-medium text-slate-200">${s.proximo_partido}</span></div>
-                        <div class="bg-cardDark p-2 rounded-lg border border-cardBorder flex items-center justify-between mt-2">
-                            <span class="text-[11px] text-accentGreen font-bold">${s.mercado_recomendado}</span>
-                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-white">@${s.cuota}</span>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (e) {
-                cont.innerHTML = `<div class="text-red-400 py-4 text-center col-span-full">Error al cargar el radar de rachas.</div>`;
-            }
-        }
-
-        async function generarBetBuilder(perfil = "balanceada") {
-            const cont = document.getElementById('contenedor-betbuilder');
-            ['conservadora', 'balanceada', 'agresiva'].forEach(p => {
-                const b = document.getElementById(`btn-bb-${p}`);
-                if (b) {
-                    if (p === perfil) {
-                        b.className = "px-3 py-1.5 rounded-xl text-xs font-black border border-accentGreen bg-emerald-950/60 text-accentGreen transition";
-                    } else {
-                        b.className = "px-3 py-1.5 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition";
-                    }
-                }
-            });
-            if (!cont) return;
-            try {
-                const res = await fetch('/api/v1/bet-builder/quant', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({perfil})
-                });
-                const data = await res.json();
-                const sels = data.selecciones || [];
-                window.ultimoBetBuilderSels = sels;
-                const cuotaComb = data.cuota_combinada || data.cuota_total || '1.85';
-                const probConjunta = data.probabilidad_matematica || '85.0%';
-                const totPart = data.total_partidos || data.total_selecciones || (sels.length);
-                const gestBanca = data.gestion_bankroll_kelly || 'Stake 2.5% (Kelly Fraccional 1/4)';
-                const evEst = data.ev_estimado || '+8.2% EV';
-
-                cont.innerHTML = `
-                    <div class="bg-baseDark border border-cardBorder rounded-xl p-4 space-y-3">
-                        <div class="flex flex-wrap items-center justify-between border-b border-cardBorder pb-3 gap-2">
-                            <div>
-                                <span class="text-[10px] font-black uppercase text-accentGreen tracking-wider block">Ticket Cuantitativo Generado</span>
-                                <h4 class="text-base font-black text-white m-0">Perfil ${data.perfil} (${totPart} Selecciones)</h4>
-                            </div>
-                            <div class="flex items-center gap-3 text-right">
-                                <div><span class="text-[9px] text-slate-400 block">Cuota Combinada</span><strong class="text-xl font-black text-accentGreen font-mono">@${cuotaComb}</strong></div>
-                                <div><span class="text-[9px] text-slate-400 block">Probabilidad Conjunta</span><strong class="text-xl font-black text-white font-mono">${probConjunta}</strong></div>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2">
-                            ${sels.map((s, idx) => `
-                                <div class="flex items-center justify-between text-xs bg-cardDark/70 p-2.5 rounded-xl border border-cardBorder/40">
-                                    <div class="space-y-0.5">
-                                        <div class="font-bold text-white">${s.icono} ${s.partido} <span class="text-[10px] font-normal text-slate-400">(${s.liga})</span></div>
-                                        <div class="text-[11px] text-accentGreen font-medium">${s.mercado}</div>
-                                        <div class="text-[10px] text-slate-400 italic">${s.razon || ''}</div>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="font-mono text-xs text-white font-bold block">@${s.cuota}</span>
-                                        <span class="font-mono text-[10px] text-slate-400">${Math.round((s.prob || 0.8) * 100)}%</span>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-
-                        <div class="bg-cardDark/40 p-3 rounded-xl border border-cardBorder flex flex-wrap items-center justify-between text-[11px] gap-2">
-                            <span class="text-slate-300"><i class="fa-solid fa-coins text-amber-400 mr-1"></i> Gestión de Banca: <strong class="text-white">${gestBanca}</strong> (${evEst})</span>
-                            <button onclick="copiarTicketCombinada('${cuotaComb}', '${probConjunta}')" class="bg-emerald-950 text-accentGreen border border-emerald-800/60 hover:bg-emerald-900 text-[10px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
-                                <i class="fa-regular fa-copy"></i> Copiar Ticket
-                            </button>
-                        </div>
-                    </div>
-                `;
-            } catch (e) {
-                cont.innerHTML = `<div class="text-red-400 py-4 text-center">Error al generar combinada inteligente.</div>`;
-            }
-        }
-
-        function copiarTicketCombinada(cuota, prob) {
-            let texto = `🎯 TICKET CUANTITATIVO PREDICXION IA\n`;
-            texto += `⚡ Cuota Combinada: @${cuota} | Probabilidad Matemática: ${prob}\n`;
-            texto += `────────────────────────────\n`;
-            if (window.ultimoBetBuilderSels && window.ultimoBetBuilderSels.length > 0) {
-                window.ultimoBetBuilderSels.forEach((s, i) => {
-                    texto += `${i + 1}. ${s.partido} (${s.liga})\n   👉 ${s.mercado} @${s.cuota} (${Math.round((s.prob || 0.8) * 100)}%)\n`;
-                });
-                texto += `────────────────────────────\n`;
-            }
-            texto += `💰 Gestión Sugerida: Stake 2.5% (Criterio Kelly Fraccional 1/4)\n`;
-            texto += `Ecosistema Cuantitativo PredicXion IA`;
-            navigator.clipboard.writeText(texto);
-            mostrarToast("¡Ticket completo copiado al portapapeles!");
-        }
-
-        async function cargarValueEdge() {
-            const cont = document.getElementById('contenedor-valueedge');
-            if (!cont) return;
-            try {
-                const res = await fetch('/api/v1/value-edge/comparison');
-                const data = await res.json();
-                const list = data.comparaciones || [];
-                if (list.length === 0) {
-                    cont.innerHTML = `<div class="text-slate-400 py-6 text-center">No se detectaron discrepancias de cuotas en este momento.</div>`;
-                    return;
-                }
-                cont.innerHTML = `
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="border-b border-cardBorder text-[10px] font-black uppercase text-slate-400">
-                                <th class="py-2.5 px-3">Partido & Torneo</th>
-                                <th class="py-2.5 px-3">Mercado Evaluado</th>
-                                <th class="py-2.5 px-3 text-center">Cuota Justa Modelo</th>
-                                <th class="py-2.5 px-3 text-center">Cuota Casas</th>
-                                <th class="py-2.5 px-3 text-center">Ventaja (+EV)</th>
-                                <th class="py-2.5 px-3 text-right">Veredicto</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-cardBorder/40">
-                            ${list.map(c => `
-                                <tr class="hover:bg-cardDark/40 transition">
-                                    <td class="py-2.5 px-3">
-                                        <strong class="text-white block">${c.partido}</strong>
-                                        <span class="text-[10px] text-slate-400">${c.liga} • ${c.fecha}</span>
-                                    </td>
-                                    <td class="py-2.5 px-3 font-medium text-slate-200">${c.mercado}</td>
-                                    <td class="py-2.5 px-3 text-center font-mono font-bold text-slate-300">@${c.cuota_justa} <span class="text-[9px] text-slate-500 block">(${c.prob_modelo})</span></td>
-                                    <td class="py-2.5 px-3 text-center font-mono font-bold text-accentGreen">@${c.cuota_mercado} <span class="text-[9px] text-slate-400 block">${c.casa}</span></td>
-                                    <td class="py-2.5 px-3 text-center font-mono font-black text-accentGreen bg-emerald-950/20 rounded">${c.edge_ev}</td>
-                                    <td class="py-2.5 px-3 text-right"><span class="text-[9px] font-black px-2 py-0.5 rounded bg-emerald-950 text-accentGreen border border-emerald-800/40">${c.veredicto}</span></td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-            } catch (e) {
-                cont.innerHTML = `<div class="text-red-400 py-4 text-center">Error al cargar comparador de cuotas.</div>`;
-            }
-        }
-
         function calcularHedgeInteractivo() {
             const stakeInit = parseFloat(document.getElementById('hedge-stake-init')?.value) || 100;
             const oddsInit = parseFloat(document.getElementById('hedge-odds-init')?.value) || 2.50;
@@ -1283,65 +929,39 @@
 
         function actualizarUI() {
             const u = window.currentUserState;
-            const plan = (u && u.plan) ? u.plan.toLowerCase() : "free";
-            const esVip = u && u.esVip;
+            const plan = (u && u.plan) ? u.plan.toLowerCase() : 'free';
+            const esAdmin = Boolean(u && u.esAdmin);
 
-            const modulosPro = ['montecarlo', 'kelly', 'anclas', 'micromercados', 'fatiga', 'playerprops', 'streaks', 'betbuilder', 'valueedge', 'cashout', 'top3'];
-            const modulosElite = ['valuebets', 'surebets', 'smartmoney'];
-
-            const setLocks = (list, htmlContent) => {
-                list.forEach(m => {
-                    const el = document.getElementById(`lock-${m}`);
-                    if (el) el.innerHTML = htmlContent;
-                });
-            };
-
-            const lockPpNav = document.getElementById('lock-playerprops-nav');
-            const lockTop3Nav = document.getElementById('lock-top3-nav');
-
-            if (plan === 'elite' || esVip) {
-                const b = document.getElementById('nav-user-badge');
-                if (b) {
+            const b = document.getElementById('nav-user-badge');
+            if (b) {
+                if (plan === 'elite') {
                     b.innerText = '💎 ÉLITE';
                     b.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40';
-                }
-                setLocks([...modulosPro, ...modulosElite], '');
-                if (lockPpNav) lockPpNav.innerHTML = '';
-                if (lockTop3Nav) lockTop3Nav.innerHTML = '';
-                const btnV = document.getElementById('btn-abrir-vip');
-                if (btnV) btnV.classList.add('hidden');
-                const bannerT3 = document.getElementById('banner-desbloqueo-top3');
-                if (bannerT3) bannerT3.classList.add('hidden');
-                // Desbloqueo reactivo inmediato del Top 3
-                if (typeof cargarTop3 === 'function') setTimeout(() => cargarTop3(fechaTop3Activa), 50);
-            } else if (plan === 'pro') {
-                const b = document.getElementById('nav-user-badge');
-                if (b) {
+                } else if (plan === 'pro') {
                     b.innerText = '👑 PRO';
                     b.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40';
-                }
-                setLocks(modulosPro, '');
-                setLocks(modulosElite, '<i class="fa-solid fa-lock text-amber-400"></i>');
-                if (lockPpNav) lockPpNav.innerHTML = '';
-                if (lockTop3Nav) lockTop3Nav.innerHTML = '';
-                const btnV = document.getElementById('btn-abrir-vip');
-                if (btnV) btnV.classList.add('hidden');
-                const bannerT3 = document.getElementById('banner-desbloqueo-top3');
-                if (bannerT3) bannerT3.classList.add('hidden');
-                // Desbloqueo reactivo inmediato del Top 3
-                if (typeof cargarTop3 === 'function') setTimeout(() => cargarTop3(fechaTop3Activa), 50);
-            } else {
-                const b = document.getElementById('nav-user-badge');
-                if (b) {
+                } else {
                     b.innerText = 'Free Tier';
                     b.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700';
                 }
-                setLocks([...modulosPro, ...modulosElite], '<i class="fa-solid fa-lock text-amber-400"></i>');
-                if (lockPpNav) lockPpNav.innerHTML = '<i class="fa-solid fa-lock text-amber-400"></i>';
-                if (lockTop3Nav) lockTop3Nav.innerHTML = '<i class="fa-solid fa-lock text-amber-400"></i>';
-                const btnV = document.getElementById('btn-abrir-vip');
-                if (btnV) btnV.classList.remove('hidden');
             }
+
+            const candado = plan === 'free' ? '<i class="fa-solid fa-lock text-amber-400"></i>' : '';
+            ['montecarlo', 'kelly', 'anclas'].forEach(m => {
+                const el = document.getElementById(`lock-${m}`);
+                if (el) el.innerHTML = candado;
+            });
+            const lockA = document.getElementById('lock-analisis-nav');
+            if (lockA) lockA.innerHTML = candado;
+
+            const btnV = document.getElementById('btn-abrir-vip');
+            if (btnV) btnV.classList.toggle('hidden', plan !== 'free');
+            const bannerT3 = document.getElementById('banner-desbloqueo-top3');
+            if (bannerT3 && plan !== 'free') bannerT3.classList.add('hidden');
+
+            const navAdmin = document.getElementById('nav-tab-admin');
+            if (navAdmin) navAdmin.classList.toggle('hidden', !esAdmin);
+            document.querySelectorAll('.solo-admin').forEach(el => el.classList.toggle('hidden', !esAdmin));
 
             if (u && u.logueado) {
                 document.getElementById('btn-login-header').classList.add('hidden');
@@ -1351,9 +971,14 @@
                 document.getElementById('btn-login-header').classList.remove('hidden');
                 document.getElementById('profile-logged').classList.add('hidden');
             }
+
+            // Al cambiar de sesión/plan, recargar lo que depende de él (el contenido lo decide el servidor)
+            if (typeof cargarTop3 === 'function') setTimeout(() => cargarTop3(fechaTop3Activa), 50);
+            if (window.__carteleraCargada && typeof cargarDatosCartelera === 'function') cargarDatosCartelera();
         }
 
         function seleccionarPlan(monto, nombre) {
+            planIdActual = (monto === 79.90) ? 'elite' : 'pro';
             planMontoActual = monto;
             planNombreActual = nombre;
             const cPro = document.getElementById('card-plan-pro');
@@ -1398,12 +1023,12 @@
             try {
                 const res = await fetch(`${API_BASE}/api/v1/payments/create-preference`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` },
-                    body: JSON.stringify({ plan_name: planNombreActual, amount: planMontoActual })
+                    headers: await authHeaders(),
+                    body: JSON.stringify({ plan: planIdActual })
                 });
                 const data = await res.json();
                 if (data.success && data.init_point) window.location.href = data.init_point;
-                else notificar("Error al conectar con MercadoPago.");
+                else notificar(data.error || "Error al conectar con MercadoPago.");
             } catch (e) { notificar("Fallo de red."); }
         }
 
@@ -1420,13 +1045,13 @@
             try {
                 const res = await fetch(`${API_BASE}/api/v1/payments/manual-submit`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` },
-                    body: JSON.stringify({ metodo, telefono: tel, codigo: cod, monto: planMontoActual, plan_texto: planNombreActual })
+                    headers: await authHeaders(),
+                    body: JSON.stringify({ metodo, telefono: tel, codigo: cod, plan: planIdActual })
                 });
                 const data = await res.json();
                 if (data.success) {
                     cerrarVipModal();
-                    notificar("Comprobante enviado a verificación para Gabriel Cerdán.");
+                    notificar("Comprobante enviado. Activaremos tu plan al confirmar el abono.");
                 } else notificar(data.error || "Fallo.");
             } catch (e) { notificar("Fallo de conexión."); }
         }
@@ -1442,7 +1067,7 @@
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/telegram-alert/broadcast`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` },
+                    headers: await authHeaders(),
                     body: JSON.stringify({ rotar: true })
                 });
                 const data = await res.json();
@@ -1455,7 +1080,7 @@
             } catch (e) {
                 statusBox.innerHTML = `<span class="text-red-400 font-bold">Error de red con el bot de Telegram.</span>`;
             } finally {
-                btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar Fija al Grupo VIP (Rotativo Dinámico)`;
+                btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Enviar pronóstico al canal (Rotativo Dinámico)`;
             }
         }
 
@@ -1466,7 +1091,7 @@
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/telegram-alert/broadcast`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` },
+                    headers: await authHeaders(),
                     body: JSON.stringify({ match_id: matchId })
                 });
                 const data = await res.json();
@@ -1481,56 +1106,6 @@
         }
 
         // CARGA DE DATOS DE LOS 10 MÓDULOS
-        async function cargarValueBets() {
-            const cont = document.getElementById('contenedor-valuebets');
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/value-bets`);
-                const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Partido</th><th>Mercado</th><th>Cuota</th><th>Prob. Real</th><th>+EV</th></tr></thead><tbody>';
-                (data.value_bets || []).forEach(v => {
-                    const cuota = v.cuota || v.cuota_mercado || '1.85';
-                    const prob = v.prob_real || v.probabilidad_modelo || '55.0';
-                    const ev = v.ev_pct || v.ev_percent || '4.2';
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${v.partido}</td><td>${v.mercado}</td><td>${cuota}</td><td class="text-accentGreen font-bold font-mono">${prob}%</td><td><span class="bg-blue-950 text-blue-300 font-bold px-2 py-0.5 rounded font-mono">+${ev}%</span></td></tr>`;
-                });
-                cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión con el escáner +EV.</p>'; }
-        }
-
-        async function cargarMicromercados() {
-            const cont = document.getElementById('contenedor-micromercados');
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/micromercados`);
-                const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Partido</th><th>Tipo</th><th>Pronóstico</th><th>Prob.</th><th>Motivo</th></tr></thead><tbody>';
-                (data.micromercados || []).forEach(m => {
-                    const tipo = m.tipo || (m.pronostico && m.pronostico.includes('Córner') ? 'CÓRNERS' : 'TARJETAS');
-                    const pron = m.pronostico || m.pronostico_friccion || m.mercado || 'Más de 7.5 Córners';
-                    const prob = m.probabilidad || (m.probabilidad_oro ? m.probabilidad_oro.replace('%', '') : '82.0');
-                    const mot = m.motivo || m.motivo_tactico || 'Análisis volumétrico y fricción táctica.';
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${m.partido}</td><td><span class="bg-yellow-950 text-yellow-300 px-1.5 py-0.5 rounded font-bold">${tipo}</span></td><td class="text-white font-medium">${pron}</td><td class="text-accentGreen font-bold font-mono">${prob}%</td><td class="text-slate-400">${mot}</td></tr>`;
-                });
-                cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión con micromercados.</p>'; }
-        }
-
-        async function cargarFatiga() {
-            const cont = document.getElementById('contenedor-fatiga');
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/fatiga`);
-                const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Equipo / Partido</th><th>Días Descanso</th><th>Partidos (15 días)</th><th>Diagnóstico Físico</th></tr></thead><tbody>';
-                (data.fatiga || []).forEach(f => {
-                    const eq = f.equipo || f.partido || 'Equipo';
-                    const dias = (f.dias_descanso !== undefined && f.dias_descanso !== null) ? f.dias_descanso : (f.fatiga_local_pct ? Math.round(f.fatiga_local_pct / 12) : 3);
-                    const part = f.partidos_ultimos_15_dias || 4;
-                    const est = f.estado_fisico || f.impacto_rendimiento || 'Condición aeróbica óptima';
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${eq}</td><td class="font-mono text-cyan-300">${dias} días</td><td class="font-mono">${part}</td><td class="font-bold text-amber-400">${est}</td></tr>`;
-                });
-                cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión con índice de fatiga.</p>'; }
-        }
-
         
         async function dispararAuditoriaTelegram() {
             const u = window.currentUserState;
@@ -1542,7 +1117,7 @@
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/telegram-auditoria/broadcast`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${u.token}` }
+                    headers: await authHeaders()
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1553,69 +1128,121 @@
             } catch (e) {
                 notificar("Error de red con el bot de Telegram.");
             } finally {
-                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram"></i> Enviar Aciertos a Telegram VIP`;
+                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram"></i> Enviar resumen a Telegram`;
             }
         }
 
         async function cargarAuditoria() {
             const cont = document.getElementById('contenedor-auditoria');
             const badge = document.getElementById('auditoria-roi-badge');
+            const esAdmin = Boolean(window.currentUserState && window.currentUserState.esAdmin);
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/auditoria`);
                 const data = await res.json();
-                if (data.metricas && badge) {
-                    badge.innerText = `${data.metricas.tasa_acierto_global} Acierto (${data.metricas.ganadas}G - ${data.metricas.perdidas}P)`;
+                const m = data.metricas || {};
+                if (badge) {
+                    badge.innerText = (m.total_picks_auditados > 0)
+                        ? `${m.tasa_acierto_global} acierto · ${m.ganadas}G-${m.perdidas}P · yield ${m.yield_acumulado}`
+                        : 'Sin picks liquidados aún';
                 }
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Fecha</th><th>Partido</th><th>Selección / Mercado</th><th>Cuota</th><th>Resultado / Datos</th><th>Estado</th></tr></thead><tbody>';
-                const lista = (data.historial && data.historial.length > 0) ? data.historial : [];
+                let html = '';
+                if (m.aviso) html += `<p class="text-[11px] text-slate-400 mb-3">${esc(m.aviso)}</p>`;
+                const lista = data.historial || [];
+                if (!lista.length) {
+                    cont.innerHTML = html + '<p class="text-slate-400 py-3">Todavía no hay picks registrados. Cada pick se registra antes del partido y después se marca como ganado o perdido.</p>';
+                    return;
+                }
+                html += '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th class="py-2">Fecha</th><th>Partido</th><th>Selección</th><th>Cuota</th><th>Resultado</th><th>Estado</th></tr></thead><tbody>';
+                const clases = {
+                    GANADA: 'bg-emerald-950 text-accentGreen border border-emerald-800',
+                    PERDIDA: 'bg-rose-950 text-rose-400 border border-rose-800',
+                    ANULADA: 'bg-slate-800 text-slate-300 border border-slate-600',
+                    PENDIENTE: 'bg-amber-950 text-amber-400 border border-amber-800'
+                };
                 lista.forEach(h => {
-                    const badgeClass = (h.estado === 'GANADA')
-                        ? 'bg-emerald-950 text-accentGreen border border-emerald-800'
-                        : 'bg-rose-950 text-rose-400 border border-rose-800';
-                    html += `<tr class="border-b border-cardBorder/40 hover:bg-white/[0.02] transition"><td class="py-2.5 text-slate-400 font-mono">${h.fecha}</td><td class="font-bold text-white">${h.partido}</td><td class="text-slate-200">${h.seleccion}</td><td class="font-mono text-amber-300 font-bold">@${h.cuota}</td><td class="font-mono text-white">${h.resultado}</td><td><span class="${badgeClass} font-bold px-2 py-0.5 rounded text-[10px] font-mono tracking-wide">${h.estado}</span></td></tr>`;
+                    const acciones = (esAdmin && h.estado === 'PENDIENTE')
+                        ? ` <button onclick="liquidarPick('${esc(h.id)}','GANADA')" class="ml-1 text-emerald-400" title="Marcar ganada">✔</button><button onclick="liquidarPick('${esc(h.id)}','PERDIDA')" class="ml-1 text-rose-400" title="Marcar perdida">✖</button>`
+                        : '';
+                    html += `<tr class="border-b border-cardBorder/40 hover:bg-white/[0.02] transition"><td class="py-2.5 text-slate-400 font-mono">${esc(h.fecha)}</td><td class="font-bold text-white">${esc(h.partido)}</td><td class="text-slate-300">${esc(h.seleccion)}</td><td class="font-mono text-cyan-300">@${esc(h.cuota)}</td><td class="text-slate-400">${esc(h.resultado)}</td><td><span class="px-2 py-0.5 rounded font-black text-[10px] ${clases[h.estado] || clases.PENDIENTE}">${esc(h.estado)}</span>${acciones}</td></tr>`;
                 });
                 cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400 py-3">Error de conexión con auditoría.</p>'; }
+            } catch (e) { cont.innerHTML = '<p class="text-red-400 py-3">Error de conexión con el historial.</p>'; }
         }
 
-        async function cargarSmartMoney() {
-            const cont = document.getElementById('contenedor-smartmoney');
+        // =========================================================================
+        // ADMINISTRACIÓN (el servidor vuelve a verificar que seas el dueño)
+        // =========================================================================
+        async function cargarAdmin() {
+            const f = document.getElementById('pick-fecha');
+            if (f && !f.value) f.value = new Date().toISOString().slice(0, 10);
+            const cont = document.getElementById('admin-pagos');
+            if (!cont) return;
             try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/smart-money`);
+                const res = await fetch(`${API_BASE}/api/v1/admin/payments/pending`, { headers: await authHeaders() });
                 const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Partido</th><th>Mercado</th><th>Apertura</th><th>Actual</th><th>Caída</th><th>Flujo</th></tr></thead><tbody>';
-                (data.smart_money || []).forEach(s => {
-                    const caida = s.caida_pct || (s.caida_cuota_pct ? `-${s.caida_cuota_pct}%` : '-8.5%');
-                    const flujo = s.flujo_capital || s.volumen_institucional_estimado || 'S/ 18,500';
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${s.partido}</td><td>${s.mercado}</td><td class="font-mono">${s.cuota_apertura}</td><td class="font-mono text-white font-bold">${s.cuota_actual}</td><td class="font-mono text-red-400 font-bold">${caida}</td><td><span class="bg-pink-950 text-pink-300 font-bold px-2 py-0.5 rounded">${flujo}</span></td></tr>`;
-                });
-                cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión con smart money.</p>'; }
+                if (!data.success) { cont.innerHTML = `<p class="text-rose-400">${esc(data.error || 'Sin acceso')}</p>`; return; }
+                if (!data.pagos.length) { cont.innerHTML = '<p class="text-slate-500">No hay pagos pendientes.</p>'; return; }
+                cont.innerHTML = data.pagos.map(p => `
+                    <div class="bg-baseDark border border-cardBorder rounded-xl p-3 space-y-1">
+                        <div class="font-bold text-white">${esc(p.metodo)} · S/ ${esc(p.monto)} · plan ${esc(p.plan_id)}</div>
+                        <div class="text-slate-400">${esc(p.email)} · cel ${esc(p.telefono_remitente)} · código <span class="font-mono text-cyan-300">${esc(p.codigo_operacion)}</span></div>
+                        <div class="flex gap-2 pt-1">
+                            <button onclick="revisarPago('${esc(p.id)}', true)" class="bg-emerald-500 text-slate-950 font-black px-3 py-1 rounded-lg">Aprobar</button>
+                            <button onclick="revisarPago('${esc(p.id)}', false)" class="bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold px-3 py-1 rounded-lg">Rechazar</button>
+                        </div>
+                    </div>`).join('');
+            } catch (e) { cont.innerHTML = '<p class="text-rose-400">Error de conexión.</p>'; }
+        }
+
+        async function revisarPago(operacionId, aprobar) {
+            if (aprobar && !confirm('¿Confirmas que ya viste este abono en tu app? Se activarán 30 días del plan.')) return;
+            const res = await fetch(`${API_BASE}/api/v1/admin/payments/review`, {
+                method: 'POST', headers: await authHeaders(), body: JSON.stringify({ operacion_id: operacionId, aprobar })
+            });
+            const data = await res.json();
+            notificar(data.success ? (aprobar ? 'Plan activado.' : 'Pago rechazado.') : (data.error || 'No se pudo revisar.'));
+            cargarAdmin();
+        }
+
+        async function registrarPick() {
+            const body = {
+                partido: document.getElementById('pick-partido').value.trim(),
+                seleccion: document.getElementById('pick-seleccion').value.trim(),
+                cuota: parseFloat(document.getElementById('pick-cuota').value),
+                fecha: document.getElementById('pick-fecha').value,
+                estado: 'PENDIENTE'
+            };
+            const res = await fetch(`${API_BASE}/api/v1/admin/auditoria/record`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(body) });
+            const data = await res.json();
+            if (data.success) {
+                notificar('Pick registrado.');
+                ['pick-partido', 'pick-seleccion', 'pick-cuota'].forEach(i => { document.getElementById(i).value = ''; });
+            } else notificar(data.error || 'No se pudo registrar.');
+        }
+
+        async function liquidarPick(id, estado) {
+            const res = await fetch(`${API_BASE}/api/v1/admin/auditoria/record`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ id, estado }) });
+            const data = await res.json();
+            notificar(data.success ? 'Pick liquidado.' : (data.error || 'No se pudo liquidar.'));
+            cargarAuditoria();
         }
 
         async function cargarRadarAnclas() {
             const cont = document.getElementById('contenedor-anclas-radar');
             try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/anclas`);
+                const res = await fetch(`${API_BASE}/api/v1/vip/anclas`, { headers: await authHeaders() });
+                if (res.status === 401 || res.status === 403) {
+                    cont.innerHTML = '<p class="text-amber-400 py-3">🔒 Inicia sesión con el Pase Pro para ver estas selecciones.</p>';
+                    return;
+                }
                 const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Partido</th><th>Liga</th><th>Mercado</th><th>Viabilidad</th><th>Certeza</th></tr></thead><tbody>';
-                (data.anclas || []).forEach(a => {
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${a.partido}</td><td class="text-slate-400">${a.liga || ''}</td><td class="text-cyan-300 font-mono">${a.mercado}</td><td class="text-accentGreen font-bold font-mono">${a.probabilidad}%</td><td><span class="bg-emerald-950 text-accentGreen text-[9px] font-bold px-2 py-0.5 rounded font-mono">${a.confianza}</span></td></tr>`;
+                const lista = data.anclas || [];
+                if (!lista.length) { cont.innerHTML = '<p class="text-slate-400 py-3">Hoy el modelo no encuentra selecciones con 80% o más de probabilidad.</p>'; return; }
+                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th class="py-2">Partido</th><th>Liga</th><th>Mercado</th><th>Probabilidad (modelo)</th></tr></thead><tbody>';
+                lista.forEach(a => {
+                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${esc(a.partido)}</td><td class="text-slate-400">${esc(a.liga)}</td><td class="text-cyan-300 font-mono">${esc(a.mercado)}</td><td class="text-emerald-400 font-mono font-bold">${esc(a.probabilidad)}%</td></tr>`;
                 });
-                cont.innerHTML = html + '</tbody></table>';
-            } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión.</p>'; }
-        }
-
-        async function cargarEscanerSurebets() {
-            const cont = document.getElementById('contenedor-surebets-radar');
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/surebets`);
-                const data = await res.json();
-                let html = '<table class="w-full text-left text-xs"><thead><tr class="text-slate-400 border-b border-cardBorder"><th>Partido</th><th>Mercado</th><th>Casas</th><th>ROI</th></tr></thead><tbody>';
-                (data.surebets || []).forEach(s => {
-                    html += `<tr class="border-b border-cardBorder/40"><td class="py-2 font-bold text-white">${s.partido}</td><td class="text-purple-300 font-mono">${s.mercado}</td><td class="text-slate-400">${s.casas || ''}</td><td><span class="bg-purple-950 text-purple-300 font-bold px-2 py-0.5 rounded font-mono">+${s.margen_beneficio_pct}%</span></td></tr>`;
-                });
-                cont.innerHTML = html + '</tbody></table>';
+                cont.innerHTML = html + '</tbody></table><p class="text-[10px] text-slate-500 mt-3">Probabilidad estimada por el modelo. No es una garantía de resultado.</p>';
             } catch (e) { cont.innerHTML = '<p class="text-red-400">Error de conexión.</p>'; }
         }
 
@@ -1625,8 +1252,9 @@
             if (!local || !visita) { notificar("Ingresa ambos equipos."); return; }
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/monte-carlo/custom`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ local, visita, iteraciones: 10000 })
+                    method: 'POST', headers: await authHeaders(), body: JSON.stringify({ local, visita, iteraciones: 10000 })
                 });
+                if (res.status === 401 || res.status === 403) { notificar('🔒 Inicia sesión con un plan Pro para usar la simulación.'); return; }
                 const data = await res.json();
                 if (data.success && data.monte_carlo) {
                     const sim = data.monte_carlo.simulacion_1x2;
@@ -1652,8 +1280,9 @@
             const prob = parseFloat(document.getElementById('calc-prob').value);
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/bankroll-calculator`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bankroll, cuota, probabilidad_pct: prob })
+                    method: 'POST', headers: await authHeaders(), body: JSON.stringify({ bankroll, cuota, probabilidad_pct: prob })
                 });
+                if (res.status === 401 || res.status === 403) { notificar('🔒 Inicia sesión con un plan Pro para usar Kelly.'); return; }
                 const resp = await res.json();
                 if (resp.success && resp.data) {
                     const d = resp.data;
@@ -1686,7 +1315,8 @@
 
         async function cargarDatosCartelera() {
             try {
-                const res = await fetch(`${API_BASE}/obtener-pronostico`);
+                window.__carteleraCargada = true;
+                const res = await fetch(`${API_BASE}/obtener-pronostico`, { headers: await authHeaders() });
                 const data = await res.json();
                 const todos = data.todos_los_partidos || data.todos || {};
                 if (todos && Object.keys(todos).length > 0) {
@@ -1839,7 +1469,7 @@
             try {
                 const res = await fetch(`${API_BASE}/api/v1/ai/triple-analysis`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await authHeaders(),
                     body: JSON.stringify({ match_id: matchId })
                 });
                 const data = await res.json();
@@ -1997,7 +1627,7 @@
                         <div class="grid sm:grid-cols-2 gap-3 text-xs">
                             <!-- Pilar 1: Gratis -->
                             <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-1.5">
-                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-fire text-amber-400"></i> Pilar 1: Volumen Ofensivo & xG</span>
+                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-fire text-amber-400"></i> Goles esperados (xG del modelo)</span>
                                 <div class="text-white font-medium">xG Proyectado: <strong class="text-accentGreen">${pil.pilar_1_volumen_ofensivo?.xg_proyectado_local}</strong> vs <strong class="text-accentGreen">${pil.pilar_1_volumen_ofensivo?.xg_proyectado_visitante}</strong></div>
                                 <div class="text-[11px] text-slate-300">Remates: <span class="font-mono text-cyan-300 font-bold">${pil.pilar_1_volumen_ofensivo?.tiros_a_puerta || ''}</span></div>
                                 <div class="text-[10px] text-slate-400 font-mono">${pil.pilar_1_volumen_ofensivo?.corners_proyectados || ''}</div>
@@ -2006,7 +1636,7 @@
 
                             <!-- Pilar 2: Gratis con explicación pedagógica completa -->
                             <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-1.5">
-                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-shield text-cyan-400"></i> Pilar 2: Solidez Defensiva & xGA</span>
+                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-shield text-cyan-400"></i> Perfil defensivo (modelo)</span>
                                 <div class="text-white font-medium">${pil.pilar_2_solidez_defensiva?.diagnostico}</div>
                                 <div class="text-[11px] text-slate-400">${pil.pilar_2_solidez_defensiva?.goles_encajados_ultimos3 || ''}</div>
                                 <div class="text-[10px] text-amber-400 font-mono font-bold">Regla Under: ${pil.pilar_2_solidez_defensiva?.regla_under}</div>
@@ -2017,23 +1647,23 @@
 
                             <!-- Pilar 3: Gratis -->
                             <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-1.5">
-                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-bolt text-yellow-400"></i> Pilar 3: Forma, Momentum & Inercia</span>
+                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-bolt text-yellow-400"></i> Tendencia (fuerza relativa)</span>
                                 <div class="text-slate-300">${pil.pilar_3_forma_momentum?.dinamica}</div>
                                 <div class="text-[11px] text-accentGreen font-bold">${pil.pilar_3_forma_momentum?.tendencia || ''}</div>
-                                <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Evaluación psicológica y racha de puntos recientes para proyectar inercia competitiva.</div>
+                                <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Se basa en la fuerza relativa de ambos equipos en el modelo; aún no incluye resultados recientes.</div>
                             </div>
 
                             <!-- Pilar 4: Gratis -->
                             <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-1.5">
-                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-handshake text-emerald-400"></i> Pilar 4: Historial H2H & Fricción</span>
+                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-handshake text-emerald-400"></i> Enfrentamientos directos</span>
                                 <div class="text-slate-300">${pil.pilar_4_historial_h2h?.friccion}</div>
                                 <div class="text-[11px] text-cyan-300 font-medium">${pil.pilar_4_historial_h2h?.antecedente_directo || ''}</div>
-                                <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Índice de roce, faltas estimadas y tendencia en enfrentamientos previos.</div>
+                                <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Resultado de los enfrentamientos directos recientes.</div>
                             </div>
 
                             <!-- Pilar 5: Gratis -->
                             <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-1.5">
-                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-trophy text-purple-400"></i> Pilar 5: Contexto Competitivo & Bajas</span>
+                                <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-trophy text-purple-400"></i> Competición</span>
                                 <div class="text-slate-200 font-medium">${pil.pilar_5_contexto_competitivo?.exigencia}</div>
                                 <div class="text-[11px] text-amber-300">${pil.pilar_5_contexto_competitivo?.novedades_plantilla || ''}</div>
                                 <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Motivación clasificatoria, urgencia de sumar y novedades en alineación.</div>
@@ -2042,16 +1672,16 @@
                             <!-- Pilar 6 y 7: CON CANDADO PARA USUARIOS GRATIS -->
                             ${esVip ? `
                                 <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-1.5">
-                                    <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-diagram-project text-cyan-400"></i> Pilar 6 y 7: Compatibilidad & Micromercados</span>
+                                    <span class="text-[10px] text-slate-400 uppercase font-black block flex items-center gap-1"><i class="fa-solid fa-diagram-project text-cyan-400"></i> Estilo de partido y mercado de goles</span>
                                     <div class="text-slate-300 font-medium">Estilo: ${pil.pilar_6_compatibilidad_tactica?.estilo}</div>
                                     <div class="text-cyan-400 font-mono text-[11px]">${pil.pilar_7_micromercados_friccion?.tarjetas_proyectadas}</div>
                                     <div class="text-amber-400 font-mono text-[11px] font-bold">${pil.pilar_7_micromercados_friccion?.verde_seguro ? 'Verde Seguro: ' + pil.pilar_7_micromercados_friccion.verde_seguro : ''}</div>
-                                    <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Lectura avanzada de emparejamiento táctico y líneas de tarjetas/córners con valor esperado (+EV).</div>
+                                    <div class="text-[10px] text-slate-400 italic pt-1 border-t border-cardBorder/40 leading-snug">Lectura del estilo de partido según el xG proyectado por el modelo.</div>
                                 </div>
                             ` : `
                                 <div class="bg-baseDark border border-amber-500/30 p-3.5 rounded-xl flex flex-col justify-between items-center text-center">
-                                    <span class="text-[10px] text-amber-400 uppercase font-black tracking-wider block flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Pilar 6 y 7: Táctica & Micromercados (VIP)</span>
-                                    <p class="text-[11px] text-slate-300 my-2">Desbloquea compatibilidad táctica y proyecciones de tarjetas/córners para este encuentro con membresía VIP.</p>
+                                    <span class="text-[10px] text-amber-400 uppercase font-black tracking-wider block flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> Estilo de partido y mercado de goles (Pro)</span>
+                                    <p class="text-[11px] text-slate-300 my-2">Desbloquea el estilo de partido y los mercados sugeridos para este encuentro con el Pase Pro.</p>
                                     <button onclick="abrirVipModal()" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
                                         <i class="fa-solid fa-crown text-[10px]"></i> Desbloquear con Plan VIP
                                     </button>
@@ -2060,73 +1690,7 @@
                         </div>
                     </div>
 
-                    <!-- 2.1 ANÁLISIS DE PARTIDOS ANTERIORES & ESTADÍSTICAS REALES -->
-                    <div class="border-t border-cardBorder/60 pt-3">
-                        <h4 class="text-xs font-black uppercase text-slate-400 mb-2.5 tracking-wider flex items-center justify-between">
-                            <span class="flex items-center gap-1.5"><i class="fa-solid fa-clock-rotate-left text-amber-400"></i> Historial Reciente (Últimos Partidos & Estadísticas Reales)</span>
-                            ${esVip ? `<span class="text-[10px] font-mono text-emerald-400">Verificado Flashscore</span>` : `<span class="text-[10px] font-mono text-amber-400 font-bold flex items-center gap-1"><i class="fa-solid fa-lock"></i> Exclusivo VIP</span>`}
-                        </h4>
-                        ${esVip ? `
-                            <div class="grid sm:grid-cols-2 gap-3 text-xs">
-                                <!-- Local Reciente -->
-                                <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-2">
-                                    <div class="flex items-center justify-between border-b border-cardBorder pb-1.5">
-                                        <span class="font-bold text-white text-xs">${item.local}</span>
-                                        <span class="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-slate-800 text-slate-300">Racha: ${ant.local?.racha || 'V-E-D'}</span>
-                                    </div>
-                                    <div class="grid grid-cols-4 gap-1 text-center py-1 bg-cardDark/40 rounded-lg">
-                                        <div><span class="text-[9px] text-slate-400 block">Tiros P.</span><span class="font-bold font-mono text-cyan-400">${ant.local?.tiros_puerta_prom || '4.0'}</span></div>
-                                        <div><span class="text-[9px] text-slate-400 block">Tiros Tot.</span><span class="font-bold font-mono text-slate-300">${ant.local?.tiros_totales_prom || '10.5'}</span></div>
-                                        <div><span class="text-[9px] text-slate-400 block">Córners</span><span class="font-bold font-mono text-amber-400">${ant.local?.corners_prom || '5.0'}</span></div>
-                                        <div><span class="text-[9px] text-slate-400 block">Tarjetas</span><span class="font-bold font-mono text-yellow-400">${ant.local?.tarjetas_prom || '2.0'}</span></div>
-                                    </div>
-                                    <div class="text-[11px] text-slate-300 italic">${ant.local?.observacion || ''}</div>
-                                    <div class="space-y-1 pt-1">
-                                        ${(ant.local?.ultimos_partidos || []).map(p => `
-                                            <div class="flex items-center justify-between text-[10px] bg-slate-900/60 px-2 py-1 rounded">
-                                                <span class="text-slate-400">vs ${p.rival}</span>
-                                                <span class="font-mono font-bold text-white">${p.resultado}</span>
-                                                <span class="px-1.5 py-0.5 rounded font-black font-mono text-[9px] ${p.condicion === 'V' ? 'bg-emerald-950 text-accentGreen' : (p.condicion === 'E' ? 'bg-slate-800 text-slate-300' : 'bg-red-950 text-red-400')}">${p.condicion === 'V' ? 'GANADO' : (p.condicion === 'E' ? 'EMPATE' : 'PERDIDO')}</span>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-
-                                <!-- Visitante Reciente -->
-                                <div class="bg-baseDark border border-cardBorder p-3 rounded-xl space-y-2">
-                                    <div class="flex items-center justify-between border-b border-cardBorder pb-1.5">
-                                        <span class="font-bold text-white text-xs">${item.visitante}</span>
-                                        <span class="text-[10px] font-mono font-black px-2 py-0.5 rounded bg-slate-800 text-slate-300">Racha: ${ant.visitante?.racha || 'V-E-D'}</span>
-                                    </div>
-                                    <div class="grid grid-cols-4 gap-1 text-center py-1 bg-cardDark/40 rounded-lg">
-                                        <div><span class="text-[9px] text-slate-400 block">Tiros P.</span><span class="font-bold font-mono text-cyan-400">${ant.visitante?.tiros_puerta_prom || '4.0'}</span></div>
-                                        <div><span class="text-[9px] text-slate-400 block">Tiros Tot.</span><span class="font-bold font-mono text-slate-300">${ant.visitante?.tiros_totales_prom || '10.5'}</span></div>
-                                        <div><span class="text-[9px] text-slate-400 block">Córners</span><span class="font-bold font-mono text-amber-400">${ant.visitante?.corners_prom || '5.0'}</span></div>
-                                        <div><span class="text-[9px] text-slate-400 block">Tarjetas</span><span class="font-bold font-mono text-yellow-400">${ant.visitante?.tarjetas_prom || '2.0'}</span></div>
-                                    </div>
-                                    <div class="text-[11px] text-slate-300 italic">${ant.visitante?.observacion || ''}</div>
-                                    <div class="space-y-1 pt-1">
-                                        ${(ant.visitante?.ultimos_partidos || []).map(p => `
-                                            <div class="flex items-center justify-between text-[10px] bg-slate-900/60 px-2 py-1 rounded">
-                                                <span class="text-slate-400">vs ${p.rival}</span>
-                                                <span class="font-mono font-bold text-white">${p.resultado}</span>
-                                                <span class="px-1.5 py-0.5 rounded font-black font-mono text-[9px] ${p.condicion === 'V' ? 'bg-emerald-950 text-accentGreen' : (p.condicion === 'E' ? 'bg-slate-800 text-slate-300' : 'bg-red-950 text-red-400')}">${p.condicion === 'V' ? 'GANADO' : (p.condicion === 'E' ? 'EMPATE' : 'PERDIDO')}</span>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                </div>
-                            </div>
-                        ` : `
-                            <div class="bg-baseDark border border-amber-500/30 p-5 rounded-xl text-center space-y-2">
-                                <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto"><i class="fa-solid fa-lock text-sm"></i></div>
-                                <div class="text-xs font-bold text-white">Historial Reciente y Estadísticas Reales Bloqueadas</div>
-                                <p class="text-[11px] text-slate-400 max-w-sm mx-auto">Para visualizar los últimos partidos, tiros a puerta, tiros totales, córners y tarjetas por encuentro de ambos equipos, activa tu membresía VIP.</p>
-                                <button onclick="abrirVipModal()" class="mt-2 bg-gradient-to-r from-accentGreen to-emerald-600 hover:from-emerald-500 text-slate-950 font-black text-[11px] px-4 py-2 rounded-xl transition shadow-md inline-flex items-center gap-1.5">
-                                    <i class="fa-solid fa-crown text-[10px]"></i> Desbloquear Historial Completo
-                                </button>
-                            </div>
-                        `}
-                    </div>
+                    
 <!-- 2.2 HISTORIAL H2H CARA A CARA DIRECTO -->
                     <div class="border-t border-cardBorder/60 pt-3">
                         <h4 class="text-xs font-black uppercase text-slate-400 mb-2.5 tracking-wider flex items-center justify-between">
@@ -2156,25 +1720,25 @@
                         <h4 class="text-xs font-black uppercase text-amber-400 mb-2.5 tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-shield-halved"></i> 3. Estructura de Stakazos Dinámica</h4>
                         <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                             <div class="bg-emerald-950/40 border border-emerald-800/60 p-3 rounded-xl">
-                                <span class="text-[9px] text-accentGreen font-black uppercase block">${stks.nivel_1_base?.etiqueta || '🛡️ Nivel 1 (Base >80%)'}</span>
+                                <span class="text-[9px] text-accentGreen font-black uppercase block">${stks.nivel_1_base?.etiqueta || '🛡️ Nivel 1 (Mayor probabilidad)'}</span>
                                 <div class="text-xs font-black text-white mt-1 font-semibold">${stks.nivel_1_base?.mercado || 'Pendiente'}</div>
-                                <span class="text-[10px] text-emerald-400 font-mono block mt-1">Viabilidad: ${stks.nivel_1_base?.probabilidad || '80%+'}</span>
+                                <span class="text-[10px] text-emerald-400 font-mono block mt-1">Probabilidad: ${stks.nivel_1_base?.probabilidad || '—'}</span>
                             </div>
                             <div class="bg-blue-950/40 border border-blue-800/60 p-3 rounded-xl">
                                 <span class="text-[9px] text-cyan-400 font-black uppercase block">${stks.nivel_2_tactico?.etiqueta || '⚙️ Nivel 2 (Táctico)'}</span>
                                 <div class="text-xs font-black text-white mt-1 font-semibold">${stks.nivel_2_tactico?.mercado || 'Pendiente'}</div>
-                                <span class="text-[10px] text-cyan-300 font-mono block mt-1">Viabilidad: ${stks.nivel_2_tactico?.probabilidad || '70%+'}</span>
+                                <span class="text-[10px] text-cyan-300 font-mono block mt-1">Probabilidad: ${stks.nivel_2_tactico?.probabilidad || '—'}</span>
                             </div>
                             <div class="bg-purple-950/40 border border-purple-800/60 p-3 rounded-xl">
                                 <span class="text-[9px] text-purple-400 font-black uppercase block">${stks.nivel_3_quirurgico?.etiqueta || '🎯 Nivel 3 (Quirúrgico)'}</span>
                                 <div class="text-xs font-black text-white mt-1 font-semibold">${stks.nivel_3_quirurgico?.mercado || 'Pendiente'}</div>
-                                <span class="text-[10px] text-purple-300 font-mono block mt-1">Cuota Justa: ${stks.nivel_3_quirurgico?.cuota_justa || '1.85'}</span>
+                                <span class="text-[10px] text-purple-300 font-mono block mt-1">Cuota Justa: ${stks.nivel_3_quirurgico?.cuota_justa || '—'}</span>
                             </div>
                             ${esVip ? `
                                 <div class="bg-amber-950/40 border border-amber-800/60 p-3 rounded-xl">
-                                    <span class="text-[9px] text-amber-400 font-black uppercase block">${stks.micromercado_oro?.etiqueta || '⚡ Micromercado Oro (>80%)'}</span>
+                                    <span class="text-[9px] text-amber-400 font-black uppercase block">${stks.micromercado_oro?.etiqueta || '⚡ Mercado de goles'}</span>
                                     <div class="text-xs font-black text-white mt-1 font-semibold">${stks.micromercado_oro?.mercado || 'Pendiente'}</div>
-                                    <span class="text-[10px] text-amber-300 font-mono block mt-1">Viabilidad: ${stks.micromercado_oro?.probabilidad || '82%+'}</span>
+                                    <span class="text-[10px] text-amber-300 font-mono block mt-1">Probabilidad: ${stks.micromercado_oro?.probabilidad || '—'}</span>
                                     <span class="text-[9px] text-slate-400 block mt-1 leading-tight">${stks.micromercado_oro?.motivo || ''}</span>
                                 </div>
                             ` : `
@@ -2224,8 +1788,9 @@
 
             try {
                 const res = await fetch(`${API_BASE}/api/v1/vip/monte-carlo/custom`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ local, visita, iteraciones: 10000 })
+                    method: 'POST', headers: await authHeaders(), body: JSON.stringify({ local, visita, iteraciones: 10000 })
                 });
+                if (res.status === 401 || res.status === 403) { notificar('🔒 Inicia sesión con un plan Pro para usar la simulación.'); return; }
                 const data = await res.json();
                 if (data.success && data.monte_carlo) {
                     const box = document.getElementById('box-mc-partido');
@@ -2251,7 +1816,7 @@
         cargarDatosCartelera();
     
         // =========================================================================
-        // CONTROLADOR TOP 3 PRONÓSTICOS DEL DÍA (ESTILO BOTANALIST / ODDSTER)
+        // CONTROLADOR TOP 3 PRONÓSTICOS DEL DÍA
         // =========================================================================
         let fechaTop3Activa = "";
         let _ultimaFechaRecargada = "";
@@ -2315,11 +1880,11 @@
             const displayFecha = document.getElementById('top3-fecha-display');
 
             if (!cont) return;
-            cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando los Top 3 del día con mayor valor cuantitativo...</div>`;
+            cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando el Top 3 del día...</div>`;
 
             try {
                 const url = fechaTop3Activa ? `/api/v1/top3/daily?fecha=${fechaTop3Activa}` : `/api/v1/top3/daily`;
-                const res = await fetch(url);
+                const res = await fetch(url, { headers: await authHeaders() });
                 const data = await res.json();
                 if (data.fecha) {
                     fechaTop3Activa = data.fecha;
@@ -2344,7 +1909,7 @@
                 const tieneBadgeVip = badgeText.includes('ÉLITE') || badgeText.includes('PRO');
                 const esVip = Boolean(
                     tieneBadgeVip ||
-                    (u && (u.esVip || u.plan === 'pro' || u.plan === 'elite' || u.plan === 'vip' || u.email === 'fabiancermaz@gmail.com' || u.nombre === 'FAB_XTECH'))
+                    (u && (u.esVip || u.plan === 'pro' || u.plan === 'elite' || u.plan === 'vip'))
                 );
 
                 let htmlCards = '';
@@ -2389,7 +1954,7 @@
                                 </div>
                             </div>
 
-                            <!-- Categoría del mercado (Pill estilo Oddster) -->
+                            <!-- Categoría del mercado (Pill) -->
                             <div class="mt-3 flex items-center justify-between">
                                 <span class="text-[10px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider flex items-center gap-1 ${
                                     t.categoria === 'CARDS' ? 'bg-amber-950/80 border border-amber-800/80 text-amber-400' :
@@ -2474,166 +2039,17 @@
         let equipoPlayerPropsActivo = "todos";
 
         let debounceTimerPP = null;
-        function buscarPlayerPropsEnVivo() {
-            clearTimeout(debounceTimerPP);
-            debounceTimerPP = setTimeout(() => {
-                const q = document.getElementById('pp-search') ? document.getElementById('pp-search').value.trim() : '';
-                cargarPlayerProps(ligaPlayerPropsActiva, equipoPlayerPropsActivo, q);
-            }, 250);
-        }
-
-        async function cargarPlayerProps(filtroLiga = "todas", filtroEquipo = "todos", busqueda = "") {
-            const cont = document.getElementById('contenedor-playerprops');
-            const contEquipos = document.getElementById('pp-equipos-container');
-            if (!cont) return;
-
-            ligaPlayerPropsActiva = filtroLiga;
-            equipoPlayerPropsActivo = filtroEquipo;
-
-            // Actualizar botones de ligas
-            document.querySelectorAll('.btn-pp-liga').forEach(b => {
-                b.className = "btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-bold border border-cardBorder bg-cardDark text-slate-400 hover:text-white transition";
-            });
-            const slug = filtroLiga.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const btnActivo = document.getElementById(`btn-pp-${slug}`) || document.getElementById('btn-pp-todas');
-            if (btnActivo) {
-                btnActivo.className = "btn-pp-liga px-2.5 py-1 rounded-lg text-[10px] font-black border border-accentGreen bg-emerald-950/60 text-accentGreen transition";
-            }
-
-            cont.innerHTML = `<div class="text-slate-400 py-6 text-center col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando métricas individuales y props de jugadores...</div>`;
-
-            try {
-                const params = new URLSearchParams();
-                if (filtroLiga !== 'todas') params.append('liga', filtroLiga);
-                if (filtroEquipo !== 'todos') params.append('equipo', filtroEquipo);
-                if (busqueda) params.append('q', busqueda);
-
-                const res = await fetch(`/api/v1/players/props?${params.toString()}`);
-                const data = await res.json();
-                const lista = data.jugadores || [];
-                const equipos = data.equipos_disponibles || [];
-
-                // Renderizar barra de equipos
-                if (contEquipos) {
-                    if (equipos.length === 0) {
-                        contEquipos.innerHTML = `<span class="text-[10px] text-slate-500 italic">No hay clubes registrados para este filtro.</span>`;
-                    } else {
-                        let htmlEq = `<button onclick="filtrarPlayerPropsPorEquipo('todos')" class="px-2 py-0.5 rounded text-[10px] font-bold border ${filtroEquipo === 'todos' ? 'border-accentGreen bg-emerald-950/80 text-accentGreen' : 'border-cardBorder bg-cardDark text-slate-400 hover:text-white'} transition">Todos (${equipos.length})</button>`;
-                        equipos.forEach(eq => {
-                            const esSel = eq.toLowerCase() === filtroEquipo.toLowerCase();
-                            htmlEq += `<button onclick="filtrarPlayerPropsPorEquipo('${eq}')" class="px-2 py-0.5 rounded text-[10px] font-bold border ${esSel ? 'border-accentGreen bg-emerald-950/80 text-accentGreen' : 'border-cardBorder bg-cardDark text-slate-400 hover:text-white'} transition whitespace-nowrap">${eq}</button>`;
-                        });
-                        contEquipos.innerHTML = htmlEq;
-                    }
-                }
-
-                if (lista.length === 0) {
-                    cont.innerHTML = `<div class="text-slate-400 py-6 text-center col-span-full">No se encontraron jugadores para el equipo o liga seleccionados.</div>`;
-                    return;
-                }
-
-                cont.innerHTML = lista.map(p => `
-                    <div class="bg-baseDark border border-cardBorder rounded-2xl p-4 space-y-3 hover:border-slate-600 transition shadow-lg flex flex-col justify-between">
-                        <div>
-                            <!-- Cabecera de Jugador: Insignia Técnica sin imagen -->
-                            <div class="flex items-center gap-3 border-b border-cardBorder/40 pb-2.5">
-                                <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-950 to-cardDark border border-emerald-700/50 flex flex-col items-center justify-center text-accentGreen flex-shrink-0 shadow-md">
-                                    <span class="text-[9px] font-black uppercase font-mono tracking-tighter text-slate-300">${(p.posicion || 'DEL').slice(0,3).toUpperCase()}</span>
-                                    <span class="text-xs font-black text-lime-400 font-mono">#${p.dorsal || '10'}</span>
-                                </div>
-                                <div class="truncate flex-1">
-                                    <h4 class="text-sm font-black text-white m-0 truncate">${p.nombre}</h4>
-                                    <div class="text-[10px] text-slate-400 font-bold truncate flex items-center gap-1.5 mt-0.5">
-                                        <span class="text-accentGreen font-bold">${p.equipo}</span> • <span>${p.posicion}</span>
-                                    </div>
-                                    <span class="text-[9px] text-slate-500 font-mono block">${p.liga}</span>
-                                </div>
-                            </div>
-
-                            <!-- Ficha Biométrica y Perfil Técnico -->
-                            <div class="grid grid-cols-4 gap-1 text-center my-2.5 bg-cardDark/80 p-2 rounded-xl border border-cardBorder/40 text-[10px]">
-                                <div class="border-r border-cardBorder/30">
-                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Edad</span>
-                                    <strong class="text-white font-mono text-[11px]">${p.edad || 25} años</strong>
-                                </div>
-                                <div class="border-r border-cardBorder/30">
-                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Altura</span>
-                                    <strong class="text-white font-mono text-[11px]">${p.altura || '1.80 m'}</strong>
-                                </div>
-                                <div class="border-r border-cardBorder/30">
-                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Peso</span>
-                                    <strong class="text-white font-mono text-[11px]">${p.peso || '75 kg'}</strong>
-                                </div>
-                                <div>
-                                    <span class="text-[8px] text-slate-400 block font-bold uppercase tracking-wider">Pierna</span>
-                                    <strong class="text-lime-400 font-mono text-[11px]">${p.pierna_buena || 'Diestro'}</strong>
-                                </div>
-                            </div>
-
-                            <!-- Métricas de Rendimiento -->
-                            <div class="grid grid-cols-4 gap-1.5 text-center mb-3 bg-baseDark/90 p-2 rounded-xl border border-cardBorder/30">
-                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">Goles</span><span class="text-xs font-black text-lime-400 font-mono">${p.goles}</span></div>
-                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">Asist.</span><span class="text-xs font-black text-cyan-400 font-mono">${p.asistencias}</span></div>
-                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">Tiros P.</span><span class="text-xs font-black text-amber-400 font-mono">${p.tiros_puerta_prom}</span></div>
-                                <div><span class="text-[8px] text-slate-400 block font-bold uppercase">xG Prom.</span><span class="text-xs font-black text-emerald-400 font-mono">${p.xg_prom}</span></div>
-                            </div>
-
-                            <!-- Mercados Prop Cuantitativos -->
-                            <div class="space-y-1.5">
-                                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                                    <span>Líneas con Valor (+EV)</span>
-                                    <span class="text-[9px] text-emerald-400 font-mono">Titular: ${p.prob_titular}</span>
-                                </div>
-                                ${(p.mercados_destacados || []).map(m => `
-                                    <div class="flex items-center justify-between bg-black/40 border border-cardBorder/40 p-2 rounded-lg text-[10px]">
-                                        <span class="text-slate-200 font-medium truncate max-w-[65%]">${m.icono} ${m.mercado}</span>
-                                        <div class="flex items-center gap-1.5 flex-shrink-0">
-                                            <span class="text-lime-400 font-bold font-mono">${m.prob}</span>
-                                            <span class="text-slate-400 text-[9px] font-mono bg-cardDark px-1 rounded">x${m.cuota}</span>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        <div class="pt-2 border-t border-cardBorder/30 text-[10px] text-slate-400 flex flex-col gap-1 font-mono mt-3">
-                            <div class="flex justify-between items-center">
-                                <span>Próximo Rival: <strong class="text-white font-bold">vs ${p.proximo_rival}</strong></span>
-                                <span class="text-[9px] text-slate-400 bg-slate-800/80 px-1.5 py-0.5 rounded border border-cardBorder/60">${p.proxima_fecha || '2026-10-10'}</span>
-                            </div>
-                            <div class="flex justify-between items-center text-[9px] text-slate-500">
-                                <span><i class="fa-solid fa-database text-[8px] text-cyan-400 mr-1"></i> Flashscore • WhoScored • FBref</span>
-                                <span class="text-accentGreen font-bold flex items-center gap-1"><i class="fa-solid fa-bolt text-[8px]"></i> 100% REAL</span>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-
-            } catch (err) {
-                console.error("Error cargando player props:", err);
-                cont.innerHTML = `<div class="text-slate-400 py-6 text-center col-span-full">Error al cargar estadísticas de jugadores.</div>`;
-            }
-        }
-
-        function filtrarPlayerProps(liga) {
-            cargarPlayerProps(liga, "todos");
-        }
-
-        function filtrarPlayerPropsPorEquipo(equipo) {
-            cargarPlayerProps(ligaPlayerPropsActiva, equipo);
-        }
-
         // =========================================================================
         // CONTROLADOR ACTUALIZAR TICKET BET BUILDER
         // =========================================================================
-        async function actualizarTicketBetBuilder() {
-            mostrarToast("Actualizando ticket con combinaciones frescas...");
-            const btn = document.getElementById('btn-bb-refresh');
-            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generando...`;
-            await generarBetBuilder(perfilBetBuilderActivo || 'balanceada');
-            if (btn) btn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Actualizar Ticket / Generar Nuevo`;
-        }
-
         iniciarCountdownTop3();
 </script>
+    <footer class="w-full border-t border-cardBorder bg-baseDark px-4 sm:px-8 py-5 text-[11px] leading-relaxed text-slate-400">
+        <div class="max-w-5xl mx-auto space-y-2">
+            <p><strong class="text-slate-200">Solo mayores de 18 años.</strong> PredicXion IA ofrece estimaciones estadísticas de fútbol con fines informativos. No es una casa de apuestas, no recibe apuestas y no garantiza resultados ni ganancias. Los resultados pasados no aseguran resultados futuros.</p>
+            <p>Las probabilidades salen de un modelo Poisson con valores base de cada equipo que se actualizan manualmente; pueden contener errores. Compáralas siempre con la cuota real de tu casa y apuesta solo dinero que puedas permitirte perder.</p>
+            <p>Si apostar deja de ser un pasatiempo o te genera problemas, busca ayuda profesional y considera pausar el juego.</p>
+        </div>
+    </footer>
 </body>
 </html>
