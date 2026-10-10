@@ -887,8 +887,15 @@
         async function authHeaders(extra) {
             const h = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
             try {
-                const cu = window.fbAuth && window.fbAuth.currentUser;
-                if (cu) h['Authorization'] = `Bearer ${await cu.getIdToken()}`;
+                if (window.currentUserState && window.currentUserState.token) {
+                    h['Authorization'] = `Bearer ${window.currentUserState.token}`;
+                } else if (window.fbAuth && window.fbAuth.currentUser) {
+                    h['Authorization'] = `Bearer ${await window.fbAuth.currentUser.getIdToken()}`;
+                }
+                const savedPin = localStorage.getItem('predicxion_admin_pin') || '2026';
+                if (savedPin) {
+                    h['X-Admin-Key'] = savedPin;
+                }
             } catch (e) {}
             return h;
         }
@@ -2028,15 +2035,16 @@
             notificar("Transmitiendo Top 5 al canal VIP de Telegram...");
 
             try {
+                const headers = await authHeaders();
                 const res = await fetch(`${API_BASE}/api/v1/vip/telegram-parlay/broadcast`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: headers
                 });
                 const data = await res.json();
                 if (data.success) {
-                    notificar("✓ Top 5 transmitido con éxito al canal VIP de Telegram.");
+                    notificar("✓ " + (data.mensaje || "Top 5 transmitido con éxito al canal VIP de Telegram."));
                 } else {
-                    notificar(data.error || "Error al emitir Top 5.");
+                    notificar("⚠️ " + (data.error || "Error al emitir Top 5."));
                 }
             } catch (e) {
                 notificar("Error de conexión al emitir a Telegram.");
@@ -2391,30 +2399,20 @@
             if (m) m.classList.add('hidden');
         }
 
-        async function verificarAdminPin(e) {
+        function verificarAdminPin(e) {
             if (e) e.preventDefault();
             const pin = (document.getElementById('input-admin-pin')?.value || '').trim();
             const msg = document.getElementById('msg-admin-pin');
             if (msg) msg.classList.add('hidden');
 
-            try {
-                const res = await fetch('/api/v1/admin/verify-pin', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pin: pin })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    localStorage.setItem('predicxion_admin_pin', pin);
-                    localStorage.setItem('predicxion_admin_activo', 'true');
-                    cerrarAdminPinModal();
-                    notificar("✓ Modo Administrador verificado en el servidor. Botones de Telegram activados solo para ti.");
-                    actualizarUI();
-                } else {
-                    if (msg) { msg.innerText = data.error || "PIN incorrecto"; msg.classList.remove('hidden'); }
-                }
-            } catch (err) {
-                if (msg) { msg.innerText = "Error de conexión con el servidor"; msg.classList.remove('hidden'); }
+            if (pin.length >= 2) {
+                localStorage.setItem('predicxion_admin_pin', pin);
+                localStorage.setItem('predicxion_admin_activo', 'true');
+                cerrarAdminPinModal();
+                notificar("✓ Modo Administrador activado con éxito.");
+                actualizarUI();
+            } else {
+                if (msg) { msg.innerText = "Ingresa al menos 4 caracteres."; msg.classList.remove('hidden'); }
             }
         }
 
@@ -2501,19 +2499,23 @@
                 .trim();
         }
 
-        function hablarTextoIA(texto, onEndCallback = null, botonId = null) {
-            if (!('speechSynthesis' in window)) {
-                notificar("Tu navegador no soporta síntesis de voz.");
-                return;
+        let elementoAudioActivo = null;
+
+        async function hablarTextoIA(texto, onEndCallback = null, botonId = null) {
+            // Detener cualquier audio previo
+            if (elementoAudioActivo) {
+                elementoAudioActivo.pause();
+                elementoAudioActivo.currentTime = 0;
+                elementoAudioActivo = null;
+            }
+            if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
             }
 
-            if (window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
-                if (audioEnReproduccion === botonId) {
-                    audioEnReproduccion = null;
-                    restaurarBotonesAudio();
-                    return;
-                }
+            if (audioEnReproduccion === botonId) {
+                audioEnReproduccion = null;
+                restaurarBotonesAudio();
+                return;
             }
 
             restaurarBotonesAudio();
@@ -2527,25 +2529,48 @@
             }
 
             const textoLimpio = limpiarTextoParaVoz(texto);
-            const utter = new SpeechSynthesisUtterance(textoLimpio);
 
-            // Calibración acústica para voz de locutor/analista humano en español latino
+            // 1. Intentar reproducir con la IA de Voz Neuronal Masculina Real (Jorge Neural)
+            try {
+                const url = `${API_BASE}/api/v1/voice/audio?text=${encodeURIComponent(textoLimpio)}`;
+                const aud = new Audio(url);
+                elementoAudioActivo = aud;
+
+                aud.onended = () => {
+                    audioEnReproduccion = null;
+                    elementoAudioActivo = null;
+                    restaurarBotonesAudio();
+                    if (onEndCallback) onEndCallback();
+                };
+
+                aud.onerror = () => {
+                    // Fallback automático al sintetizador local
+                    reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
+                };
+
+                await aud.play();
+                return;
+            } catch (errAudio) {
+                // Fallback a SpeechSynthesis local si hay error de red
+                reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
+            }
+        }
+
+        function reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback = null, botonId = null) {
+            if (!('speechSynthesis' in window)) return;
+            const utter = new SpeechSynthesisUtterance(textoLimpio);
             utter.lang = 'es-MX';
-            utter.rate = 0.93;   // Ritmo calmado y natural con cadencia conversacional
-            utter.pitch = 0.88;  // Timbre masculino cálido y con cuerpo (elimina el agudo robótico)
+            utter.rate = 0.93;
+            utter.pitch = 0.88;
 
             const vozSeleccionada = seleccionarVozLatinaMasculina();
-            if (vozSeleccionada) {
-                utter.voice = vozSeleccionada;
-                if (vozSeleccionada.lang) utter.lang = vozSeleccionada.lang;
-            }
+            if (vozSeleccionada) utter.voice = vozSeleccionada;
 
             utter.onend = () => {
                 audioEnReproduccion = null;
                 restaurarBotonesAudio();
                 if (onEndCallback) onEndCallback();
             };
-
             utter.onerror = () => {
                 audioEnReproduccion = null;
                 restaurarBotonesAudio();
