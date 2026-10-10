@@ -2364,57 +2364,8 @@
             }
         }
 
-        /api/v1/value-edge/comparison`);
-                const data = await res.json();
-                if (!data.success || !data.comparativas || data.comparativas.length === 0) {
-                    cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-4">No se detectaron discrepancias de cuota (+EV) en este bloque horario.</div>`;
-                    return;
-                }
-
-                let html = '';
-                data.comparativas.forEach(c => {
-                    html += `
-                        <div class="bg-baseDark/90 border border-cardBorder rounded-2xl p-4 shadow-md flex items-center justify-between gap-4 flex-wrap hover:border-cyan-500/40 transition">
-                            <div class="space-y-1">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] font-bold text-slate-400">${esc(c.liga)}</span>
-                                    <span class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-[9px] font-black px-2 py-0.5 rounded-full">${esc(c.veredicto || '+EV')}</span>
-                                </div>
-                                <h4 class="text-sm font-black text-white m-0">${esc(c.partido)}</h4>
-                                <div class="text-xs font-bold text-slate-200">
-                                    Mercado: <span class="text-lime-400">${esc(c.mercado)}</span>
-                                </div>
-                                <p class="text-[11px] text-slate-400 m-0 max-w-lg">${esc(c.explicacion)}</p>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <div class="text-center bg-cardDark border border-cardBorder p-2 rounded-xl">
-                                    <span class="text-[9px] text-slate-400 block font-mono">Prob Modelo</span>
-                                    <span class="text-xs font-black text-emerald-400 font-mono">${esc(c.prob_modelo)}</span>
-                                </div>
-                                <div class="text-center bg-cardDark border border-cardBorder p-2 rounded-xl">
-                                    <span class="text-[9px] text-slate-400 block font-mono">Cuota Justa</span>
-                                    <span class="text-xs font-black text-slate-300 font-mono">@${c.cuota_justa}</span>
-                                </div>
-                                <div class="text-center bg-cyan-950/40 border border-cyan-500/40 p-2 rounded-xl shadow-inner">
-                                    <span class="text-[9px] text-cyan-300 block font-mono font-bold">Cuota Mercado</span>
-                                    <span class="text-sm font-black text-cyan-400 font-mono">@${c.cuota_mercado}</span>
-                                </div>
-                                <div class="text-center bg-emerald-950/40 border border-emerald-500/40 px-3 py-2 rounded-xl shadow-inner">
-                                    <span class="text-[9px] text-emerald-300 block font-mono font-bold">Edge (+EV)</span>
-                                    <span class="text-sm font-black text-emerald-400 font-mono">${esc(c.edge_ev)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                cont.innerHTML = html;
-            } catch (e) {
-                console.error("Error en cargarRadarValueEdge:", e);
-                cont.innerHTML = `<div class="text-xs text-red-400 text-center py-4">Error cargando comparativas de cuotas.</div>`;
-            }
-        }
-
         
+
         // =========================================================================
         // CONTROLADOR DE ACCESO ADMINISTRADOR POR PIN (DESBLOQUEO PRIVADO)
         // =========================================================================
