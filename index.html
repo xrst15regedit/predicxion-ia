@@ -262,6 +262,9 @@
                             <button onclick="reproducirAudioTop5Completo()" id="btn-audio-top5-full" class="bg-cardDark hover:bg-slate-800 text-lime-400 border border-lime-500/40 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-md shadow-lime-950/30 cursor-pointer" title="Escuchar el resumen narrado por voz de los 5 destacados de hoy">
                                 <i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 5 (Voz IA)</span>
                             </button>
+                            <button onclick="abrirModalAdminPin()" id="btn-admin-unlock-top5" class="bg-baseDark hover:bg-slate-800 text-slate-500 hover:text-amber-400 border border-cardBorder text-xs font-bold px-2.5 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer" title="Activar controles de administración para Telegram">
+                                <i class="fa-solid fa-lock text-xs"></i>
+                            </button>
                             <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-lg shadow-sky-950/40 cursor-pointer" title="Enviar Top 5 directamente al canal VIP de Telegram">
                                 <i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>
                             </button>
@@ -1092,6 +1095,8 @@
             const navAdmin = document.getElementById('nav-tab-admin');
             if (navAdmin) navAdmin.classList.toggle('hidden', !esAdmin);
             document.querySelectorAll('.solo-admin').forEach(el => el.classList.toggle('hidden', !esAdmin));
+            const btnUnlockTop5 = document.getElementById('btn-admin-unlock-top5');
+            if (btnUnlockTop5) btnUnlockTop5.classList.toggle('hidden', esAdmin);
 
             if (u && u.logueado) {
                 document.getElementById('btn-login-header').classList.add('hidden');
@@ -2423,11 +2428,59 @@
 
         
         // =========================================================================
-        // MOTOR DE VOZ IA CUANTITATIVA (Narración de Análisis sin lectura pesada)
+        // MOTOR DE VOZ IA CUANTITATIVA (Voz Masculina en Español Latino, Natural y Humana)
         // =========================================================================
         let audioEnReproduccion = null;
         window.top5DataMemoria = window.top5DataMemoria || [];
         window.partidoModalActualMemoria = window.partidoModalActualMemoria || null;
+        let catalogoVoces = [];
+
+        function inicializarVoces() {
+            if ('speechSynthesis' in window) {
+                catalogoVoces = window.speechSynthesis.getVoices();
+            }
+        }
+        if ('speechSynthesis' in window) {
+            inicializarVoces();
+            window.speechSynthesis.onvoiceschanged = inicializarVoces;
+        }
+
+        function seleccionarVozLatinaMasculina() {
+            if (!catalogoVoces || catalogoVoces.length === 0) {
+                if ('speechSynthesis' in window) catalogoVoces = window.speechSynthesis.getVoices();
+            }
+            if (!catalogoVoces || catalogoVoces.length === 0) return null;
+
+            // 1. Voces neuronales/naturales de hombre en español latino (México, Colombia, Perú, US, etc.)
+            const candidatosLatinosHombre = catalogoVoces.filter(v => {
+                const lang = (v.lang || "").toLowerCase();
+                const name = (v.name || "").toLowerCase();
+                const esLatino = lang.includes('es-mx') || lang.includes('es-us') || lang.includes('es-419') || lang.includes('es-co') || lang.includes('es-pe') || lang.includes('es-ar');
+                const esHombre = name.includes('jorge') || name.includes('diego') || name.includes('gonzalo') || name.includes('carlos') || name.includes('male') || name.includes('hombre') || name.includes('natural') || name.includes('online');
+                const noEsMujer = !name.includes('female') && !name.includes('mujer') && !name.includes('sabina') && !name.includes('monica') && !name.includes('paulina') && !name.includes('helena') && !name.includes('hilda') && !name.includes('zira');
+                return esLatino && (esHombre || noEsMujer);
+            });
+
+            if (candidatosLatinosHombre.length > 0) return candidatosLatinosHombre[0];
+
+            // 2. Voz de Google español latino / Microsoft en español
+            const vozGoogleLatina = catalogoVoces.find(v => {
+                const name = (v.name || "").toLowerCase();
+                const lang = (v.lang || "").toLowerCase();
+                return (lang.startsWith('es') && (name.includes('google') || name.includes('natural') || name.includes('jorge'))) && !name.includes('female');
+            });
+            if (vozGoogleLatina) return vozGoogleLatina;
+
+            // 3. Cualquier voz masculina en español
+            const vozEspanolMasculina = catalogoVoces.find(v => {
+                const name = (v.name || "").toLowerCase();
+                const lang = (v.lang || "").toLowerCase();
+                return lang.startsWith('es') && !name.includes('female') && !name.includes('mujer') && !name.includes('sabina');
+            });
+            if (vozEspanolMasculina) return vozEspanolMasculina;
+
+            return catalogoVoces.find(v => (v.lang || "").toLowerCase().startsWith('es')) || null;
+        }
 
         function limpiarTextoParaVoz(txt) {
             if (!txt) return "";
@@ -2435,13 +2488,14 @@
                 .replace(/1X/gi, "gana local o empata")
                 .replace(/X2/gi, "gana visita o empata")
                 .replace(/12/gi, "cualquiera de los dos gana")
-                .replace(/DNB/gi, "empate apuesta no válida")
+                .replace(/DNB/gi, "empate no acción")
                 .replace(/xG/gi, "goles esperados")
-                .replace(/\+EV/gi, "valor esperado positivo")
+                .replace(/\+EV/gi, "valor positivo")
                 .replace(/@([0-9.]+)/g, "cuota $1")
                 .replace(/\+([0-9.]+)/g, "más de $1")
                 .replace(/-([0-9.]+)/g, "menos de $1")
                 .replace(/%/g, " por ciento")
+                .replace(/vs\.?/gi, "frente a")
                 .replace(/[•*_#`]/g, " ")
                 .replace(/\s+/g, " ")
                 .trim();
@@ -2468,21 +2522,23 @@
             if (botonId) {
                 const btn = document.getElementById(botonId);
                 if (btn) {
-                    btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-400 animate-pulse"></i> <span>Detener Voz</span>`;
+                    btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-400 animate-pulse"></i> <span>Pausar Voz</span>`;
                 }
             }
 
             const textoLimpio = limpiarTextoParaVoz(texto);
             const utter = new SpeechSynthesisUtterance(textoLimpio);
-            utter.lang = 'es-ES';
-            utter.rate = 1.05;
-            utter.pitch = 1.0;
 
-            const voces = window.speechSynthesis.getVoices();
-            const vozEsp = voces.find(v => v.lang.startsWith('es') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Neural') || v.name.includes('Sabina') || v.name.includes('Jorge'))) 
-                        || voces.find(v => v.lang.startsWith('es')) 
-                        || null;
-            if (vozEsp) utter.voice = vozEsp;
+            // Calibración acústica para voz de locutor/analista humano en español latino
+            utter.lang = 'es-MX';
+            utter.rate = 0.93;   // Ritmo calmado y natural con cadencia conversacional
+            utter.pitch = 0.88;  // Timbre masculino cálido y con cuerpo (elimina el agudo robótico)
+
+            const vozSeleccionada = seleccionarVozLatinaMasculina();
+            if (vozSeleccionada) {
+                utter.voice = vozSeleccionada;
+                if (vozSeleccionada.lang) utter.lang = vozSeleccionada.lang;
+            }
 
             utter.onend = () => {
                 audioEnReproduccion = null;
@@ -2520,24 +2576,25 @@
             const list = window.top5DataMemoria || [];
             const item = list.find(t => t.rank === rank);
             if (!item) {
-                notificar("No se encontró la información del partido.");
+                notificar("Cargando información del partido...");
                 return;
             }
-            const guion = `Análisis de PredicXion IA para ${item.local} contra ${item.visitante}, en ${item.liga}. Nuestro modelo cuantitativo proyecta el mercado ${item.mercado}, con una probabilidad matemática del ${item.probabilidad}. Justificación clave: ${item.justificacion}.`;
+            // Guion con pausas naturales de respiración (estilo analista humano)
+            const guion = `PredicXion IA... Análisis del encuentro: ${item.local}, frente a ${item.visitante}, en la ${item.liga}... Para este partido, nuestro modelo proyecta: ${item.mercado}... con una probabilidad estimada del ${item.probabilidad}... Motivo clave: ${item.justificacion}.`;
             hablarTextoIA(guion, null, `btn-audio-top5-${rank}`);
         }
 
         function reproducirAudioTop5Completo() {
             const list = window.top5DataMemoria || [];
             if (!list || list.length === 0) {
-                notificar("Cargando partidos del Top 5...");
+                notificar("Cargando el Top 5 del día...");
                 return;
             }
-            let guion = "Resumen de los cinco pronósticos destacados de hoy por PredicXion IA. ";
+            let guion = "Hola, te habla la inteligencia artificial de PredicXion IA... Aquí tienes el resumen de los cinco pronósticos destacados de hoy... ";
             list.forEach((item, idx) => {
-                guion += `Selección número ${idx + 1}: ${item.local} contra ${item.visitante}. Jugada recomendada: ${item.mercado}, probabilidad ${item.probabilidad}. `;
+                guion += `Selección ${idx + 1}... ${item.local} frente a ${item.visitante}... Jugada recomendada: ${item.mercado}, con ${item.probabilidad} de probabilidad... `;
             });
-            guion += "Verifica los detalles cuantitativos en la plataforma.";
+            guion += "Puedes revisar las métricas completas en la terminal.";
             hablarTextoIA(guion, null, 'btn-audio-top5-full');
         }
 
@@ -2552,21 +2609,21 @@
             const liga = p.liga || "Competición Oficial";
             const mercado = (p.pronostico_principal && p.pronostico_principal.seleccion) || "Victoria Local";
             const prob = (p.pronostico_principal && p.pronostico_principal.probabilidad) || "80%";
-            const just = (p.pronostico_principal && p.pronostico_principal.justificacion) || "Ventaja estadística en goles esperados y solidez defensiva.";
+            const just = (p.pronostico_principal && p.pronostico_principal.justificacion) || "Ventaja estadística en goles esperados.";
 
-            const guion = `Análisis del encuentro ${local} frente a ${vis}, por la ${liga}. Pronóstico principal sugerido: ${mercado}. Probabilidad estimada: ${prob}. Justificación técnica: ${just}.`;
+            const guion = `Análisis del encuentro: ${local}, frente a ${vis}, en la ${liga}... Nuestro modelo proyecta: ${mercado}, con una probabilidad estimada del ${prob}... Justificación técnica: ${just}.`;
             hablarTextoIA(guion, null, 'btn-audio-modal');
         }
 
         function reproducirAudioParlay() {
             if (!parlayActualData || !parlayActualData.selecciones || parlayActualData.selecciones.length === 0) {
-                notificar("Genera una combinada primero.");
+                notificar("Primero genera una combinada.");
                 return;
             }
             const d = parlayActualData;
-            let guion = `Combinada parlay generada por inteligencia artificial en perfil ${d.perfil || 'balanceado'}. Cuota combinada total: cuota ${d.cuota_total}. Probabilidad matemática: ${d.probabilidad_matematica}. Selecciones incluidas: `;
+            let guion = `Combinada parlay generada en perfil ${d.perfil || 'balanceado'}... Cuota total estimada: ${d.cuota_total}... con una probabilidad del ${d.probabilidad_matematica}... Selecciones del boleto: `;
             d.selecciones.forEach((s, idx) => {
-                guion += `Partido ${idx + 1}: ${s.partido}, jugada recomendada: ${s.mercado}, a cuota ${s.cuota}. `;
+                guion += `Partido ${idx + 1}: ${s.partido}... Selección: ${s.mercado}, a cuota ${s.cuota}... `;
             });
             guion += `Recomendación de bankroll: ${d.gestion_bankroll_kelly}.`;
             hablarTextoIA(guion, null, 'btn-audio-parlay');
