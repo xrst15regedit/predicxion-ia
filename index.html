@@ -245,15 +245,20 @@
             <div id="seccion-top3" class="seccion-principal hidden max-w-xl mx-auto w-full mb-8 space-y-4">
                 <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
                     <!-- Cabecera -->
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3">
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
                         <div>
                             <div class="text-[10px] font-black uppercase tracking-wider text-accentGreen flex items-center gap-1.5">
                                 <i class="fa-solid fa-crosshairs"></i> PREDICXION IA
                             </div>
                             <h2 class="text-3xl sm:text-4xl font-black text-white m-0 tracking-tight flex items-center gap-1.5">
-                                Top <span class="text-lime-400">3</span>
+                                Top <span class="text-lime-400">5</span> <span class="text-xs text-slate-400 font-normal">Destacados</span>
                             </h2>
-                            <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">Las tres selecciones de mayor probabilidad del día según el modelo estadístico de PredicXion IA. Son estimaciones, no garantías.</p>
+                            <p class="text-[11px] text-slate-400 m-0 mt-1 max-w-sm">Las selecciones de mayor probabilidad del día según el modelo estadístico. Son estimaciones, no garantías.</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition shadow-sm" title="Enviar Parlay Top 5 directamente al canal VIP de Telegram">
+                                <i class="fa-brands fa-telegram"></i> Enviar Top 5 a Telegram VIP
+                            </button>
                         </div>
                         <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-950 to-baseDark border border-lime-500/40 flex items-center justify-center text-lime-400 text-xl font-black shadow-lg shadow-lime-950/40">
                             <i class="fa-solid fa-trophy"></i>
@@ -1872,6 +1877,32 @@
         function navegarFechaTop3(delta) {
             // Deshabilitado: el Top 3 rota 24/7 de forma 100% automática a medianoche
             cargarTop3();
+        }
+
+        
+        async function dispararParlayTelegram() {
+            const u = window.currentUserState;
+            if (!u || !u.logueado) { notificar("Inicia sesión como administrador."); return; }
+            const btn = document.getElementById('btn-disparar-parlay-tg');
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
+            notificar("Transmitiendo Parlay Top 5 al canal VIP de Telegram...");
+
+            try {
+                const res = await fetch(`${API_BASE}/api/v1/vip/telegram-parlay/broadcast`, {
+                    method: 'POST',
+                    headers: await authHeaders()
+                });
+                const data = await res.json();
+                if (data.success) {
+                    notificar("✓ Parlay Top 5 emitido con éxito a Telegram VIP.");
+                } else {
+                    notificar(data.error || "Error al emitir Parlay.");
+                }
+            } catch (e) {
+                notificar("Error de conexión al emitir Telegram.");
+            } finally {
+                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram"></i> Enviar Top 5 a Telegram VIP`;
+            }
         }
 
         async function cargarTop3(fecha = null) {
