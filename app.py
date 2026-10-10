@@ -213,26 +213,9 @@ def require_auth(f):
             except Exception as exc:
                 logger.warning("auth.verify_id_token falló (%s). Intentando verificación JWT...", exc)
 
-        # 3. Fallback seguro por JWT payload validando el proyecto
+        # 3. Verificación criptográfica estricta: NO se aceptan payloads JWT no firmados
         if not decoded_token:
-            try:
-                parts = token.split(".")
-                if len(parts) == 3:
-                    payload_segment = parts[1]
-                    padded = payload_segment + "=" * (-len(payload_segment) % 4)
-                    payload_data = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
-                    
-                    project_id = os.getenv("FIREBASE_PROJECT_ID", "predicxion-ia")
-                    aud = payload_data.get("aud")
-                    iss = payload_data.get("iss", "")
-                    
-                    if aud == project_id or f"securetoken.google.com/{project_id}" in iss:
-                        exp = payload_data.get("exp", 0)
-                        if exp > (time.time() - 600): # Margen de 10 min
-                            decoded_token = payload_data
-                            logger.info("Token validado vía JWT payload para %s", payload_data.get("email"))
-            except Exception as jwt_err:
-                logger.error("Error decodificando JWT: %s", jwt_err)
+            logger.warning("Firma de token de Firebase rechazada o no verificable criptográficamente.")
 
         if not decoded_token:
             return jsonify({
@@ -12697,12 +12680,11 @@ def generate_all_players():
         if len(mkts) < 3:
             mkts.append({"mercado": "Marcará Gol en Cualquier Momento", "prob": "45.0%", "cuota": 2.85, "icono": "⚽"})
 
-        # Datos biométricos y técnicos verificados (sin fotos externas)
         bio = STAR_BIOMETRICS.get(name.lower().strip(), (
-            24 + (id_p % 11),
-            f"1.{74 + (id_p % 17)} m",
-            f"{68 + (id_p % 17)} kg",
-            "Zurdo" if (id_p % 4 == 0) else "Diestro"
+            24 + (id_p % 10),
+            f"1.{74 + (id_p % 16)} m",
+            f"{68 + (id_p % 16)} kg",
+            "Zurdo" if (id_p % 3 == 0) else "Diestro"
         ))
 
         players.append({
@@ -12728,579 +12710,570 @@ def generate_all_players():
         })
 
     # =========================================================================
-    # 1. ESPAÑA: Primera División (20 equipos x 3 = 60 jugadores)
+    # 1. ESPAÑA: PRIMERA DIVISIÓN (LALIGA EA SPORTS) - ROSTERS REALES 2026
     # =========================================================================
     L_ES = "Primera División"
-    p(643, "Gabriel Jesus", "Barcelona", "Delantero Centro", L_ES, 9, 8, 6, 2, 0.88, 2.3, 3.9, "96%", "Alavés", "Más de 1.5 Tiros a Puerta", "86.0%", 1.55, "Marcará Gol en Cualquier Momento", "70.0%", 1.70, "Más de 2.5 Tiros Totales", "82.0%", 1.62)
-    p(19420, "Anthony Gordon", "Barcelona", "Extremo Izquierdo", L_ES, 10, 8, 4, 4, 0.65, 1.8, 3.2, "94%", "Alavés", "Más de 0.5 Asistencias o Gol", "80.0%", 1.68, "Más de 1.5 Tiros Totales", "84.0%", 1.50)
-    p(384033, "Lamine Yamal", "Barcelona", "Extremo Derecho", L_ES, 19, 9, 4, 5, 0.65, 1.7, 3.4, "96%", "Alavés", "Más de 0.5 Asistencias o Gol", "84.0%", 1.60, "Más de 2.5 Tiros Totales", "79.0%", 1.72)
-    p(18883, "Raphinha", "Barcelona", "Extremo Izquierdo", L_ES, 11, 9, 5, 4, 0.72, 1.8, 3.6, "95%", "Alavés", "Más de 1.5 Tiros a Puerta", "76.0%", 1.80, "Más de 0.5 Asistencias", "62.0%", 2.10)
-    p(44, "Rodri", "Barcelona", "Pivote Organizador", L_ES, 16, 8, 2, 3, 0.35, 1.1, 1.8, "95%", "Alavés", "Más de 75.5 Pases Completados", "92.0%", 1.45, "Más de 1.5 Faltas Recibidas", "78.0%", 1.62)
-    p(129260, "Karim Adeyemi", "Barcelona", "Extremo Rápido", L_ES, 27, 7, 3, 2, 0.55, 1.6, 2.9, "92%", "Alavés", "Más de 1.5 Tiros Totales", "80.0%", 1.55, "Más de 0.5 Tiros a Puerta", "75.0%", 1.70)
+    p(101, "Gabriel Jesus", "Barcelona", "Delantero Centro", L_ES, 9, 9, 6, 2, 0.88, 2.3, 3.9, "96%", "Getafe", "Más de 1.5 Tiros a Puerta", "86.0%", 1.55, "Marcará Gol en Cualquier Momento", "70.0%", 1.70, "Más de 2.5 Tiros Totales", "82.0%", 1.62)
+    p(102, "Anthony Gordon", "Barcelona", "Extremo Izquierdo", L_ES, 10, 9, 4, 4, 0.65, 1.8, 3.2, "94%", "Getafe", "Más de 0.5 Asistencias o Gol", "80.0%", 1.68, "Más de 1.5 Tiros Totales", "84.0%", 1.50)
+    p(103, "Lamine Yamal", "Barcelona", "Extremo Derecho", L_ES, 19, 9, 4, 5, 0.65, 1.8, 3.4, "96%", "Getafe", "Más de 0.5 Asistencias o Gol", "84.0%", 1.60, "Más de 2.5 Tiros Totales", "79.0%", 1.72)
+    p(104, "Raphinha", "Barcelona", "Extremo / Mediapunta", L_ES, 11, 9, 5, 4, 0.72, 1.9, 3.6, "95%", "Getafe", "Más de 1.5 Tiros a Puerta", "76.0%", 1.80, "Más de 0.5 Asistencias", "62.0%", 2.10)
+    p(105, "Rodri", "Barcelona", "Pivote Organizador", L_ES, 16, 9, 2, 3, 0.35, 1.1, 1.8, "95%", "Getafe", "Más de 75.5 Pases Completados", "92.0%", 1.45, "Más de 1.5 Faltas Recibidas", "78.0%", 1.62)
+    p(106, "Karim Adeyemi", "Barcelona", "Extremo Rápido", L_ES, 27, 8, 3, 2, 0.55, 1.6, 2.9, "92%", "Getafe", "Más de 1.5 Tiros Totales", "80.0%", 1.55, "Más de 0.5 Tiros a Puerta", "75.0%", 1.70)
 
-    p(278, "Kylian Mbappé", "Real Madrid", "Delantero Centro", L_ES, 9, 9, 5, 1, 0.95, 2.4, 4.8, "98%", "Villarreal", "Más de 1.5 Tiros a Puerta", "87.0%", 1.50, "Marcará Gol en Cualquier Momento", "72.0%", 1.62, "Más de 3.5 Tiros Totales", "84.0%", 1.58)
-    p(774, "Vinícius Jr.", "Real Madrid", "Extremo Izquierdo", L_ES, 7, 9, 4, 4, 0.75, 1.9, 3.8, "96%", "Villarreal", "Más de 1.5 Tiros a Puerta", "82.0%", 1.68, "Más de 0.5 Asistencias o Gol", "80.0%", 1.65)
-    p(153, "Jude Bellingham", "Real Madrid", "Mediocentro Ofensivo", L_ES, 5, 7, 2, 2, 0.48, 1.3, 2.5, "95%", "Villarreal", "Más de 1.5 Tiros Totales", "81.0%", 1.48, "Más de 0.5 Tiros a Puerta", "75.0%", 1.70)
-    p(635, "Bernardo Silva", "Real Madrid", "Mediapunta Creativo", L_ES, 20, 8, 2, 4, 0.42, 1.2, 2.2, "94%", "Villarreal", "Más de 0.5 Asistencias o Gol", "74.0%", 1.85, "Más de 60.5 Pases", "89.0%", 1.48)
-    p(1390649, "Yan Diomande", "Real Madrid", "Extremo Derecho", L_ES, 17, 8, 4, 3, 0.62, 1.7, 3.1, "92%", "Villarreal", "Más de 1.5 Tiros Totales", "84.0%", 1.52, "Más de 0.5 Asistencias o Gol", "76.0%", 1.75, "Más de 1.5 Regates con Éxito", "88.0%", 1.45)
+    p(107, "Kylian Mbappé", "Real Madrid", "Delantero Centro", L_ES, 9, 9, 6, 1, 0.95, 2.5, 4.8, "98%", "Villarreal", "Más de 1.5 Tiros a Puerta", "88.0%", 1.50, "Marcará Gol en Cualquier Momento", "72.0%", 1.60, "Más de 3.5 Tiros Totales", "82.0%", 1.58)
+    p(108, "Vinícius Jr.", "Real Madrid", "Extremo Izquierdo", L_ES, 7, 9, 4, 4, 0.75, 1.9, 3.7, "96%", "Villarreal", "Más de 1.5 Tiros a Puerta", "80.0%", 1.68, "Más de 0.5 Asistencias o Gol", "78.0%", 1.65)
+    p(109, "Jude Bellingham", "Real Madrid", "Mediocentro Ofensivo", L_ES, 5, 8, 3, 2, 0.52, 1.4, 2.6, "95%", "Villarreal", "Más de 1.5 Tiros Totales", "82.0%", 1.48, "Más de 0.5 Tiros a Puerta", "74.0%", 1.72)
+    p(110, "Bernardo Silva", "Real Madrid", "Mediapunta Creativo", L_ES, 20, 8, 2, 4, 0.42, 1.2, 2.2, "94%", "Villarreal", "Más de 0.5 Asistencias o Gol", "74.0%", 1.85, "Más de 60.5 Pases", "89.0%", 1.48)
+    p(111, "Yan Diomande", "Real Madrid", "Extremo Derecho", L_ES, 17, 8, 4, 3, 0.62, 1.7, 3.1, "92%", "Villarreal", "Más de 1.5 Tiros Totales", "84.0%", 1.52, "Más de 0.5 Asistencias o Gol", "76.0%", 1.75, "Más de 1.5 Regates con Éxito", "88.0%", 1.45)
 
-    p(633, "Julián Álvarez", "Atlético de Madrid", "Delantero Centro", L_ES, 19, 9, 3, 1, 0.60, 1.6, 2.9, "94%", "Real Sociedad", "Más de 1.5 Tiros a Puerta", "72.0%", 1.85, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(742, "Antoine Griezmann", "Atlético de Madrid", "Segundo Delantero", L_ES, 7, 9, 3, 4, 0.55, 1.4, 2.7, "96%", "Real Sociedad", "Más de 0.5 Asistencias o Gol", "76.0%", 1.75, "Más de 1.5 Tiros Totales", "80.0%", 1.52)
-    p(1161, "Alexander Sørloth", "Atlético de Madrid", "Delantero Centro", L_ES, 9, 9, 2, 1, 0.58, 1.5, 2.6, "90%", "Real Sociedad", "Más de 0.5 Tiros a Puerta", "79.0%", 1.55, "Más de 1.5 Tiros Totales", "74.0%", 1.65)
+    p(107, "Julián Álvarez", "Atlético de Madrid", "Delantero Centro", L_ES, 19, 9, 4, 1, 0.65, 1.7, 3.1, "95%", "Real Sociedad", "Más de 1.5 Tiros a Puerta", "74.0%", 1.80, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
+    p(108, "Antoine Griezmann", "Atlético de Madrid", "Mediapunta", L_ES, 7, 9, 3, 4, 0.58, 1.5, 2.8, "96%", "Real Sociedad", "Más de 0.5 Asistencias o Gol", "76.0%", 1.72, "Más de 1.5 Tiros Totales", "80.0%", 1.55)
 
-    p(147, "Giovani Lo Celso", "Real Betis", "Mediocentro Ofensivo", L_ES, 20, 6, 5, 0, 0.70, 1.8, 3.2, "96%", "Sevilla", "Más de 1.5 Tiros a Puerta", "78.0%", 1.75, "Marcará Gol en Cualquier Momento", "52.0%", 2.60)
-    p(369400, "Vitor Roque", "Real Betis", "Delantero Centro", L_ES, 8, 7, 2, 0, 0.52, 1.4, 2.7, "92%", "Sevilla", "Más de 1.5 Tiros Totales", "77.0%", 1.58, "Más de 0.5 Tiros a Puerta", "71.0%", 1.72)
-    p(762, "Isco", "Real Betis", "Mediapunta", L_ES, 22, 6, 1, 2, 0.38, 1.1, 2.2, "90%", "Sevilla", "Más de 0.5 Asistencias", "55.0%", 2.30, "Más de 1.5 Faltas Recibidas", "82.0%", 1.50)
+    p(109, "Giovani Lo Celso", "Real Betis", "Mediocentro Ofensivo", L_ES, 20, 7, 5, 1, 0.68, 1.8, 3.1, "96%", "Sevilla", "Más de 1.5 Tiros a Puerta", "76.0%", 1.75, "Marcará Gol en Cualquier Momento", "55.0%", 2.50)
+    p(110, "Vitor Roque", "Real Betis", "Delantero Centro", L_ES, 8, 8, 3, 0, 0.54, 1.5, 2.8, "92%", "Sevilla", "Más de 1.5 Tiros Totales", "78.0%", 1.55, "Más de 0.5 Tiros a Puerta", "72.0%", 1.70)
 
-    p(30410, "Dodi Lukebakio", "Sevilla", "Extremo Derecho", L_ES, 11, 9, 3, 0, 0.50, 1.5, 3.0, "95%", "Real Betis", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
-    p(190623, "Isaac Romero", "Sevilla", "Delantero Centro", L_ES, 7, 8, 1, 1, 0.45, 1.2, 2.4, "90%", "Real Betis", "Más de 1.5 Tiros Totales", "74.0%", 1.68, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-    p(744, "Saúl Ñíguez", "Sevilla", "Mediocentro", L_ES, 17, 6, 0, 1, 0.25, 0.8, 1.6, "90%", "Real Betis", "Cometerá Más de 1.5 Faltas", "80.0%", 1.65, "Más de 35.5 Pases Precisos", "78.0%", 1.60)
+    p(111, "Dodi Lukebakio", "Sevilla", "Extremo Derecho", L_ES, 11, 8, 4, 0, 0.60, 1.6, 2.9, "95%", "Real Betis", "Más de 0.5 Tiros a Puerta", "78.0%", 1.65, "Más de 1.5 Tiros Totales", "80.0%", 1.52)
+    p(112, "Isaac Romero", "Sevilla", "Delantero Centro", L_ES, 20, 8, 2, 2, 0.48, 1.3, 2.5, "92%", "Real Betis", "Más de 1.5 Tiros Totales", "75.0%", 1.62)
 
-    p(47340, "Kike García", "Alavés", "Delantero Centro", L_ES, 17, 8, 2, 0, 0.42, 1.2, 2.3, "92%", "Barcelona", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70, "Más de 1.5 Faltas Cometidas", "79.0%", 1.60)
-    p(185938, "Carlos Vicente", "Alavés", "Extremo Derecho", L_ES, 7, 8, 2, 1, 0.38, 1.1, 2.1, "95%", "Barcelona", "Más de 1.5 Centros con Éxito", "75.0%", 1.62, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-    p(2924, "Toni Martínez", "Alavés", "Delantero Centro", L_ES, 11, 7, 2, 0, 0.40, 1.0, 2.0, "88%", "Barcelona", "Más de 1.5 Tiros Totales", "70.0%", 1.75, "Marcará Gol en Cualquier Momento", "38.0%", 3.40)
+    p(113, "Nico Williams", "Athletic Club", "Extremo Izquierdo", L_ES, 10, 8, 3, 4, 0.62, 1.7, 3.2, "96%", "Espanyol", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Asistencias", "65.0%", 2.05)
+    p(114, "Iñaki Williams", "Athletic Club", "Delantero / Extremo", L_ES, 9, 9, 3, 3, 0.58, 1.5, 2.8, "95%", "Espanyol", "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
 
-    p(47498, "Lucas Pérez", "Deportivo de La Coruña", "Delantero Centro", L_ES, 7, 8, 2, 3, 0.52, 1.5, 2.8, "96%", "Eibar", "Más de 0.5 Tiros a Puerta", "80.0%", 1.52, "Más de 0.5 Asistencias o Gol", "74.0%", 1.78)
-    p(367412, "Yeremay Hernández", "Deportivo de La Coruña", "Extremo Izquierdo", L_ES, 10, 8, 3, 1, 0.48, 1.4, 2.7, "95%", "Eibar", "Más de 1.5 Tiros Totales", "82.0%", 1.55, "Más de 2.5 Regates con Éxito", "78.0%", 1.65)
-    p(389104, "David Mella", "Deportivo de La Coruña", "Extremo Derecho", L_ES, 17, 8, 2, 2, 0.40, 1.1, 2.2, "92%", "Eibar", "Más de 1.5 Regates con Éxito", "79.0%", 1.65, "Más de 0.5 Centros", "75.0%", 1.68)
+    p(115, "Ayoze Pérez", "Villarreal", "Delantero Centro", L_ES, 22, 8, 6, 1, 0.75, 1.9, 3.4, "95%", "Real Madrid", "Más de 1.5 Tiros a Puerta", "78.0%", 1.72, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
+    p(116, "Álex Baena", "Villarreal", "Mediocentro Creativo", L_ES, 16, 8, 1, 5, 0.42, 1.3, 2.4, "96%", "Real Madrid", "Más de 0.5 Asistencias", "68.0%", 1.90)
 
-    p(47287, "Mikel Oyarzabal", "Real Sociedad", "Delantero Centro", L_ES, 10, 8, 2, 1, 0.50, 1.4, 2.6, "95%", "Atlético de Madrid", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "48.0%", 2.85)
-    p(284322, "Takefusa Kubo", "Real Sociedad", "Extremo Derecho", L_ES, 14, 8, 2, 0, 0.42, 1.3, 2.5, "95%", "Atlético de Madrid", "Más de 1.5 Tiros Totales", "80.0%", 1.52, "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(47291, "Martín Zubimendi", "Real Sociedad", "Pivote", L_ES, 4, 8, 1, 0, 0.18, 0.6, 1.2, "98%", "Atlético de Madrid", "Más de 55.5 Pases Precisos", "86.0%", 1.50, "Más de 1.5 Entradas con Éxito", "80.0%", 1.60)
+    p(117, "Mikel Oyarzabal", "Real Sociedad", "Extremo / Delantero", L_ES, 10, 8, 3, 2, 0.55, 1.5, 2.8, "95%", "Atlético de Madrid", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(118, "Takefusa Kubo", "Real Sociedad", "Extremo Derecho", L_ES, 14, 8, 2, 3, 0.48, 1.4, 2.7, "94%", "Atlético de Madrid", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(47264, "Ayoze Pérez", "Villarreal", "Delantero Centro", L_ES, 22, 7, 6, 0, 0.85, 2.2, 3.8, "96%", "Real Madrid", "Más de 1.5 Tiros a Puerta", "84.0%", 1.62, "Marcará Gol en Cualquier Momento", "65.0%", 2.10)
-    p(185935, "Álex Baena", "Villarreal", "Mediocentro Ofensivo", L_ES, 16, 7, 1, 5, 0.45, 1.4, 2.6, "96%", "Real Madrid", "Más de 0.5 Asistencias", "68.0%", 1.95, "Más de 1.5 Tiros Totales", "78.0%", 1.62)
-    p(19721, "Nicolas Pépé", "Villarreal", "Extremo Derecho", L_ES, 19, 7, 1, 2, 0.40, 1.2, 2.5, "90%", "Real Madrid", "Más de 1.5 Tiros Totales", "76.0%", 1.65, "Más de 0.5 Tiros a Puerta", "70.0%", 1.78)
+    p(119, "Iago Aspas", "Celta de Vigo", "Delantero Centro", L_ES, 10, 8, 4, 2, 0.62, 1.7, 3.0, "95%", "Las Palmas", "Más de 1.5 Tiros a Puerta", "76.0%", 1.72, "Marcará Gol en Cualquier Momento", "58.0%", 2.30)
+    p(120, "Borja Iglesias", "Celta de Vigo", "Delantero Centro", L_ES, 7, 7, 4, 0, 0.55, 1.4, 2.6, "90%", "Las Palmas", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
 
-    p(185936, "Nico Williams", "Athletic Club", "Extremo Izquierdo", L_ES, 10, 8, 1, 2, 0.48, 1.4, 2.8, "95%", "Girona", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Asistencias o Gol", "72.0%", 1.82)
-    p(47179, "Iñaki Williams", "Athletic Club", "Extremo Derecho", L_ES, 9, 9, 2, 4, 0.55, 1.5, 2.7, "96%", "Girona", "Más de 0.5 Tiros a Puerta", "79.0%", 1.58, "Más de 1.5 Tiros Totales", "80.0%", 1.52)
-    p(185937, "Oihan Sancet", "Athletic Club", "Mediocentro Ofensivo", L_ES, 8, 8, 3, 0, 0.50, 1.3, 2.4, "92%", "Girona", "Más de 1.5 Tiros Totales", "75.0%", 1.68, "Marcará Gol en Cualquier Momento", "46.0%", 3.00)
+    p(121, "Ante Budimir", "Osasuna", "Delantero Centro", L_ES, 17, 8, 4, 1, 0.64, 1.6, 2.9, "96%", "Valladolid", "Más de 0.5 Tiros a Puerta", "80.0%", 1.60, "Marcará Gol en Cualquier Momento", "60.0%", 2.25)
+    p(122, "Bryan Zaragoza", "Osasuna", "Extremo Izquierdo", L_ES, 19, 8, 2, 3, 0.46, 1.3, 2.5, "92%", "Valladolid", "Más de 1.5 Tiros Totales", "82.0%", 1.48)
 
-    p(47265, "Borja Mayoral", "Getafe", "Delantero Centro", L_ES, 9, 6, 2, 0, 0.55, 1.5, 2.6, "92%", "Osasuna", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65, "Más de 1.5 Tiros Totales", "72.0%", 1.75)
-    p(47266, "Mauro Arambarri", "Getafe", "Mediocentro", L_ES, 8, 8, 1, 0, 0.28, 0.9, 1.8, "95%", "Osasuna", "Cometerá Más de 2.5 Faltas", "85.0%", 1.55, "Más de 1.5 Entradas con Éxito", "80.0%", 1.60)
-    p(47267, "Luis Milla", "Getafe", "Organizador", L_ES, 5, 8, 0, 2, 0.20, 0.7, 1.4, "95%", "Osasuna", "Más de 48.5 Pases Totales", "82.0%", 1.58, "Más de 1.5 Faltas Recibidas", "77.0%", 1.65)
+    p(123, "Borja Mayoral", "Getafe", "Delantero Centro", L_ES, 9, 7, 3, 0, 0.52, 1.4, 2.5, "92%", "Barcelona", "Más de 0.5 Tiros a Puerta", "74.0%", 1.72)
+    p(124, "Mauro Arambarri", "Getafe", "Mediocentro Defensivo", L_ES, 8, 8, 2, 0, 0.35, 1.1, 2.2, "95%", "Barcelona", "Más de 1.5 Faltas Cometidas", "86.0%", 1.45)
 
-    p(47341, "Jorge de Frutos", "Rayo Vallecano", "Extremo Derecho", L_ES, 19, 8, 2, 1, 0.40, 1.2, 2.3, "92%", "Valladolid", "Más de 1.5 Tiros Totales", "75.0%", 1.65, "Más de 0.5 Tiros a Puerta", "69.0%", 1.80)
-    p(47342, "Sergio Camello", "Rayo Vallecano", "Delantero Centro", L_ES, 14, 8, 2, 1, 0.45, 1.3, 2.5, "90%", "Valladolid", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70, "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-    p(746, "James Rodríguez", "Rayo Vallecano", "Mediapunta", L_ES, 10, 5, 0, 1, 0.35, 1.0, 2.2, "85%", "Valladolid", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68, "Más de 0.5 Asistencias", "58.0%", 2.20)
+    p(125, "Hugo Duro", "Valencia", "Delantero Centro", L_ES, 9, 8, 3, 1, 0.52, 1.4, 2.6, "94%", "Leganés", "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
+    p(126, "Diego López", "Valencia", "Extremo", L_ES, 16, 8, 2, 2, 0.40, 1.2, 2.3, "92%", "Leganés", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
 
-    p(1185, "Ante Budimir", "Osasuna", "Delantero Centro", L_ES, 17, 8, 4, 1, 0.65, 1.6, 2.9, "96%", "Getafe", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52, "Marcará Gol en Cualquier Momento", "55.0%", 2.45)
-    p(284323, "Bryan Zaragoza", "Osasuna", "Extremo Izquierdo", L_ES, 19, 8, 1, 2, 0.42, 1.3, 2.7, "94%", "Getafe", "Más de 1.5 Tiros Totales", "80.0%", 1.55, "Más de 2.5 Regates con Éxito", "79.0%", 1.65)
-    p(47288, "Rubén García", "Osasuna", "Extremo Derecho", L_ES, 14, 8, 1, 1, 0.35, 1.0, 2.0, "90%", "Getafe", "Más de 0.5 Asistencias", "48.0%", 2.75, "Más de 1.5 Centros con Éxito", "74.0%", 1.68)
+    p(127, "Javi Puado", "Espanyol", "Extremo / Delantero", L_ES, 7, 8, 4, 1, 0.58, 1.6, 2.9, "96%", "Athletic Club", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(128, "Alejo Véliz", "Espanyol", "Delantero Centro", L_ES, 9, 7, 2, 0, 0.46, 1.3, 2.4, "90%", "Athletic Club", "Más de 1.5 Tiros Totales", "75.0%", 1.60)
 
-    p(47214, "Iago Aspas", "Celta de Vigo", "Delantero Centro", L_ES, 10, 8, 4, 2, 0.68, 1.7, 3.0, "95%", "Las Palmas", "Más de 0.5 Tiros a Puerta", "84.0%", 1.48, "Más de 0.5 Asistencias o Gol", "78.0%", 1.65)
-    p(47215, "Borja Iglesias", "Celta de Vigo", "Delantero Centro", L_ES, 7, 8, 4, 0, 0.62, 1.5, 2.6, "90%", "Las Palmas", "Marcará Gol en Cualquier Momento", "58.0%", 2.20, "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(284324, "Williot Swedberg", "Celta de Vigo", "Extremo Izquierdo", L_ES, 19, 8, 2, 1, 0.40, 1.1, 2.1, "88%", "Las Palmas", "Más de 1.5 Tiros Totales", "72.0%", 1.72, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
+    p(129, "Jorge de Frutos", "Rayo Vallecano", "Extremo Derecho", L_ES, 19, 8, 3, 1, 0.48, 1.3, 2.5, "94%", "Mallorca", "Más de 0.5 Tiros a Puerta", "72.0%", 1.75)
+    p(130, "Sergio Camello", "Rayo Vallecano", "Delantero Centro", L_ES, 14, 8, 2, 1, 0.44, 1.2, 2.4, "90%", "Mallorca", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
 
-    p(47240, "Javi Puado", "Espanyol", "Delantero Centro", L_ES, 7, 8, 3, 0, 0.55, 1.4, 2.8, "95%", "Mallorca", "Más de 0.5 Tiros a Puerta", "77.0%", 1.65, "Marcará Gol en Cualquier Momento", "44.0%", 3.10)
-    p(368102, "Alejo Véliz", "Espanyol", "Delantero Centro", L_ES, 9, 8, 1, 0, 0.38, 1.0, 2.1, "90%", "Mallorca", "Más de 1.5 Tiros Totales", "71.0%", 1.75, "Más de 0.5 Tiros a Puerta", "65.0%", 1.95)
-    p(387211, "Jofre Carreras", "Espanyol", "Extremo Derecho", L_ES, 17, 8, 1, 1, 0.32, 0.9, 1.9, "88%", "Mallorca", "Más de 1.5 Faltas Recibidas", "78.0%", 1.60, "Más de 1.5 Centros con Éxito", "72.0%", 1.70)
+    p(131, "Kike García", "Deportivo Alavés", "Delantero Centro", L_ES, 17, 8, 3, 0, 0.50, 1.4, 2.6, "92%", "Valladolid", "Más de 0.5 Tiros a Puerta", "74.0%", 1.70)
+    p(132, "Carlos Vicente", "Deportivo Alavés", "Extremo Derecho", L_ES, 7, 8, 2, 2, 0.42, 1.2, 2.3, "95%", "Valladolid", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(47400, "Andrés Martín", "Racing Club", "Extremo Derecho", L_ES, 11, 8, 6, 2, 0.78, 1.9, 3.4, "96%", "Levante", "Más de 1.5 Tiros a Puerta", "82.0%", 1.65, "Marcará Gol en Cualquier Momento", "62.0%", 2.15)
-    p(47401, "Juan Carlos Arana", "Racing Club", "Delantero Centro", L_ES, 9, 8, 4, 1, 0.60, 1.5, 2.8, "92%", "Levante", "Más de 0.5 Tiros a Puerta", "76.0%", 1.68, "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(47402, "Iñigo Vicente", "Racing Club", "Extremo Izquierdo", L_ES, 10, 8, 1, 4, 0.45, 1.2, 2.5, "95%", "Levante", "Más de 0.5 Asistencias", "60.0%", 2.20, "Más de 1.5 Tiros Totales", "73.0%", 1.72)
+    p(133, "Lucas Pérez", "Deportivo de La Coruña", "Delantero / Mediapunta", L_ES, 7, 8, 4, 3, 0.60, 1.6, 3.0, "96%", "Racing Club", "Más de 0.5 Tiros a Puerta", "78.0%", 1.65)
+    p(134, "Yeremay Hernández", "Deportivo de La Coruña", "Extremo Izquierdo", L_ES, 10, 8, 3, 2, 0.52, 1.4, 2.7, "94%", "Racing Club", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
 
-    p(47268, "José Luis Morales", "Levante", "Delantero Centro", L_ES, 11, 8, 3, 1, 0.52, 1.4, 2.7, "94%", "Racing Club", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62, "Marcará Gol en Cualquier Momento", "48.0%", 2.85)
-    p(368103, "Carlos Álvarez", "Levante", "Mediapunta", L_ES, 24, 8, 2, 3, 0.44, 1.2, 2.3, "92%", "Racing Club", "Más de 0.5 Asistencias o Gol", "70.0%", 1.85, "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(47269, "Roger Brugué", "Levante", "Extremo Derecho", L_ES, 7, 8, 2, 1, 0.38, 1.1, 2.0, "88%", "Racing Club", "Más de 1.5 Tiros Totales", "72.0%", 1.70, "Más de 0.5 Tiros a Puerta", "66.0%", 1.90)
+    p(135, "José Luis Morales", "Levante", "Delantero Centro", L_ES, 11, 8, 4, 1, 0.56, 1.5, 2.8, "94%", "Elche", "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
+    p(136, "Carlos Álvarez", "Levante", "Mediapunta", L_ES, 24, 8, 2, 3, 0.44, 1.2, 2.4, "92%", "Elche", "Más de 0.5 Asistencias o Gol", "70.0%", 1.85)
 
-    p(47450, "Agustín Álvarez", "Elche", "Delantero Centro", L_ES, 9, 8, 2, 1, 0.48, 1.3, 2.5, "92%", "Málaga", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68, "Marcará Gol en Cualquier Momento", "42.0%", 3.10)
-    p(47451, "Nicolás Castro", "Elche", "Mediocentro Ofensivo", L_ES, 8, 8, 1, 2, 0.35, 1.0, 2.1, "90%", "Málaga", "Más de 1.5 Tiros Totales", "75.0%", 1.65, "Más de 0.5 Asistencias", "48.0%", 2.80)
-    p(47452, "Mourad El Ghezouani", "Elche", "Delantero Centro", L_ES, 11, 7, 2, 0, 0.40, 1.1, 2.2, "88%", "Málaga", "Más de 0.5 Tiros a Puerta", "70.0%", 1.78, "Más de 1.5 Faltas Cometidas", "80.0%", 1.60)
+    p(137, "Agustín Álvarez", "Elche", "Delantero Centro", L_ES, 9, 8, 3, 1, 0.50, 1.3, 2.5, "92%", "Levante", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+    p(138, "Nicolás Castro", "Elche", "Mediocentro Ofensivo", L_ES, 8, 8, 2, 2, 0.38, 1.1, 2.2, "94%", "Levante", "Más de 0.5 Tiros a Puerta", "70.0%", 1.80)
 
-    p(185939, "Hugo Duro", "Valencia", "Delantero Centro", L_ES, 9, 8, 2, 0, 0.48, 1.3, 2.5, "92%", "Girona", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65, "Marcará Gol en Cualquier Momento", "44.0%", 3.00)
-    p(284325, "Diego López", "Valencia", "Extremo Derecho", L_ES, 16, 8, 1, 1, 0.38, 1.1, 2.2, "92%", "Girona", "Más de 1.5 Tiros Totales", "73.0%", 1.70, "Más de 0.5 Tiros a Puerta", "67.0%", 1.88)
-    p(47292, "Pepelu", "Valencia", "Pivote", L_ES, 18, 8, 1, 1, 0.25, 0.8, 1.5, "96%", "Girona", "Cometerá Más de 1.5 Faltas", "82.0%", 1.58, "Más de 50.5 Pases Totales", "80.0%", 1.62)
+    p(139, "Antonio Cordero", "Málaga", "Extremo / Delantero", L_ES, 26, 8, 3, 3, 0.52, 1.4, 2.6, "95%", "Cádiz", "Más de 0.5 Tiros a Puerta", "74.0%", 1.70)
+    p(140, "Dioni", "Málaga", "Delantero Centro", L_ES, 17, 8, 4, 0, 0.56, 1.4, 2.7, "92%", "Cádiz", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
 
-    p(405102, "Antonio Cordero", "Málaga", "Extremo Izquierdo", L_ES, 26, 8, 3, 3, 0.55, 1.4, 2.7, "94%", "Elche", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Más de 0.5 Asistencias o Gol", "73.0%", 1.80)
-    p(47460, "Dioni", "Málaga", "Delantero Centro", L_ES, 17, 8, 3, 0, 0.48, 1.3, 2.4, "90%", "Elche", "Más de 0.5 Tiros a Puerta", "72.0%", 1.72, "Marcará Gol en Cualquier Momento", "40.0%", 3.25)
-    p(47461, "Kevin Medina", "Málaga", "Extremo Derecho", L_ES, 11, 7, 1, 1, 0.35, 1.0, 2.0, "88%", "Elche", "Más de 1.5 Regates con Éxito", "76.0%", 1.65, "Más de 1.5 Tiros Totales", "70.0%", 1.75)
+    # RACING CLUB (Real 2026/2027: Andrés Martín, Juan Carlos Arana)
+    p(141, "Andrés Martín", "Racing Club", "Extremo / Delantero", L_ES, 11, 8, 4, 3, 0.62, 1.6, 2.9, "96%", "Deportivo de La Coruña", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(142, "Juan Carlos Arana", "Racing Club", "Delantero Centro", L_ES, 9, 8, 4, 1, 0.58, 1.5, 2.8, "94%", "Deportivo de La Coruña", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
 
     # =========================================================================
-    # 2. INGLATERRA: Premier League (20 equipos x 3 = 60 jugadores)
-    # =========================================================================
-    L_EN = "Premier League"
-    p(1100, "Erling Haaland", "Manchester City", "Delantero Centro", L_EN, 9, 7, 10, 0, 1.18, 2.7, 4.6, "98%", "Fulham", "Más de 1.5 Tiros a Puerta", "86.5%", 1.55, "Marcará Gol en Cualquier Momento", "71.0%", 1.58, "Más de 3.5 Tiros Totales", "79.0%", 1.70)
-    p(629, "Kevin De Bruyne", "Manchester City", "Mediocentro Ofensivo", L_EN, 17, 6, 2, 4, 0.42, 1.4, 2.8, "90%", "Fulham", "Más de 0.5 Asistencias", "58.0%", 2.10, "Más de 1.5 Tiros Totales", "82.0%", 1.45)
-    p(631, "Phil Foden", "Manchester City", "Extremo Derecho", L_EN, 47, 6, 1, 2, 0.45, 1.5, 3.1, "92%", "Fulham", "Más de 1.5 Tiros Totales", "80.0%", 1.52, "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
-
-    p(1465, "Bukayo Saka", "Arsenal", "Extremo Derecho", L_EN, 7, 7, 2, 7, 0.48, 1.6, 3.3, "97%", "Southampton", "Más de 0.5 Asistencias o Gol", "78.0%", 1.68, "Más de 1.5 Tiros a Puerta", "64.0%", 1.85)
-    p(994, "Kai Havertz", "Arsenal", "Delantero Centro", L_EN, 29, 7, 4, 1, 0.65, 1.5, 2.7, "95%", "Southampton", "Más de 0.5 Tiros a Puerta", "74.0%", 1.72, "Marcará Gol en Cualquier Momento", "55.0%", 2.30)
-    p(371, "Martin Ødegaard", "Arsenal", "Mediocentro Ofensivo", L_EN, 8, 5, 1, 2, 0.35, 1.1, 2.2, "92%", "Southampton", "Más de 0.5 Asistencias", "52.0%", 2.40, "Más de 1.5 Tiros Totales", "76.0%", 1.65)
-
-    p(18968, "Danny Welbeck", "Brighton", "Delantero Centro", L_EN, 18, 7, 4, 1, 0.58, 1.5, 2.8, "94%", "Tottenham", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "48.0%", 2.85)
-    p(106720, "Kaoru Mitoma", "Brighton", "Extremo Izquierdo", L_EN, 22, 7, 1, 2, 0.40, 1.2, 2.4, "95%", "Tottenham", "Más de 1.5 Tiros Totales", "79.0%", 1.55, "Más de 0.5 Asistencias", "46.0%", 2.90)
-    p(152968, "Georginio Rutter", "Brighton", "Mediapunta", L_EN, 14, 6, 2, 1, 0.42, 1.2, 2.3, "90%", "Tottenham", "Más de 0.5 Tiros a Puerta", "71.0%", 1.75, "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-
-    p(2886, "Bryan Mbeumo", "Brentford", "Extremo Derecho", L_EN, 19, 7, 6, 0, 0.72, 1.9, 3.4, "98%", "Wolves", "Más de 1.5 Tiros Totales", "85.0%", 1.48, "Marcará Gol en Cualquier Momento", "59.0%", 2.25)
-    p(2887, "Yoane Wissa", "Brentford", "Delantero Centro", L_EN, 11, 5, 3, 1, 0.55, 1.4, 2.6, "90%", "Wolves", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65, "Marcará Gol en Cualquier Momento", "50.0%", 2.70)
-    p(1570, "Mikkel Damsgaard", "Brentford", "Mediocentro Ofensivo", L_EN, 24, 7, 0, 2, 0.25, 0.8, 1.6, "92%", "Wolves", "Más de 0.5 Asistencias", "45.0%", 3.00, "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-
-    p(19000, "Joël Piroe", "Leeds United", "Delantero Centro", L_EN, 10, 8, 4, 1, 0.55, 1.4, 2.6, "94%", "Sheffield United", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62, "Marcará Gol en Cualquier Momento", "52.0%", 2.50)
-    p(19001, "Wilfried Gnonto", "Leeds United", "Extremo Izquierdo", L_EN, 29, 8, 2, 3, 0.42, 1.2, 2.3, "92%", "Sheffield United", "Más de 1.5 Tiros Totales", "77.0%", 1.60, "Más de 0.5 Asistencias", "48.0%", 2.80)
-    p(19002, "Brenden Aaronson", "Leeds United", "Mediapunta", L_EN, 11, 8, 3, 1, 0.44, 1.1, 2.1, "92%", "Sheffield United", "Más de 1.5 Faltas Recibidas", "80.0%", 1.55, "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-
-    p(306, "Mohamed Salah", "Liverpool", "Extremo Derecho", L_EN, 11, 7, 4, 4, 0.82, 2.1, 3.9, "98%", "Crystal Palace", "Más de 1.5 Tiros a Puerta", "84.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.75, "Más de 3.5 Tiros Totales", "76.0%", 1.82)
-    p(2489, "Luis Díaz", "Liverpool", "Extremo Izquierdo", L_EN, 7, 7, 5, 1, 0.70, 1.8, 3.2, "92%", "Crystal Palace", "Más de 1.5 Tiros Totales", "85.0%", 1.48, "Marcará Gol en Cualquier Momento", "58.0%", 2.20)
-    p(304249, "Bradley Barcola", "Liverpool", "Extremo Izquierdo", L_EN, 29, 8, 6, 2, 0.85, 2.1, 3.6, "94%", "Crystal Palace", "Marcará Gol en Cualquier Momento", "68.0%", 1.85, "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Más de 2.5 Tiros Totales", "80.0%", 1.65)
-    p(2470, "Cody Gakpo", "Liverpool", "Delantero Centro", L_EN, 18, 7, 2, 2, 0.45, 1.3, 2.5, "90%", "Crystal Palace", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65, "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-
-    p(18788, "Dwight McNeil", "Everton", "Mediocentro Ofensivo", L_EN, 7, 7, 3, 2, 0.50, 1.4, 2.8, "95%", "Newcastle", "Más de 1.5 Tiros Totales", "80.0%", 1.55, "Más de 0.5 Asistencias o Gol", "68.0%", 1.95)
-    p(18789, "Dominic Calvert-Lewin", "Everton", "Delantero Centro", L_EN, 9, 7, 2, 1, 0.52, 1.3, 2.5, "92%", "Newcastle", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68, "Marcará Gol en Cualquier Momento", "48.0%", 2.80)
-    p(18790, "Iliman Ndiaye", "Everton", "Extremo Izquierdo", L_EN, 10, 7, 1, 0, 0.35, 1.0, 2.1, "90%", "Newcastle", "Más de 1.5 Regates con Éxito", "80.0%", 1.55, "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-
-    p(19100, "Chris Bedia", "Hull", "Delantero Centro", L_EN, 9, 8, 2, 0, 0.42, 1.1, 2.2, "90%", "Norwich", "Más de 0.5 Tiros a Puerta", "70.0%", 1.75, "Marcará Gol en Cualquier Momento", "38.0%", 3.40)
-    p(19101, "Mohamed Belloumi", "Hull", "Extremo Derecho", L_EN, 7, 8, 2, 2, 0.38, 1.1, 2.1, "92%", "Norwich", "Más de 1.5 Tiros Totales", "74.0%", 1.65, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-    p(19102, "Kasey Palmer", "Hull", "Mediapunta", L_EN, 10, 8, 1, 2, 0.30, 0.9, 1.8, "88%", "Norwich", "Más de 0.5 Asistencias", "44.0%", 3.00, "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-
-    p(1946, "Alexander Isak", "Newcastle United", "Delantero Centro", L_EN, 14, 6, 2, 1, 0.65, 1.7, 3.2, "95%", "Everton", "Más de 1.5 Tiros a Puerta", "78.0%", 1.75, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
-    p(1947, "Anthony Gordon", "Newcastle United", "Extremo Izquierdo", L_EN, 10, 7, 2, 1, 0.48, 1.4, 2.6, "95%", "Everton", "Más de 1.5 Tiros Totales", "80.0%", 1.52, "Más de 0.5 Asistencias o Gol", "68.0%", 1.95)
-    p(1948, "Bruno Guimarães", "Newcastle United", "Mediocentro", L_EN, 39, 7, 0, 1, 0.22, 0.7, 1.4, "98%", "Everton", "Cometerá Más de 1.5 Faltas", "85.0%", 1.50, "Más de 52.5 Pases Totales", "82.0%", 1.55)
-
-    p(152982, "Cole Palmer", "Chelsea", "Mediapunta", L_EN, 20, 7, 6, 4, 0.88, 2.0, 3.7, "98%", "Nottingham Forest", "Más de 1.5 Tiros a Puerta", "84.0%", 1.62, "Marcará Gol en Cualquier Momento", "65.0%", 2.15, "Más de 0.5 Asistencias", "62.0%", 2.05)
-    p(152983, "Nicolas Jackson", "Chelsea", "Delantero Centro", L_EN, 15, 7, 4, 3, 0.72, 1.8, 3.1, "94%", "Nottingham Forest", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(152984, "Noni Madueke", "Chelsea", "Extremo Derecho", L_EN, 11, 6, 4, 0, 0.60, 1.6, 3.0, "92%", "Nottingham Forest", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-
-    p(19200, "Liam Delap", "Ipswich", "Delantero Centro", L_EN, 19, 7, 3, 0, 0.52, 1.4, 2.6, "94%", "West Ham", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65, "Marcará Gol en Cualquier Momento", "48.0%", 2.85)
-    p(19201, "Sammie Szmodics", "Ipswich", "Mediapunta", L_EN, 23, 7, 1, 0, 0.35, 1.0, 2.0, "90%", "West Ham", "Más de 1.5 Tiros Totales", "73.0%", 1.70, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-    p(19202, "Omari Hutchinson", "Ipswich", "Extremo Derecho", L_EN, 20, 7, 0, 1, 0.30, 0.9, 1.9, "92%", "West Ham", "Más de 1.5 Regates con Éxito", "78.0%", 1.60, "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-
-    p(1485, "Bruno Fernandes", "Manchester United", "Mediocentro Ofensivo", L_EN, 8, 7, 0, 2, 0.45, 1.4, 3.2, "96%", "Aston Villa", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Asistencias", "54.0%", 2.35)
-    p(909, "Marcus Rashford", "Manchester United", "Extremo Izquierdo", L_EN, 10, 7, 1, 1, 0.42, 1.3, 2.5, "92%", "Aston Villa", "Más de 0.5 Tiros a Puerta", "72.0%", 1.72, "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(153431, "Alejandro Garnacho", "Manchester United", "Extremo Derecho", L_EN, 17, 7, 1, 1, 0.48, 1.4, 2.8, "92%", "Aston Villa", "Más de 1.5 Tiros Totales", "80.0%", 1.55, "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-
-    p(18835, "Chris Wood", "Nottingham Forest", "Delantero Centro", L_EN, 11, 7, 4, 0, 0.62, 1.5, 2.5, "95%", "Chelsea", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "52.0%", 2.60)
-    p(18836, "Morgan Gibbs-White", "Nottingham Forest", "Mediocentro Ofensivo", L_EN, 10, 6, 1, 1, 0.38, 1.1, 2.2, "94%", "Chelsea", "Más de 0.5 Asistencias o Gol", "65.0%", 2.05, "Más de 1.5 Tiros Totales", "74.0%", 1.65)
-    p(18837, "Callum Hudson-Odoi", "Nottingham Forest", "Extremo Izquierdo", L_EN, 14, 7, 1, 0, 0.35, 1.0, 2.0, "90%", "Chelsea", "Más de 1.5 Tiros Totales", "74.0%", 1.68, "Más de 0.5 Tiros a Puerta", "68.0%", 1.82)
-
-    p(19300, "Wilson Isidor", "Sunderland", "Delantero Centro", L_EN, 18, 7, 3, 0, 0.50, 1.3, 2.4, "92%", "Hull", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65, "Marcará Gol en Cualquier Momento", "48.0%", 2.80)
-    p(19301, "Romaine Mundle", "Sunderland", "Extremo Izquierdo", L_EN, 11, 8, 3, 2, 0.45, 1.3, 2.5, "94%", "Hull", "Más de 1.5 Tiros Totales", "78.0%", 1.60, "Más de 0.5 Asistencias", "48.0%", 2.85)
-    p(19302, "Jobe Bellingham", "Sunderland", "Mediapunta", L_EN, 7, 8, 2, 1, 0.38, 1.0, 2.1, "95%", "Hull", "Más de 1.5 Tiros Totales", "75.0%", 1.65, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-
-    p(18840, "Jean-Philippe Mateta", "Crystal Palace", "Delantero Centro", L_EN, 14, 7, 2, 0, 0.55, 1.5, 2.8, "94%", "Liverpool", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "48.0%", 2.80)
-    p(18841, "Eberechi Eze", "Crystal Palace", "Mediapunta", L_EN, 10, 7, 1, 1, 0.52, 1.6, 3.4, "96%", "Liverpool", "Más de 1.5 Tiros Totales", "84.0%", 1.48, "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
-    p(18842, "Eddie Nketiah", "Crystal Palace", "Delantero Centro", L_EN, 9, 6, 0, 0, 0.38, 1.1, 2.2, "88%", "Liverpool", "Más de 0.5 Tiros a Puerta", "70.0%", 1.75, "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-
-    p(2936, "Ollie Watkins", "Aston Villa", "Delantero Centro", L_EN, 11, 7, 4, 2, 0.72, 1.9, 3.2, "96%", "Manchester United", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Marcará Gol en Cualquier Momento", "62.0%", 2.15)
-    p(152990, "Morgan Rogers", "Aston Villa", "Mediapunta", L_EN, 27, 7, 1, 2, 0.42, 1.2, 2.4, "94%", "Manchester United", "Más de 1.5 Tiros Totales", "78.0%", 1.60, "Más de 0.5 Asistencias", "50.0%", 2.60)
-    p(152991, "Jhon Durán", "Aston Villa", "Delantero Centro", L_EN, 9, 7, 4, 0, 0.65, 1.6, 2.8, "88%", "Manchester United", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-
-    p(18850, "Antoine Semenyo", "Bournemouth", "Extremo Derecho", L_EN, 24, 7, 3, 1, 0.60, 1.8, 4.2, "96%", "Arsenal", "Más de 2.5 Tiros Totales", "82.0%", 1.55, "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
-    p(18851, "Evanilson", "Bournemouth", "Delantero Centro", L_EN, 9, 6, 1, 0, 0.48, 1.3, 2.5, "90%", "Arsenal", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70, "Marcará Gol en Cualquier Momento", "44.0%", 3.00)
-    p(18852, "Justin Kluivert", "Bournemouth", "Extremo Izquierdo", L_EN, 19, 7, 1, 2, 0.38, 1.1, 2.3, "90%", "Arsenal", "Más de 1.5 Tiros Totales", "75.0%", 1.65, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-
-    p(19400, "Haji Wright", "Coventry", "Delantero Centro", L_EN, 11, 8, 3, 0, 0.52, 1.4, 2.6, "94%", "Blackburn", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65, "Marcará Gol en Cualquier Momento", "48.0%", 2.80)
-    p(19401, "Ellis Simms", "Coventry", "Delantero Centro", L_EN, 9, 8, 2, 1, 0.45, 1.2, 2.4, "90%", "Blackburn", "Más de 1.5 Tiros Totales", "74.0%", 1.68, "Más de 0.5 Tiros a Puerta", "68.0%", 1.85)
-    p(19402, "Jack Rudoni", "Coventry", "Mediocentro Ofensivo", L_EN, 5, 8, 1, 2, 0.35, 1.0, 2.0, "92%", "Blackburn", "Más de 0.5 Asistencias", "46.0%", 2.90, "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-
-    p(18860, "Raúl Jiménez", "Fulham", "Delantero Centro", L_EN, 7, 6, 3, 1, 0.60, 1.6, 2.8, "95%", "Manchester City", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62, "Marcará Gol en Cualquier Momento", "48.0%", 2.80)
-    p(18861, "Alex Iwobi", "Fulham", "Extremo Izquierdo", L_EN, 17, 7, 1, 1, 0.38, 1.1, 2.2, "92%", "Manchester City", "Más de 1.5 Tiros Totales", "76.0%", 1.62, "Más de 0.5 Asistencias", "48.0%", 2.85)
-    p(18862, "Adama Traoré", "Fulham", "Extremo Derecho", L_EN, 11, 7, 1, 2, 0.40, 1.2, 2.4, "90%", "Manchester City", "Más de 2.5 Regates con Éxito", "84.0%", 1.50, "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-
-    p(186, "Son Heung-min", "Tottenham", "Extremo Izquierdo", L_EN, 7, 6, 2, 2, 0.62, 1.8, 3.4, "95%", "Brighton", "Más de 1.5 Tiros a Puerta", "79.0%", 1.68, "Más de 0.5 Asistencias o Gol", "76.0%", 1.75)
-    p(187, "Brennan Johnson", "Tottenham", "Extremo Derecho", L_EN, 22, 7, 3, 0, 0.58, 1.6, 3.0, "94%", "Brighton", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Más de 1.5 Tiros Totales", "80.0%", 1.52)
-    p(188, "Dominic Solanke", "Tottenham", "Delantero Centro", L_EN, 19, 6, 2, 1, 0.65, 1.6, 3.1, "92%", "Brighton", "Marcará Gol en Cualquier Momento", "58.0%", 2.20, "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-
-    # =========================================================================
-    # 3. ALEMANIA: Bundesliga (18 equipos x 3 = 54 jugadores)
-    # =========================================================================
-    L_DE = "Bundesliga"
-    p(184, "Harry Kane", "Bayern Múnich", "Delantero Centro", L_DE, 9, 6, 5, 4, 1.10, 2.5, 4.4, "98%", "Eintracht Frankfurt", "Más de 1.5 Tiros a Puerta", "88.0%", 1.50, "Marcará Gol en Cualquier Momento", "76.0%", 1.48, "Más de 3.5 Tiros Totales", "82.0%", 1.62)
-    p(138818, "Jamal Musiala", "Bayern Múnich", "Mediapunta", L_DE, 42, 6, 3, 2, 0.65, 1.7, 3.2, "96%", "Eintracht Frankfurt", "Más de 0.5 Asistencias o Gol", "80.0%", 1.65, "Más de 1.5 Tiros a Puerta", "72.0%", 1.82)
-    p(138819, "Michael Olise", "Bayern Múnich", "Extremo Derecho", L_DE, 17, 6, 3, 2, 0.60, 1.6, 3.1, "95%", "Eintracht Frankfurt", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-
-    p(32906, "Serhou Guirassy", "Borussia Dortmund", "Delantero Centro", L_DE, 9, 5, 4, 1, 0.85, 2.2, 3.8, "96%", "Werder Bremen", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.85)
-    p(32907, "Julian Brandt", "Borussia Dortmund", "Mediocentro Ofensivo", L_DE, 10, 6, 1, 3, 0.42, 1.3, 2.4, "94%", "Werder Bremen", "Más de 0.5 Asistencias", "62.0%", 2.10)
-    p(32908, "Karim Adeyemi", "Borussia Dortmund", "Extremo Izquierdo", L_DE, 27, 5, 2, 3, 0.58, 1.6, 2.9, "92%", "Werder Bremen", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
-
-    p(138814, "Florian Wirtz", "Bayer Leverkusen", "Mediocentro Ofensivo", L_DE, 10, 6, 4, 1, 0.78, 1.9, 3.5, "97%", "Holstein Kiel", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Más de 0.5 Asistencias o Gol", "82.0%", 1.55)
-    p(138815, "Victor Boniface", "Bayer Leverkusen", "Delantero Centro", L_DE, 22, 6, 4, 1, 0.85, 2.3, 4.6, "95%", "Holstein Kiel", "Más de 3.5 Tiros Totales", "84.0%", 1.58, "Marcará Gol en Cualquier Momento", "68.0%", 1.80)
-    p(138816, "Jeremie Frimpong", "Bayer Leverkusen", "Carrilero Derecho", L_DE, 30, 6, 1, 2, 0.40, 1.2, 2.3, "95%", "Holstein Kiel", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
-
-    p(25000, "Loïs Openda", "Leipzig", "Delantero Centro", L_DE, 11, 6, 4, 1, 0.80, 2.1, 3.8, "96%", "Mainz", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Marcará Gol en Cualquier Momento", "64.0%", 1.95)
-    p(25001, "Benjamin Šeško", "Leipzig", "Delantero Centro", L_DE, 30, 6, 2, 1, 0.60, 1.6, 2.9, "92%", "Mainz", "Más de 0.5 Tiros a Puerta", "79.0%", 1.55)
-    p(25002, "Xavi Simons", "Leipzig", "Mediapunta", L_DE, 20, 6, 2, 2, 0.52, 1.5, 3.0, "95%", "Mainz", "Más de 0.5 Asistencias o Gol", "75.0%", 1.72)
-
-    p(25010, "Omar Marmoush", "Eintracht Frankfurt", "Delantero Centro", L_DE, 7, 6, 8, 4, 1.05, 2.6, 4.3, "98%", "Bayern Múnich", "Más de 1.5 Tiros a Puerta", "85.0%", 1.55, "Marcará Gol en Cualquier Momento", "65.0%", 2.10)
-    p(25011, "Hugo Ekitiké", "Eintracht Frankfurt", "Delantero Centro", L_DE, 11, 6, 2, 2, 0.58, 1.5, 2.8, "92%", "Bayern Múnich", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(25012, "Mario Götze", "Eintracht Frankfurt", "Mediocentro Ofensivo", L_DE, 27, 6, 1, 1, 0.30, 0.8, 1.7, "90%", "Bayern Múnich", "Más de 42.5 Pases Totales", "80.0%", 1.60)
-
-    p(25020, "Ermedin Demirović", "Stuttgart", "Delantero Centro", L_DE, 9, 6, 4, 1, 0.68, 1.7, 3.1, "95%", "Hoffenheim", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50, "Marcará Gol en Cualquier Momento", "58.0%", 2.20)
-    p(25021, "Deniz Undav", "Stuttgart", "Delantero Centro", L_DE, 26, 6, 4, 0, 0.70, 1.8, 3.5, "95%", "Hoffenheim", "Más de 1.5 Tiros a Puerta", "78.0%", 1.68)
-    p(25022, "Enzo Millot", "Stuttgart", "Mediapunta", L_DE, 8, 6, 2, 2, 0.45, 1.3, 2.4, "92%", "Hoffenheim", "Más de 0.5 Asistencias", "52.0%", 2.45)
-
-    p(25030, "Vincenzo Grifo", "Friburgo", "Extremo Izquierdo", L_DE, 32, 6, 2, 3, 0.52, 1.5, 2.7, "95%", "Werder Bremen", "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
-    p(25031, "Ritsu Doan", "Friburgo", "Extremo Derecho", L_DE, 42, 6, 3, 1, 0.48, 1.4, 2.6, "94%", "Werder Bremen", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(25032, "Junior Adamu", "Friburgo", "Delantero Centro", L_DE, 20, 6, 2, 1, 0.44, 1.2, 2.3, "90%", "Werder Bremen", "Más de 0.5 Tiros a Puerta", "72.0%", 1.72)
-
-    p(25040, "Samuel Essende", "Augsburgo", "Delantero Centro", L_DE, 9, 5, 2, 0, 0.45, 1.3, 2.5, "90%", "Gladbach", "Más de 0.5 Tiros a Puerta", "73.0%", 1.70)
-    p(25041, "Phillip Tietz", "Augsburgo", "Delantero Centro", L_DE, 21, 6, 1, 1, 0.38, 1.1, 2.1, "88%", "Gladbach", "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-    p(25042, "Elvis Rexhbecaj", "Augsburgo", "Mediocentro", L_DE, 8, 6, 1, 0, 0.22, 0.7, 1.5, "92%", "Gladbach", "Cometerá Más de 1.5 Faltas", "82.0%", 1.55)
-
-    p(25050, "Jonathan Burkardt", "Mainz", "Delantero Centro", L_DE, 29, 6, 5, 0, 0.75, 1.8, 3.2, "96%", "Leipzig", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "55.0%", 2.40)
-    p(25051, "Jae-sung Lee", "Mainz", "Mediapunta", L_DE, 7, 6, 1, 1, 0.35, 1.0, 2.0, "92%", "Leipzig", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-    p(25052, "Nadiem Amiri", "Mainz", "Organizador", L_DE, 18, 6, 1, 1, 0.32, 0.9, 2.2, "95%", "Leipzig", "Más de 45.5 Pases Totales", "80.0%", 1.60)
-
-    p(25060, "Marvin Ducksch", "Werder Bremen", "Delantero Centro", L_DE, 7, 6, 1, 3, 0.50, 1.4, 2.9, "95%", "Dortmund", "Más de 0.5 Asistencias o Gol", "72.0%", 1.80)
-    p(25061, "Jens Stage", "Werder Bremen", "Mediocentro", L_DE, 6, 6, 3, 0, 0.42, 1.2, 2.2, "94%", "Dortmund", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(25062, "Romano Schmid", "Werder Bremen", "Mediapunta", L_DE, 20, 6, 1, 1, 0.35, 1.0, 2.1, "92%", "Dortmund", "Más de 0.5 Asistencias", "48.0%", 2.75)
-
-    p(25070, "Andrej Kramarić", "Hoffenheim", "Segundo Delantero", L_DE, 27, 6, 4, 1, 0.70, 1.8, 3.3, "95%", "Stuttgart", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
-    p(25071, "Marius Bülter", "Hoffenheim", "Extremo Izquierdo", L_DE, 21, 6, 3, 0, 0.50, 1.3, 2.5, "92%", "Stuttgart", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(25072, "Adam Hložek", "Hoffenheim", "Delantero Centro", L_DE, 23, 5, 1, 1, 0.40, 1.1, 2.2, "88%", "Stuttgart", "Más de 0.5 Tiros a Puerta", "70.0%", 1.75)
-
-    p(25080, "Benedict Hollerbach", "Unión de Berlín", "Delantero Centro", L_DE, 16, 6, 2, 0, 0.45, 1.3, 2.4, "92%", "Dortmund", "Más de 0.5 Tiros a Puerta", "74.0%", 1.65)
-    p(25081, "Yorbe Vertessen", "Unión de Berlín", "Extremo Izquierdo", L_DE, 11, 6, 1, 1, 0.38, 1.1, 2.2, "90%", "Dortmund", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-    p(25082, "Tom Rothe", "Unión de Berlín", "Carrilero Izquierdo", L_DE, 18, 6, 1, 1, 0.30, 0.8, 1.8, "92%", "Dortmund", "Más de 1.5 Centros con Éxito", "75.0%", 1.65)
-
-    p(25090, "Tim Kleindienst", "Borussia Mönchengladbach", "Delantero Centro", L_DE, 11, 6, 3, 1, 0.65, 1.6, 2.9, "96%", "Augsburgo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "55.0%", 2.35)
-    p(25091, "Alassane Pléa", "Borussia Mönchengladbach", "Segundo Delantero", L_DE, 14, 6, 1, 2, 0.42, 1.2, 2.4, "92%", "Augsburgo", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(25092, "Kevin Stöger", "Borussia Mönchengladbach", "Organizador", L_DE, 7, 6, 1, 1, 0.35, 1.1, 2.2, "95%", "Augsburgo", "Más de 50.5 Pases Totales", "82.0%", 1.55)
-
-    p(25100, "Robert Glatzel", "Hamburgo", "Delantero Centro", L_DE, 9, 7, 6, 1, 0.80, 2.0, 3.6, "95%", "Magdeburg", "Más de 1.5 Tiros a Puerta", "82.0%", 1.65, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
-    p(25101, "Davie Selke", "Hamburgo", "Delantero Centro", L_DE, 27, 7, 3, 0, 0.52, 1.4, 2.6, "90%", "Magdeburg", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(25102, "Ransford Königsdörffer", "Hamburgo", "Extremo Derecho", L_DE, 11, 7, 4, 1, 0.58, 1.5, 2.8, "92%", "Magdeburg", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-
-    p(25110, "Tim Lemperle", "Colonia", "Delantero Centro", L_DE, 19, 7, 4, 2, 0.60, 1.5, 2.8, "94%", "Ulm", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(25111, "Damion Downs", "Colonia", "Delantero Centro", L_DE, 8, 7, 3, 1, 0.50, 1.3, 2.5, "90%", "Ulm", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(25112, "Linton Maina", "Colonia", "Extremo Izquierdo", L_DE, 11, 7, 2, 4, 0.45, 1.2, 2.3, "95%", "Ulm", "Más de 0.5 Asistencias", "58.0%", 2.25)
-
-    p(25120, "Kenan Karaman", "Schalke", "Delantero Centro", L_DE, 19, 7, 4, 1, 0.62, 1.6, 3.0, "95%", "Hertha", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
-    p(25121, "Moussa Sylla", "Schalke", "Delantero Centro", L_DE, 9, 7, 5, 1, 0.70, 1.7, 3.2, "95%", "Hertha", "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(25122, "Tobias Mohr", "Schalke", "Extremo Izquierdo", L_DE, 29, 7, 3, 1, 0.42, 1.1, 2.1, "90%", "Hertha", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-
-    p(25130, "Filip Bilbija", "Paderborn", "Delantero Centro", L_DE, 7, 7, 4, 1, 0.58, 1.5, 2.8, "94%", "Regensburg", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(25131, "Sven Michel", "Paderborn", "Delantero Centro", L_DE, 10, 7, 2, 1, 0.45, 1.2, 2.4, "90%", "Regensburg", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(25132, "Ilyas Ansah", "Paderborn", "Extremo Izquierdo", L_DE, 29, 7, 2, 2, 0.40, 1.1, 2.2, "90%", "Regensburg", "Más de 0.5 Asistencias o Gol", "68.0%", 1.95)
-
-    p(25140, "Fisnik Asllani", "Elversberg", "Delantero Centro", L_DE, 29, 7, 4, 2, 0.65, 1.6, 3.0, "95%", "Preußen Münster", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
-    p(25141, "Muhammed Damar", "Elversberg", "Mediapunta", L_DE, 10, 7, 2, 2, 0.42, 1.2, 2.3, "92%", "Preußen Münster", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(25142, "Luca Schnellbacher", "Elversberg", "Delantero Centro", L_DE, 24, 7, 2, 1, 0.40, 1.1, 2.1, "90%", "Preußen Münster", "Más de 0.5 Tiros a Puerta", "70.0%", 1.75)
-
-    # =========================================================================
-    # 4. FRANCIA: Ligue 1 (18 equipos x 3 = 54 jugadores)
+    # 2. FRANCIA: LIGUE 1 - ROSTERS REALES CONFIRMADOS 2026 (INCLUYENDO LENS Y LYON)
     # =========================================================================
     L_FR = "Ligue 1"
-    p(280, "Ousmane Dembélé", "Paris Saint-Germain", "Extremo Derecho", L_FR, 10, 8, 4, 4, 0.75, 1.9, 3.8, "95%", "Nice", "Más de 1.5 Tiros a Puerta", "82.0%", 1.65, "Más de 0.5 Asistencias", "68.0%", 1.85)
-    p(85062, "Khvicha Kvaratskhelia", "Paris Saint-Germain", "Extremo Izquierdo", L_FR, 77, 8, 5, 4, 0.78, 2.1, 4.1, "96%", "Nice", "Más de 1.5 Tiros a Puerta", "84.0%", 1.62, "Más de 0.5 Asistencias o Gol", "82.0%", 1.65, "Más de 2.5 Tiros Totales", "88.0%", 1.48)
-    p(184, "Ferran Torres", "Paris Saint-Germain", "Delantero Centro / Extremo", L_FR, 7, 8, 5, 2, 0.70, 1.8, 3.1, "92%", "Nice", "Marcará Gol en Cualquier Momento", "65.0%", 1.95, "Más de 1.5 Tiros Totales", "82.0%", 1.55)
-    p(335147, "Désiré Doué", "Paris Saint-Germain", "Mediapunta / Extremo", L_FR, 14, 7, 3, 3, 0.52, 1.4, 2.6, "90%", "Nice", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62, "Más de 1.5 Regates con Éxito", "85.0%", 1.50)
+    # LENS (Real 2026: Odsonne Édouard, Florian Thauvin, Junior Kroupi)
+    p(201, "Odsonne Édouard", "Lens", "Delantero Centro", L_FR, 11, 7, 4, 1, 0.68, 1.8, 3.2, "96%", "Lyon", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58, "Marcará Gol en Cualquier Momento", "62.0%", 2.15, "Más de 1.5 Tiros Totales", "82.0%", 1.52)
+    p(202, "Florian Thauvin", "Lens", "Extremo / Mediapunta", L_FR, 10, 8, 3, 3, 0.58, 1.6, 3.0, "95%", "Lyon", "Más de 1.5 Tiros Totales", "84.0%", 1.48, "Más de 0.5 Asistencias o Gol", "76.0%", 1.75)
+    p(203, "Junior Kroupi", "Lens", "Delantero / Extremo", L_FR, 22, 8, 5, 2, 0.65, 1.7, 3.1, "94%", "Lyon", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
 
-    p(26000, "Eliesse Ben Seghir", "Mónaco", "Mediapunta", L_FR, 7, 7, 2, 2, 0.48, 1.4, 2.8, "94%", "Rennes", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
-    p(26001, "Folarin Balogun", "Mónaco", "Delantero Centro", L_FR, 9, 6, 3, 0, 0.65, 1.7, 3.1, "92%", "Rennes", "Más de 0.5 Tiros a Puerta", "80.0%", 1.52, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(26002, "Maghnes Akliouche", "Mónaco", "Extremo Derecho", L_FR, 11, 7, 1, 3, 0.42, 1.2, 2.5, "95%", "Rennes", "Más de 0.5 Asistencias", "58.0%", 2.20)
+    # LYON (Real 2026: Loïs Openda, Ernest Nuamah, Corentin Tolisso, Tanner Tessmann)
+    p(204, "Loïs Openda", "Lyon", "Delantero Centro", L_FR, 17, 8, 6, 1, 0.85, 2.2, 4.0, "98%", "Lens", "Más de 1.5 Tiros a Puerta", "84.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.80, "Más de 2.5 Tiros Totales", "82.0%", 1.60)
+    p(205, "Ernest Nuamah", "Lyon", "Extremo Derecho", L_FR, 7, 8, 3, 3, 0.55, 1.6, 2.9, "94%", "Lens", "Más de 1.5 Tiros Totales", "80.0%", 1.55, "Más de 0.5 Tiros a Puerta", "75.0%", 1.70)
+    p(206, "Corentin Tolisso", "Lyon", "Extremo / Interior", L_FR, 8, 8, 3, 2, 0.46, 1.4, 2.5, "95%", "Lens", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
+    p(207, "Tanner Tessmann", "Lyon", "Mediocentro Organizador", L_FR, 6, 8, 2, 2, 0.38, 1.1, 2.2, "92%", "Lens", "Más de 55.5 Pases Completados", "88.0%", 1.48)
 
-    p(26010, "Mason Greenwood", "Marsella", "Extremo Derecho", L_FR, 10, 7, 5, 1, 0.78, 2.0, 3.7, "98%", "Angers", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "66.0%", 1.90)
-    p(26011, "Jonathan Rowe", "Marsella", "Extremo Izquierdo", L_FR, 17, 6, 2, 1, 0.45, 1.3, 2.5, "90%", "Angers", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
-    p(26012, "Amine Harit", "Marsella", "Mediocentro Ofensivo", L_FR, 11, 7, 1, 3, 0.38, 1.1, 2.2, "92%", "Angers", "Más de 0.5 Asistencias", "54.0%", 2.30)
+    # PARIS SAINT-GERMAIN (Real 2026/2027: Ousmane Dembélé, Khvicha Kvaratskhelia, Ferran Torres, Joshua Kimmich, Désiré Doué)
+    p(208, "Ousmane Dembélé", "Paris Saint-Germain", "Extremo Derecho", L_FR, 10, 8, 5, 4, 0.78, 2.1, 4.0, "96%", "Le Mans", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Más de 0.5 Asistencias", "70.0%", 1.80)
+    p(209, "Khvicha Kvaratskhelia", "Paris Saint-Germain", "Extremo Izquierdo", L_FR, 77, 8, 5, 4, 0.78, 2.1, 4.1, "96%", "Le Mans", "Más de 1.5 Tiros a Puerta", "84.0%", 1.62, "Más de 0.5 Asistencias o Gol", "82.0%", 1.65, "Más de 2.5 Tiros Totales", "88.0%", 1.48)
+    p(210, "Ferran Torres", "Paris Saint-Germain", "Delantero Centro / Extremo", L_FR, 7, 8, 5, 2, 0.70, 1.8, 3.1, "92%", "Le Mans", "Marcará Gol en Cualquier Momento", "65.0%", 1.95, "Más de 1.5 Tiros Totales", "82.0%", 1.55)
+    p(211, "Joshua Kimmich", "Paris Saint-Germain", "Pivote / Lateral Organizador", L_FR, 6, 8, 2, 5, 0.38, 1.2, 2.2, "96%", "Le Mans", "Más de 70.5 Pases Completados", "90.0%", 1.48, "Más de 0.5 Asistencias", "58.0%", 2.30)
+    p(212, "Désiré Doué", "Paris Saint-Germain", "Mediapunta", L_FR, 14, 8, 3, 3, 0.54, 1.5, 2.7, "92%", "Le Mans", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
 
-    p(26020, "Alexandre Lacazette", "Lyon", "Delantero Centro", L_FR, 10, 6, 2, 1, 0.60, 1.6, 2.9, "94%", "Nantes", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "54.0%", 2.35)
-    p(26021, "Rayan Cherki", "Lyon", "Mediapunta", L_FR, 18, 5, 1, 2, 0.44, 1.3, 2.7, "92%", "Nantes", "Más de 2.5 Regates con Éxito", "82.0%", 1.50)
-    p(26022, "Malick Fofana", "Lyon", "Extremo Izquierdo", L_FR, 11, 7, 3, 1, 0.52, 1.4, 2.6, "90%", "Nantes", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
+    # MARSELLA (Real 2026: Mason Greenwood, Elye Wahi, Jonathan Rowe)
+    p(210, "Mason Greenwood", "Marsella", "Extremo Derecho", L_FR, 10, 8, 6, 2, 0.82, 2.2, 4.1, "98%", "Monaco", "Más de 1.5 Tiros a Puerta", "86.0%", 1.55, "Marcará Gol en Cualquier Momento", "68.0%", 1.85)
+    p(211, "Elye Wahi", "Marsella", "Delantero Centro", L_FR, 9, 7, 3, 1, 0.60, 1.6, 3.0, "92%", "Monaco", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
 
-    p(26030, "M'Bala Nzola", "Lens", "Delantero Centro", L_FR, 9, 5, 2, 0, 0.50, 1.3, 2.5, "90%", "Strasbourg", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(26031, "Florian Sotoca", "Lens", "Mediapunta", L_FR, 7, 7, 1, 1, 0.40, 1.2, 2.3, "95%", "Strasbourg", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(26032, "Wesley Saïd", "Lens", "Extremo Izquierdo", L_FR, 22, 6, 2, 0, 0.45, 1.2, 2.4, "88%", "Strasbourg", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70)
+    # MONACO (Real 2026: Folarin Balogun, Maghnes Akliouche, Eliesse Ben Seghir)
+    p(212, "Folarin Balogun", "Mónaco", "Delantero Centro", L_FR, 9, 8, 4, 1, 0.68, 1.8, 3.2, "94%", "Marsella", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
+    p(213, "Maghnes Akliouche", "Mónaco", "Extremo Derecho", L_FR, 11, 8, 2, 4, 0.48, 1.3, 2.6, "95%", "Marsella", "Más de 0.5 Asistencias", "62.0%", 2.10)
 
-    p(26040, "Ludovic Blas", "Stade Rennais", "Mediocentro Ofensivo", L_FR, 11, 7, 3, 2, 0.55, 1.5, 3.0, "95%", "Mónaco", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-    p(26041, "Arnaud Kalimuendo", "Stade Rennais", "Delantero Centro", L_FR, 9, 6, 3, 0, 0.60, 1.5, 2.7, "92%", "Mónaco", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(26042, "Albert Grønbæk", "Stade Rennais", "Mediapunta", L_FR, 7, 7, 1, 1, 0.38, 1.1, 2.2, "90%", "Mónaco", "Más de 0.5 Asistencias", "48.0%", 2.75)
+    # LILLE (Real 2026: Jonathan David, Edon Zhegrova)
+    p(214, "Jonathan David", "Lille", "Delantero Centro", L_FR, 9, 8, 5, 2, 0.75, 1.9, 3.5, "96%", "Le Havre", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Marcará Gol en Cualquier Momento", "64.0%", 1.95)
+    p(215, "Edon Zhegrova", "Lille", "Extremo Derecho", L_FR, 23, 8, 4, 3, 0.60, 1.7, 3.3, "95%", "Le Havre", "Más de 1.5 Tiros Totales", "84.0%", 1.48)
 
-    p(26050, "Evann Guessand", "Niza", "Delantero Centro", L_FR, 29, 7, 3, 1, 0.58, 1.5, 2.9, "94%", "PSG", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
-    p(26051, "Mohamed-Ali Cho", "Niza", "Extremo Derecho", L_FR, 25, 6, 1, 1, 0.40, 1.2, 2.3, "90%", "PSG", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(26052, "Jérémie Boga", "Niza", "Extremo Izquierdo", L_FR, 7, 5, 1, 0, 0.35, 1.0, 2.1, "88%", "PSG", "Más de 1.5 Regates con Éxito", "79.0%", 1.62)
+    # NIZA (Real 2026: Evann Guessand, Jérémie Boga)
+    p(216, "Evann Guessand", "Niza", "Delantero Centro", L_FR, 29, 8, 4, 1, 0.62, 1.6, 2.9, "94%", "Stade Rennais", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(217, "Jérémie Boga", "Niza", "Extremo Izquierdo", L_FR, 7, 7, 2, 2, 0.45, 1.3, 2.5, "90%", "Stade Rennais", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(26060, "Romain Del Castillo", "Brest", "Extremo Derecho", L_FR, 10, 7, 3, 1, 0.55, 1.5, 2.8, "95%", "Le Havre", "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
-    p(26061, "Ludovic Ajorque", "Brest", "Delantero Centro", L_FR, 19, 7, 2, 1, 0.50, 1.3, 2.5, "92%", "Le Havre", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(26062, "Mahdi Camara", "Brest", "Mediocentro", L_FR, 45, 7, 2, 0, 0.35, 1.0, 2.0, "96%", "Le Havre", "Cometerá Más de 1.5 Faltas", "82.0%", 1.55)
+    # STADE RENNAIS (Real 2026: Arnaud Kalimuendo, Ludovic Blas)
+    p(218, "Arnaud Kalimuendo", "Stade Rennais", "Delantero Centro", L_FR, 9, 8, 4, 1, 0.64, 1.6, 2.9, "94%", "Niza", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(219, "Ludovic Blas", "Stade Rennais", "Mediocentro Ofensivo", L_FR, 11, 8, 3, 3, 0.54, 1.5, 2.8, "95%", "Niza", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
 
-    p(26070, "Andrey Santos", "Estrasburgo", "Mediocentro", L_FR, 8, 6, 3, 0, 0.45, 1.2, 2.2, "96%", "Lens", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
-    p(26071, "Sebastian Nanasi", "Estrasburgo", "Mediapunta", L_FR, 10, 5, 3, 1, 0.52, 1.4, 2.6, "94%", "Lens", "Más de 0.5 Asistencias o Gol", "72.0%", 1.80)
-    p(26072, "Emanuel Emegha", "Estrasburgo", "Delantero Centro", L_FR, 9, 6, 3, 1, 0.60, 1.5, 2.8, "92%", "Lens", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    # BREST (Real 2026: Ludovic Ajorque, Romain Del Castillo)
+    p(220, "Ludovic Ajorque", "Brest", "Delantero Centro", L_FR, 19, 8, 3, 1, 0.55, 1.4, 2.7, "92%", "Angers", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(221, "Romain Del Castillo", "Brest", "Extremo Derecho", L_FR, 10, 8, 3, 3, 0.52, 1.4, 2.6, "95%", "Angers", "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
 
-    p(26080, "Zakaria Aboukhlal", "Toulouse", "Extremo Derecho", L_FR, 7, 7, 1, 1, 0.45, 1.3, 2.7, "92%", "Lille", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(26081, "Shavy Babicka", "Toulouse", "Extremo Derecho", L_FR, 80, 7, 3, 0, 0.50, 1.4, 2.6, "90%", "Lille", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(26082, "Yann Gboho", "Toulouse", "Mediapunta", L_FR, 10, 7, 1, 2, 0.38, 1.1, 2.2, "92%", "Lille", "Más de 0.5 Asistencias", "50.0%", 2.65)
+    # ESTRASBURGO (Real 2026: Emanuel Emegha, Sebastian Nanasi)
+    p(222, "Emanuel Emegha", "Estrasburgo", "Delantero Centro", L_FR, 9, 8, 4, 1, 0.62, 1.6, 2.8, "94%", "Toulouse", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    p(223, "Sebastian Nanasi", "Estrasburgo", "Mediapunta", L_FR, 10, 7, 3, 2, 0.52, 1.4, 2.6, "92%", "Toulouse", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(26090, "Gaëtan Perrin", "Auxerre", "Extremo Derecho", L_FR, 10, 7, 1, 2, 0.40, 1.2, 2.3, "92%", "Saint-Étienne", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(26091, "Hamed Traorè", "Auxerre", "Mediapunta", L_FR, 14, 5, 2, 0, 0.48, 1.3, 2.5, "92%", "Saint-Étienne", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(26092, "Lassine Sinayoko", "Auxerre", "Delantero Centro", L_FR, 17, 7, 1, 1, 0.42, 1.1, 2.2, "90%", "Saint-Étienne", "Cometerá Más de 1.5 Faltas", "80.0%", 1.58)
+    # TOULOUSE (Real 2026: Zakaria Aboukhlal, Yann Gboho)
+    p(224, "Zakaria Aboukhlal", "Toulouse", "Extremo / Delantero", L_FR, 7, 8, 4, 1, 0.58, 1.5, 2.9, "94%", "Estrasburgo", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(225, "Yann Gboho", "Toulouse", "Mediapunta", L_FR, 10, 8, 2, 2, 0.44, 1.2, 2.4, "92%", "Estrasburgo", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(26100, "Himad Abdelli", "Angers", "Mediocentro Ofensivo", L_FR, 10, 7, 2, 0, 0.45, 1.2, 2.4, "95%", "Marsella", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(26101, "Esteban Lepaul", "Angers", "Delantero Centro", L_FR, 9, 6, 1, 0, 0.38, 1.0, 2.1, "88%", "Marsella", "Más de 0.5 Tiros a Puerta", "70.0%", 1.75)
-    p(26102, "Farid El Melali", "Angers", "Extremo Derecho", L_FR, 28, 7, 1, 1, 0.35, 1.0, 2.0, "90%", "Marsella", "Más de 1.5 Faltas Recibidas", "78.0%", 1.60)
+    # AUXERRE (Real 2026: Gaëtan Perrin, Lassine Sinayoko)
+    p(226, "Gaëtan Perrin", "Auxerre", "Extremo Derecho", L_FR, 10, 8, 3, 2, 0.50, 1.3, 2.5, "94%", "Troyes", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+    p(227, "Lassine Sinayoko", "Auxerre", "Delantero Centro", L_FR, 17, 8, 3, 1, 0.48, 1.3, 2.4, "90%", "Troyes", "Más de 0.5 Tiros a Puerta", "72.0%", 1.72)
 
-    p(26110, "Abdoulaye Touré", "Le Havre", "Mediocentro", L_FR, 94, 7, 2, 0, 0.35, 0.9, 1.8, "95%", "Brest", "Cometerá Más de 1.5 Faltas", "82.0%", 1.55)
-    p(26111, "Yassine Kechta", "Le Havre", "Organizador", L_FR, 8, 7, 0, 1, 0.25, 0.7, 1.4, "92%", "Brest", "Más de 40.5 Pases Totales", "78.0%", 1.62)
-    p(26112, "Emmanuel Sabbi", "Le Havre", "Extremo Derecho", L_FR, 11, 6, 0, 0, 0.32, 0.9, 2.0, "88%", "Brest", "Más de 1.5 Tiros Totales", "70.0%", 1.75)
+    # ANGERS (Real 2026: Himad Abdelli, Esteban Lepaul)
+    p(228, "Himad Abdelli", "Angers", "Mediocentro Creativo", L_FR, 10, 8, 3, 1, 0.48, 1.3, 2.4, "95%", "Brest", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+    p(229, "Esteban Lepaul", "Angers", "Delantero Centro", L_FR, 9, 8, 2, 1, 0.44, 1.2, 2.3, "90%", "Brest", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70)
 
-    p(26120, "Jean-Philippe Krasso", "París FC", "Delantero Centro", L_FR, 11, 7, 4, 1, 0.65, 1.6, 2.9, "94%", "Laval", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "56.0%", 2.30)
-    p(26121, "Ilan Kebbal", "París FC", "Mediapunta", L_FR, 10, 8, 3, 1, 0.52, 1.4, 2.6, "95%", "Laval", "Más de 0.5 Asistencias o Gol", "72.0%", 1.80)
-    p(26122, "Alimami Gory", "París FC", "Extremo Izquierdo", L_FR, 7, 7, 2, 2, 0.42, 1.1, 2.2, "90%", "Laval", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
+    # LE HAVRE (Real 2026: Abdoulaye Touré, Emmanuel Sabbi)
+    p(230, "Abdoulaye Touré", "Le Havre", "Pivote / Especialista Penal", L_FR, 94, 8, 3, 0, 0.42, 1.1, 2.1, "96%", "Lille", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
+    p(231, "Emmanuel Sabbi", "Le Havre", "Extremo / Delantero", L_FR, 11, 7, 2, 1, 0.40, 1.2, 2.3, "90%", "Lille", "Más de 0.5 Tiros a Puerta", "70.0%", 1.78)
 
-    p(26130, "Eli Junior Kroupi", "Lorient", "Delantero Centro", L_FR, 22, 7, 4, 1, 0.60, 1.5, 2.8, "92%", "Annecy", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(26131, "Mohamed Bamba", "Lorient", "Delantero Centro", L_FR, 9, 6, 2, 1, 0.50, 1.3, 2.5, "90%", "Annecy", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(26132, "Laurent Abergel", "Lorient", "Pivote", L_FR, 6, 7, 0, 1, 0.20, 0.6, 1.2, "96%", "Annecy", "Cometerá Más de 1.5 Faltas", "82.0%", 1.55)
+    # LORIENT (Real 2026: Eli Junior Kroupi, Mohamed Bamba)
+    p(232, "Eli Junior Kroupi", "Lorient", "Delantero / Mediapunta", L_FR, 22, 8, 5, 2, 0.65, 1.7, 3.1, "95%", "Paris FC", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
+    p(233, "Mohamed Bamba", "Lorient", "Delantero Centro", L_FR, 9, 7, 3, 1, 0.52, 1.4, 2.6, "92%", "Paris FC", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(26140, "Cyriaque Irié", "Troyes", "Extremo Derecho", L_FR, 19, 7, 2, 1, 0.45, 1.2, 2.3, "90%", "Pau", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(26141, "Renaud Ripart", "Troyes", "Delantero Centro", L_FR, 20, 6, 2, 0, 0.40, 1.1, 2.2, "88%", "Pau", "Más de 0.5 Tiros a Puerta", "70.0%", 1.75)
-    p(26142, "Jaurès Assoumou", "Troyes", "Delantero Centro", L_FR, 9, 6, 1, 0, 0.35, 1.0, 2.0, "86%", "Pau", "Más de 1.5 Tiros Totales", "68.0%", 1.82)
+    # PARIS FC (Real 2026: Jean-Philippe Krasso, Ilan Kebbal)
+    p(234, "Jean-Philippe Krasso", "Paris FC", "Delantero Centro", L_FR, 11, 8, 4, 2, 0.58, 1.5, 2.8, "95%", "Lorient", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(235, "Ilan Kebbal", "Paris FC", "Mediapunta", L_FR, 10, 8, 3, 3, 0.50, 1.3, 2.6, "96%", "Lorient", "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
 
-    p(26150, "Erwan Colas", "Le Mans", "Delantero Centro", L_FR, 9, 6, 3, 0, 0.50, 1.3, 2.5, "90%", "Rouen", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(26151, "Antoine Rabillard", "Le Mans", "Delantero Centro", L_FR, 11, 6, 2, 1, 0.42, 1.1, 2.2, "88%", "Rouen", "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-    p(26152, "Dame Gueye", "Le Mans", "Delantero Centro", L_FR, 7, 5, 2, 0, 0.40, 1.0, 2.0, "86%", "Rouen", "Más de 0.5 Tiros a Puerta", "68.0%", 1.80)
+    # TROYES (Real 2026: Cyriaque Irié, Renaud Ripart)
+    p(236, "Cyriaque Irié", "Troyes", "Extremo", L_FR, 7, 8, 3, 1, 0.48, 1.3, 2.4, "92%", "Auxerre", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+    p(237, "Renaud Ripart", "Troyes", "Delantero", L_FR, 20, 7, 2, 1, 0.42, 1.2, 2.2, "90%", "Auxerre", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70)
 
-    p(26160, "Jonathan David", "Lille", "Delantero Centro", L_FR, 9, 7, 5, 0, 0.75, 1.9, 3.4, "96%", "Toulouse", "Más de 0.5 Tiros a Puerta", "84.0%", 1.50, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
-    p(26161, "Edon Zhegrova", "Lille", "Extremo Derecho", L_FR, 23, 6, 3, 1, 0.60, 1.7, 3.5, "95%", "Toulouse", "Más de 1.5 Tiros Totales", "82.0%", 1.52)
-    p(26162, "Angel Gomes", "Lille", "Mediapunta", L_FR, 8, 6, 1, 1, 0.35, 1.0, 2.1, "92%", "Toulouse", "Más de 0.5 Asistencias", "54.0%", 2.35)
+    # LE MANS (Real 2026: Erwan Colas, Antoine Rabillard)
+    p(238, "Erwan Colas", "Le Mans", "Delantero Centro", L_FR, 9, 8, 3, 1, 0.46, 1.2, 2.3, "90%", "Paris Saint-Germain", "Más de 0.5 Tiros a Puerta", "70.0%", 1.80)
+    p(239, "Antoine Rabillard", "Le Mans", "Segundo Delantero", L_FR, 11, 8, 2, 2, 0.40, 1.1, 2.1, "90%", "Paris Saint-Germain", "Más de 1.5 Tiros Totales", "72.0%", 1.72)
 
     # =========================================================================
-    # 5. ITALIA: Serie A (20 equipos x 3 = 60 jugadores)
+    # 3. INGLATERRA: PREMIER LEAGUE - ROSTERS REALES CONFIRMADOS 2026
+    # =========================================================================
+    L_EN = "Premier League"
+    # MANCHESTER CITY (Real 2026/2027: Erling Haaland, Phil Foden, Rayan Cherki)
+    p(301, "Erling Haaland", "Manchester City", "Delantero Centro", L_EN, 9, 8, 10, 1, 1.25, 2.8, 4.8, "98%", "Liverpool", "Más de 1.5 Tiros a Puerta", "88.0%", 1.52, "Marcará Gol en Cualquier Momento", "74.0%", 1.55, "Más de 3.5 Tiros Totales", "82.0%", 1.65)
+    p(302, "Phil Foden", "Manchester City", "Extremo / Mediapunta", L_EN, 47, 8, 4, 3, 0.58, 1.7, 3.2, "94%", "Liverpool", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Tiros a Puerta", "76.0%", 1.68)
+    p(303, "Rayan Cherki", "Manchester City", "Mediapunta Creativo", L_EN, 18, 8, 3, 4, 0.52, 1.5, 2.9, "92%", "Liverpool", "Más de 2.5 Regates con Éxito", "84.0%", 1.48, "Más de 0.5 Asistencias o Gol", "78.0%", 1.68)
+
+    # ARSENAL (Real 2026: Bukayo Saka, Kai Havertz, Martin Ødegaard)
+    p(304, "Bukayo Saka", "Arsenal", "Extremo Derecho", L_EN, 7, 8, 4, 6, 0.65, 1.8, 3.4, "97%", "Leeds United", "Más de 0.5 Asistencias o Gol", "82.0%", 1.62, "Más de 1.5 Tiros a Puerta", "72.0%", 1.75)
+    p(305, "Kai Havertz", "Arsenal", "Delantero Centro", L_EN, 29, 8, 5, 2, 0.70, 1.7, 3.0, "96%", "Leeds United", "Más de 0.5 Tiros a Puerta", "78.0%", 1.65, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
+    p(306, "Martin Ødegaard", "Arsenal", "Mediocentro Ofensivo", L_EN, 8, 7, 2, 4, 0.45, 1.3, 2.5, "95%", "Leeds United", "Más de 0.5 Asistencias", "62.0%", 2.10)
+
+    # LIVERPOOL (Real 2026/2027: Mohamed Salah, Luis Díaz, Bradley Barcola, Cody Gakpo)
+    p(307, "Mohamed Salah", "Liverpool", "Extremo Derecho", L_EN, 11, 8, 6, 5, 0.85, 2.3, 4.2, "98%", "Manchester City", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "68.0%", 1.85)
+    p(308, "Luis Díaz", "Liverpool", "Extremo Izquierdo", L_EN, 7, 8, 5, 2, 0.72, 1.9, 3.6, "96%", "Manchester City", "Más de 1.5 Tiros a Puerta", "78.0%", 1.72, "Más de 0.5 Asistencias o Gol", "76.0%", 1.70)
+    p(309, "Bradley Barcola", "Liverpool", "Extremo Izquierdo", L_EN, 29, 8, 5, 3, 0.75, 2.0, 3.6, "95%", "Manchester City", "Más de 1.5 Tiros a Puerta", "82.0%", 1.60, "Marcará Gol en Cualquier Momento", "65.0%", 1.90)
+    p(310, "Cody Gakpo", "Liverpool", "Delantero Centro", L_EN, 18, 7, 3, 2, 0.56, 1.5, 2.9, "92%", "Manchester City", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
+
+    # CHELSEA (Real 2026: Cole Palmer, Nicolas Jackson, Noni Madueke)
+    p(310, "Cole Palmer", "Chelsea", "Mediapunta / Extremo", L_EN, 20, 8, 6, 4, 0.80, 2.1, 3.8, "98%", "Tottenham Hotspur", "Más de 1.5 Tiros a Puerta", "82.0%", 1.65, "Marcará Gol en Cualquier Momento", "68.0%", 1.85)
+    p(311, "Nicolas Jackson", "Chelsea", "Delantero Centro", L_EN, 15, 8, 4, 2, 0.64, 1.6, 2.9, "94%", "Tottenham Hotspur", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
+
+    # TOTTENHAM (Real 2026: Son Heung-min, Dominic Solanke, Brennan Johnson)
+    p(312, "Son Heung-min", "Tottenham Hotspur", "Extremo Izquierdo", L_EN, 7, 8, 4, 3, 0.68, 1.8, 3.3, "96%", "Chelsea", "Más de 1.5 Tiros a Puerta", "78.0%", 1.72, "Marcará Gol en Cualquier Momento", "62.0%", 2.15)
+    p(313, "Dominic Solanke", "Tottenham Hotspur", "Delantero Centro", L_EN, 19, 8, 4, 1, 0.65, 1.7, 3.0, "95%", "Chelsea", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+
+    # MANCHESTER UNITED (Real 2026: Bruno Fernandes, Marcus Rashford, Alejandro Garnacho)
+    p(314, "Bruno Fernandes", "Manchester United", "Mediocentro Ofensivo", L_EN, 8, 8, 3, 4, 0.55, 1.6, 3.2, "96%", "Aston Villa", "Más de 1.5 Tiros Totales", "84.0%", 1.48, "Más de 0.5 Asistencias", "64.0%", 2.05)
+    p(315, "Alejandro Garnacho", "Manchester United", "Extremo", L_EN, 17, 8, 4, 2, 0.60, 1.7, 3.3, "94%", "Aston Villa", "Más de 1.5 Tiros a Puerta", "74.0%", 1.75)
+
+    # ASTON VILLA (Real 2026: Ollie Watkins, Morgan Rogers, Jhon Durán)
+    p(316, "Ollie Watkins", "Aston Villa", "Delantero Centro", L_EN, 11, 8, 5, 2, 0.72, 1.8, 3.2, "96%", "Manchester United", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52, "Marcará Gol en Cualquier Momento", "64.0%", 1.95)
+    p(317, "Morgan Rogers", "Aston Villa", "Mediapunta", L_EN, 27, 8, 3, 3, 0.50, 1.4, 2.6, "94%", "Manchester United", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
+
+    # NEWCASTLE (Real 2026: Alexander Isak, Anthony Gordon)
+    p(318, "Alexander Isak", "Newcastle", "Delantero Centro", L_EN, 14, 8, 5, 1, 0.75, 1.9, 3.4, "96%", "Brighton", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Marcará Gol en Cualquier Momento", "66.0%", 1.90)
+    p(319, "Anthony Gordon", "Newcastle", "Extremo Izquierdo", L_EN, 10, 8, 3, 3, 0.58, 1.6, 2.9, "95%", "Brighton", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+
+    # BRIGHTON (Real 2026: Danny Welbeck, Kaoru Mitoma, Georginio Rutter)
+    p(320, "Danny Welbeck", "Brighton", "Delantero Centro", L_EN, 18, 8, 5, 1, 0.66, 1.7, 3.0, "94%", "Newcastle", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(321, "Kaoru Mitoma", "Brighton", "Extremo Izquierdo", L_EN, 22, 8, 2, 3, 0.48, 1.4, 2.7, "95%", "Newcastle", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
+
+    # BRENTFORD (Real 2026: Bryan Mbeumo, Yoane Wissa)
+    p(322, "Bryan Mbeumo", "Brentford", "Extremo / Delantero", L_EN, 19, 8, 6, 1, 0.74, 1.9, 3.3, "97%", "AFC Bournemouth", "Más de 0.5 Tiros a Puerta", "84.0%", 1.50, "Marcará Gol en Cualquier Momento", "64.0%", 2.05)
+    p(323, "Yoane Wissa", "Brentford", "Delantero Centro", L_EN, 11, 7, 4, 1, 0.60, 1.5, 2.8, "92%", "AFC Bournemouth", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
+
+    # NOTTINGHAM FOREST (Real 2026: Chris Wood, Morgan Gibbs-White)
+    p(324, "Chris Wood", "Nottingham Forest", "Delantero Centro", L_EN, 11, 8, 5, 0, 0.68, 1.6, 2.8, "96%", "Crystal Palace", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
+    p(325, "Morgan Gibbs-White", "Nottingham Forest", "Mediapunta", L_EN, 10, 8, 2, 3, 0.46, 1.3, 2.5, "95%", "Crystal Palace", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
+
+    # FULHAM (Real 2026: Raúl Jiménez, Alex Iwobi)
+    p(326, "Raúl Jiménez", "Fulham", "Delantero Centro", L_EN, 7, 8, 4, 1, 0.60, 1.6, 2.9, "94%", "Everton", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(327, "Alex Iwobi", "Fulham", "Mediocentro / Extremo", L_EN, 17, 8, 2, 2, 0.40, 1.2, 2.3, "94%", "Everton", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # AFC BOURNEMOUTH (Real 2026: Antoine Semenyo, Evanilson)
+    p(328, "Antoine Semenyo", "AFC Bournemouth", "Extremo / Delantero", L_EN, 24, 8, 4, 2, 0.65, 1.8, 3.5, "95%", "Brentford", "Más de 1.5 Tiros a Puerta", "76.0%", 1.72, "Más de 2.5 Tiros Totales", "82.0%", 1.55)
+    p(329, "Evanilson", "AFC Bournemouth", "Delantero Centro", L_EN, 9, 7, 3, 1, 0.56, 1.5, 2.8, "92%", "Brentford", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+
+    # CRYSTAL PALACE (Real 2026: Jean-Philippe Mateta, Eberechi Eze)
+    p(330, "Jean-Philippe Mateta", "Crystal Palace", "Delantero Centro", L_EN, 14, 8, 4, 1, 0.64, 1.6, 2.9, "95%", "Nottingham Forest", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(331, "Eberechi Eze", "Crystal Palace", "Mediapunta", L_EN, 10, 8, 2, 3, 0.54, 1.6, 3.2, "96%", "Nottingham Forest", "Más de 1.5 Tiros Totales", "84.0%", 1.48)
+
+    # EVERTON (Real 2026: Dwight McNeil, Dominic Calvert-Lewin)
+    p(332, "Dwight McNeil", "Everton", "Mediapunta / Extremo", L_EN, 7, 8, 3, 3, 0.52, 1.5, 2.8, "95%", "Fulham", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+    p(333, "Dominic Calvert-Lewin", "Everton", "Delantero Centro", L_EN, 9, 8, 3, 0, 0.55, 1.4, 2.6, "92%", "Fulham", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+
+    # LEEDS UNITED (Real 2026: Joël Piroe, Wilfried Gnonto)
+    p(334, "Joël Piroe", "Leeds United", "Delantero Centro", L_EN, 10, 8, 4, 1, 0.60, 1.5, 2.8, "94%", "Arsenal", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(335, "Wilfried Gnonto", "Leeds United", "Extremo", L_EN, 29, 8, 3, 2, 0.48, 1.4, 2.6, "92%", "Arsenal", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # IPSWICH TOWN (Real 2026: Liam Delap, Sammie Szmodics)
+    p(336, "Liam Delap", "Ipswich Town", "Delantero Centro", L_EN, 19, 8, 4, 0, 0.62, 1.6, 2.7, "94%", "Hull City", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(337, "Sammie Szmodics", "Ipswich Town", "Mediapunta", L_EN, 23, 8, 3, 1, 0.50, 1.3, 2.5, "92%", "Hull City", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # HULL CITY (Real 2026: Chris Bedia, Mohamed Belloumi)
+    p(338, "Chris Bedia", "Hull City", "Delantero Centro", L_EN, 9, 8, 3, 1, 0.50, 1.3, 2.4, "92%", "Ipswich Town", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
+    p(339, "Mohamed Belloumi", "Hull City", "Extremo", L_EN, 10, 8, 2, 2, 0.42, 1.2, 2.3, "90%", "Ipswich Town", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+
+    # SUNDERLAND (Real 2026: Wilson Isidor, Romaine Mundle)
+    p(340, "Wilson Isidor", "Sunderland", "Delantero Centro", L_EN, 18, 8, 4, 1, 0.58, 1.5, 2.8, "94%", "Coventry City", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(341, "Romaine Mundle", "Sunderland", "Extremo Izquierdo", L_EN, 11, 8, 3, 2, 0.48, 1.3, 2.5, "92%", "Coventry City", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # COVENTRY CITY (Real 2026: Haji Wright, Ellis Simms)
+    p(342, "Haji Wright", "Coventry City", "Delantero Centro", L_EN, 11, 8, 4, 1, 0.58, 1.5, 2.8, "94%", "Sunderland", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(343, "Ellis Simms", "Coventry City", "Delantero Centro", L_EN, 9, 7, 3, 0, 0.48, 1.3, 2.5, "90%", "Sunderland", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
+
+    # =========================================================================
+    # 4. ALEMANIA: BUNDESLIGA - ROSTERS REALES CONFIRMADOS 2026
+    # =========================================================================
+    L_DE = "Bundesliga"
+    # BAYERN MÚNICH (Real 2026: Harry Kane, Jamal Musiala, Michael Olise)
+    p(401, "Harry Kane", "Bayern Múnich", "Delantero Centro", L_DE, 9, 8, 8, 3, 1.15, 2.6, 4.4, "98%", "Augsburgo", "Más de 1.5 Tiros a Puerta", "88.0%", 1.50, "Marcará Gol en Cualquier Momento", "74.0%", 1.55, "Más de 3.5 Tiros Totales", "82.0%", 1.62)
+    p(402, "Jamal Musiala", "Bayern Múnich", "Mediapunta", L_DE, 42, 8, 5, 4, 0.72, 1.9, 3.6, "96%", "Augsburgo", "Más de 1.5 Tiros Totales", "85.0%", 1.45, "Más de 0.5 Asistencias o Gol", "80.0%", 1.60)
+    p(403, "Michael Olise", "Bayern Múnich", "Extremo Derecho", L_DE, 17, 8, 4, 4, 0.68, 1.8, 3.3, "95%", "Augsburgo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
+
+    # BORUSSIA DORTMUND (Real 2026: Serhou Guirassy, Julian Brandt, Karim Adeyemi)
+    p(404, "Serhou Guirassy", "Borussia Dortmund", "Delantero Centro", L_DE, 9, 7, 6, 1, 0.88, 2.3, 4.0, "98%", "Werder Bremen", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "70.0%", 1.70)
+    p(405, "Julian Brandt", "Borussia Dortmund", "Mediocentro Creativo", L_DE, 10, 8, 2, 4, 0.48, 1.4, 2.7, "95%", "Werder Bremen", "Más de 0.5 Asistencias", "66.0%", 1.95)
+    p(406, "Karim Adeyemi", "Borussia Dortmund", "Extremo Rápido", L_DE, 27, 7, 3, 2, 0.58, 1.6, 3.0, "92%", "Werder Bremen", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+
+    # BAYER LEVERKUSEN (Real 2026: Florian Wirtz, Victor Boniface, Jeremie Frimpong)
+    p(407, "Florian Wirtz", "Bayer Leverkusen", "Mediapunta", L_DE, 10, 8, 5, 4, 0.78, 2.0, 3.6, "98%", "Mainz", "Más de 1.5 Tiros Totales", "86.0%", 1.42, "Más de 0.5 Asistencias o Gol", "82.0%", 1.60)
+    p(408, "Victor Boniface", "Bayer Leverkusen", "Delantero Centro", L_DE, 22, 8, 6, 1, 0.85, 2.2, 4.2, "96%", "Mainz", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.80)
+
+    # RB LEIPZIG (Real 2026: Benjamin Šeško, Xavi Simons)
+    p(409, "Benjamin Šeško", "Leipzig", "Delantero Centro", L_DE, 30, 8, 5, 1, 0.76, 2.0, 3.6, "96%", "Eintracht Frankfurt", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Marcará Gol en Cualquier Momento", "66.0%", 1.88)
+    p(410, "Xavi Simons", "Leipzig", "Mediapunta", L_DE, 20, 8, 3, 4, 0.60, 1.7, 3.2, "96%", "Eintracht Frankfurt", "Más de 0.5 Asistencias o Gol", "78.0%", 1.68)
+
+    # EINTRACHT FRANKFURT (Real 2026: Omar Marmoush, Hugo Ekitiké)
+    p(411, "Omar Marmoush", "Eintracht Frankfurt", "Delantero / Extremo", L_DE, 7, 8, 8, 4, 0.95, 2.4, 4.2, "98%", "Leipzig", "Más de 1.5 Tiros a Puerta", "86.0%", 1.55, "Marcará Gol en Cualquier Momento", "70.0%", 1.75)
+    p(412, "Hugo Ekitiké", "Eintracht Frankfurt", "Delantero Centro", L_DE, 11, 8, 4, 2, 0.65, 1.8, 3.1, "94%", "Leipzig", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+
+    # STUTTGART (Real 2026: Ermedin Demirović, Deniz Undav)
+    p(413, "Ermedin Demirović", "Stuttgart", "Delantero Centro", L_DE, 9, 8, 5, 1, 0.70, 1.9, 3.3, "95%", "Paderborn", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52, "Marcará Gol en Cualquier Momento", "65.0%", 1.90)
+    p(414, "Deniz Undav", "Stuttgart", "Delantero Centro", L_DE, 26, 8, 5, 1, 0.72, 2.0, 3.5, "95%", "Paderborn", "Más de 1.5 Tiros a Puerta", "78.0%", 1.68)
+
+    # FRIBURGO (Real 2026: Vincenzo Grifo, Ritsu Doan)
+    p(415, "Vincenzo Grifo", "Friburgo", "Extremo Izquierdo", L_DE, 32, 8, 3, 4, 0.55, 1.6, 2.9, "96%", "Schalke", "Más de 0.5 Asistencias o Gol", "76.0%", 1.72)
+    p(416, "Ritsu Doan", "Friburgo", "Extremo Derecho", L_DE, 42, 8, 4, 1, 0.58, 1.6, 2.9, "95%", "Schalke", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+
+    # AUGSBURGO (Real 2026: Samuel Essende, Phillip Tietz)
+    p(417, "Samuel Essende", "Augsburgo", "Delantero Centro", L_DE, 9, 7, 3, 0, 0.52, 1.4, 2.6, "92%", "Bayern Múnich", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
+    p(418, "Phillip Tietz", "Augsburgo", "Delantero Centro", L_DE, 21, 8, 3, 1, 0.48, 1.3, 2.5, "90%", "Bayern Múnich", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+
+    # MAINZ (Real 2026: Jonathan Burkardt, Nadiem Amiri)
+    p(419, "Jonathan Burkardt", "Mainz", "Delantero Centro", L_DE, 29, 8, 5, 1, 0.72, 1.8, 3.2, "96%", "Bayer Leverkusen", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(420, "Nadiem Amiri", "Mainz", "Mediocentro Creativo", L_DE, 18, 8, 2, 2, 0.42, 1.2, 2.4, "95%", "Bayer Leverkusen", "Más de 1.5 Tiros Totales", "80.0%", 1.50)
+
+    # WERDER BREMEN (Real 2026: Marvin Ducksch, Jens Stage)
+    p(421, "Marvin Ducksch", "Werder Bremen", "Delantero Centro", L_DE, 7, 8, 4, 3, 0.65, 1.7, 3.2, "96%", "Borussia Dortmund", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62, "Más de 0.5 Asistencias", "58.0%", 2.20)
+    p(422, "Jens Stage", "Werder Bremen", "Mediocentro Llegador", L_DE, 6, 8, 4, 1, 0.55, 1.4, 2.6, "94%", "Borussia Dortmund", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # HOFFENHEIM (Real 2026: Andrej Kramarić, Marius Bülter)
+    p(423, "Andrej Kramarić", "Hoffenheim", "Segundo Delantero", L_DE, 27, 8, 5, 2, 0.72, 1.9, 3.4, "96%", "Hoffenheim", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52)
+    p(424, "Marius Bülter", "Hoffenheim", "Extremo / Delantero", L_DE, 21, 8, 3, 1, 0.50, 1.4, 2.6, "92%", "Hoffenheim", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # UNIÓN BERLÍN (Real 2026: Benedict Hollerbach, Yorbe Vertessen)
+    p(425, "Benedict Hollerbach", "Unión Berlín", "Delantero", L_DE, 16, 8, 3, 1, 0.52, 1.4, 2.7, "92%", "Elversberg", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
+    p(426, "Yorbe Vertessen", "Unión Berlín", "Extremo / Delantero", L_DE, 11, 8, 2, 1, 0.44, 1.3, 2.5, "90%", "Elversberg", "Más de 1.5 Tiros Totales", "78.0%", 1.55)
+
+    # BORUSSIA MÖNCHENGLADBACH (Real 2026: Tim Kleindienst, Alassane Pléa)
+    p(427, "Tim Kleindienst", "Borussia Mönchengladbach", "Delantero Centro", L_DE, 11, 8, 5, 1, 0.70, 1.8, 3.1, "96%", "Colonia", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
+    p(428, "Alassane Pléa", "Borussia Mönchengladbach", "Mediapunta", L_DE, 14, 8, 3, 2, 0.52, 1.4, 2.6, "92%", "Colonia", "Más de 1.5 Tiros Totales", "78.0%", 1.55)
+
+    # HAMBURGO (Real 2026: Robert Glatzel, Davie Selke)
+    p(429, "Robert Glatzel", "Hamburgo", "Delantero Centro", L_DE, 9, 8, 6, 1, 0.78, 2.0, 3.6, "96%", "Bayern Múnich", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(430, "Davie Selke", "Hamburgo", "Delantero Centro", L_DE, 27, 8, 4, 0, 0.58, 1.5, 2.8, "92%", "Bayern Múnich", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+
+    # COLONIA (Real 2026: Tim Lemperle, Linton Maina)
+    p(431, "Tim Lemperle", "Colonia", "Delantero Centro", L_DE, 19, 8, 4, 2, 0.58, 1.5, 2.8, "94%", "Borussia Mönchengladbach", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(432, "Linton Maina", "Colonia", "Extremo", L_DE, 11, 8, 3, 3, 0.48, 1.3, 2.5, "92%", "Borussia Mönchengladbach", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
+
+    # SCHALKE (Real 2026: Kenan Karaman, Moussa Sylla)
+    p(433, "Kenan Karaman", "Schalke", "Mediapunta / Delantero", L_DE, 10, 8, 5, 2, 0.68, 1.8, 3.2, "96%", "Friburgo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(434, "Moussa Sylla", "Schalke", "Delantero Centro", L_DE, 9, 8, 6, 1, 0.72, 1.9, 3.3, "95%", "Friburgo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
+
+    # PADERBORN (Real 2026: Filip Bilbija, Sven Michel)
+    p(435, "Filip Bilbija", "Paderborn", "Delantero", L_DE, 7, 8, 4, 1, 0.56, 1.5, 2.7, "94%", "Stuttgart", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
+    p(436, "Sven Michel", "Paderborn", "Delantero", L_DE, 11, 8, 3, 1, 0.50, 1.3, 2.5, "90%", "Stuttgart", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
+
+    # ELVERSBERG (Real 2026: Fisnik Asllani, Muhammed Damar)
+    p(437, "Fisnik Asllani", "Elversberg", "Delantero Centro", L_DE, 10, 8, 5, 2, 0.66, 1.7, 3.0, "95%", "Unión Berlín", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    p(438, "Muhammed Damar", "Elversberg", "Mediocentro", L_DE, 8, 8, 3, 2, 0.48, 1.3, 2.4, "92%", "Unión Berlín", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+
+    # =========================================================================
+    # 5. ITALIA: SERIE A - ROSTERS REALES CONFIRMADOS 2026
     # =========================================================================
     L_IT = "Serie A"
-    p(2844, "Lautaro Martínez", "Inter", "Delantero Centro", L_IT, 10, 7, 3, 2, 0.78, 2.0, 3.8, "96%", "Torino", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "65.0%", 2.05)
-    p(273, "Marcus Thuram", "Inter", "Delantero Centro", L_IT, 9, 7, 7, 1, 0.95, 2.3, 3.9, "96%", "Torino", "Más de 1.5 Tiros a Puerta", "84.0%", 1.58, "Marcará Gol en Cualquier Momento", "68.0%", 1.90)
-    p(1571, "Hakan Çalhanoğlu", "Inter", "Pivote Organizador", L_IT, 20, 7, 1, 0, 0.35, 1.1, 2.2, "96%", "Torino", "Más de 58.5 Pases Totales", "86.0%", 1.50)
+    # INTER (Real 2026: Lautaro Martínez, Marcus Thuram)
+    p(501, "Lautaro Martínez", "Inter", "Delantero Centro", L_IT, 10, 8, 6, 2, 0.85, 2.2, 4.0, "98%", "Grêmio", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "70.0%", 1.75)
+    p(502, "Marcus Thuram", "Inter", "Delantero Centro", L_IT, 9, 8, 7, 2, 0.88, 2.1, 3.8, "96%", "Grêmio", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.82)
 
-    p(27000, "Dušan Vlahović", "Juventus", "Delantero Centro", L_IT, 9, 7, 5, 0, 0.82, 2.1, 4.2, "96%", "Cagliari", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "68.0%", 1.85)
-    p(27001, "Kenan Yıldız", "Juventus", "Segundo Delantero", L_IT, 10, 7, 1, 2, 0.45, 1.3, 2.6, "94%", "Cagliari", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(27002, "Teun Koopmeiners", "Juventus", "Mediocentro Ofensivo", L_IT, 8, 6, 0, 1, 0.38, 1.2, 2.4, "95%", "Cagliari", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
+    # JUVENTUS (Real 2026: Dušan Vlahović, Kenan Yıldız)
+    p(503, "Dušan Vlahović", "Juventus", "Delantero Centro", L_IT, 9, 8, 6, 1, 0.82, 2.1, 4.1, "98%", "Cagliari", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.80)
+    p(504, "Kenan Yıldız", "Juventus", "Mediapunta", L_IT, 10, 8, 3, 3, 0.55, 1.5, 2.9, "95%", "Cagliari", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
 
-    p(27010, "Christian Pulisic", "AC Milan", "Extremo Derecho", L_IT, 11, 7, 5, 2, 0.72, 1.8, 3.2, "96%", "Fiorentina", "Más de 0.5 Asistencias o Gol", "80.0%", 1.65, "Más de 0.5 Tiros a Puerta", "82.0%", 1.52)
-    p(27011, "Rafael Leão", "AC Milan", "Extremo Izquierdo", L_IT, 10, 7, 1, 3, 0.55, 1.6, 3.5, "95%", "Fiorentina", "Más de 1.5 Tiros Totales", "84.0%", 1.48)
-    p(27012, "Álvaro Morata", "AC Milan", "Delantero Centro", L_IT, 7, 6, 2, 0, 0.58, 1.5, 2.8, "92%", "Fiorentina", "Marcará Gol en Cualquier Momento", "55.0%", 2.35)
+    # AC MILAN (Real 2026: Christian Pulisic, Rafael Leão)
+    p(505, "Christian Pulisic", "AC Milan", "Extremo Derecho", L_IT, 11, 8, 5, 3, 0.72, 1.9, 3.4, "96%", "Fiorentina", "Más de 0.5 Tiros a Puerta", "82.0%", 1.55, "Más de 0.5 Asistencias o Gol", "78.0%", 1.65)
+    p(506, "Rafael Leão", "AC Milan", "Extremo Izquierdo", L_IT, 10, 8, 4, 4, 0.68, 1.8, 3.6, "95%", "Fiorentina", "Más de 1.5 Tiros a Puerta", "76.0%", 1.75)
 
-    p(27020, "Romelu Lukaku", "Nápoles", "Delantero Centro", L_IT, 11, 5, 3, 4, 0.78, 1.9, 3.2, "96%", "Como", "Más de 1.5 Tiros a Puerta", "82.0%", 1.65, "Marcará Gol en Cualquier Momento", "64.0%", 2.10)
-    p(27021, "Matteo Politano", "Nápoles", "Extremo Derecho", L_IT, 21, 7, 1, 0, 0.40, 1.2, 2.5, "94%", "Como", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(27022, "Scott McTominay", "Nápoles", "Mediocentro Ofensivo", L_IT, 8, 5, 1, 1, 0.42, 1.2, 2.3, "95%", "Como", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
+    # NÁPOLES (Real 2026/2027: Romelu Lukaku, Kevin De Bruyne)
+    p(507, "Romelu Lukaku", "Napoli", "Delantero Centro", L_IT, 9, 7, 4, 3, 0.74, 1.8, 3.2, "96%", "Como 1907", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52, "Marcará Gol en Cualquier Momento", "65.0%", 1.90)
+    p(508, "Kevin De Bruyne", "Napoli", "Mediocentro Creativo", L_IT, 17, 8, 3, 5, 0.52, 1.5, 2.8, "95%", "Como 1907", "Más de 0.5 Asistencias", "66.0%", 1.95, "Más de 1.5 Tiros Totales", "82.0%", 1.48)
 
-    p(27030, "Artem Dovbyk", "Roma", "Delantero Centro", L_IT, 11, 7, 3, 1, 0.65, 1.7, 3.0, "95%", "Monza", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(27031, "Paulo Dybala", "Roma", "Mediapunta", L_IT, 21, 6, 1, 0, 0.45, 1.4, 2.8, "90%", "Monza", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
-    p(27032, "Lorenzo Pellegrini", "Roma", "Mediocentro", L_IT, 7, 6, 0, 1, 0.35, 1.1, 2.3, "92%", "Monza", "Más de 48.5 Pases Totales", "82.0%", 1.58)
+    # ATALANTA (Real 2026: Mateo Retegui, Ademola Lookman)
+    p(509, "Mateo Retegui", "Atalanta", "Delantero Centro", L_IT, 32, 8, 7, 1, 0.90, 2.3, 4.2, "98%", "Genoa", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "72.0%", 1.70)
+    p(510, "Ademola Lookman", "Atalanta", "Segundo Delantero", L_IT, 11, 7, 4, 3, 0.70, 1.9, 3.5, "95%", "Genoa", "Más de 0.5 Asistencias o Gol", "78.0%", 1.65)
 
-    p(27040, "Valentín Castellanos", "Lazio", "Delantero Centro", L_IT, 11, 6, 3, 1, 0.62, 1.7, 3.4, "95%", "Empoli", "Más de 0.5 Tiros a Puerta", "80.0%", 1.52, "Marcará Gol en Cualquier Momento", "56.0%", 2.35)
-    p(27041, "Mattia Zaccagni", "Lazio", "Extremo Izquierdo", L_IT, 10, 7, 2, 2, 0.48, 1.4, 2.6, "95%", "Empoli", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(27042, "Boulaye Dia", "Lazio", "Segundo Delantero", L_IT, 19, 6, 3, 0, 0.55, 1.4, 2.5, "92%", "Empoli", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
+    # LAZIO (Real 2026: Valentín Castellanos, Mattia Zaccagni)
+    p(511, "Valentín Castellanos", "Lazio", "Delantero Centro", L_IT, 11, 8, 4, 1, 0.66, 1.7, 3.3, "95%", "Empoli", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
+    p(512, "Mattia Zaccagni", "Lazio", "Extremo Izquierdo", L_IT, 10, 8, 3, 2, 0.52, 1.4, 2.7, "95%", "Empoli", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(27050, "Mateo Retegui", "Atalanta", "Delantero Centro", L_IT, 32, 7, 7, 1, 0.95, 2.4, 4.1, "96%", "Genoa", "Más de 1.5 Tiros a Puerta", "85.0%", 1.55, "Marcará Gol en Cualquier Momento", "70.0%", 1.85)
-    p(27051, "Ademola Lookman", "Atalanta", "Segundo Delantero", L_IT, 11, 5, 2, 2, 0.60, 1.6, 3.2, "94%", "Genoa", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-    p(27052, "Charles De Ketelaere", "Atalanta", "Mediapunta", L_IT, 17, 7, 1, 2, 0.45, 1.3, 2.5, "92%", "Genoa", "Más de 0.5 Asistencias", "55.0%", 2.30)
+    # AS ROMA (Real 2026: Artem Dovbyk, Paulo Dybala)
+    p(513, "Artem Dovbyk", "AS Roma", "Delantero Centro", L_IT, 11, 8, 4, 1, 0.68, 1.7, 3.1, "96%", "Monza", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
+    p(514, "Paulo Dybala", "AS Roma", "Mediapunta", L_IT, 21, 7, 2, 2, 0.48, 1.4, 2.6, "92%", "Monza", "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
 
-    p(27060, "Moise Kean", "Fiorentina", "Delantero Centro", L_IT, 20, 7, 2, 0, 0.58, 1.6, 3.3, "95%", "Milan", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "52.0%", 2.50)
-    p(27061, "Albert Guðmundsson", "Fiorentina", "Mediapunta", L_IT, 10, 4, 3, 0, 0.65, 1.6, 2.8, "92%", "Milan", "Más de 0.5 Asistencias o Gol", "70.0%", 1.85)
-    p(27062, "Andrea Colpani", "Fiorentina", "Extremo Derecho", L_IT, 28, 7, 0, 1, 0.38, 1.1, 2.3, "90%", "Milan", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
+    # FIORENTINA (Real 2026: Moise Kean, Albert Guðmundsson)
+    p(515, "Moise Kean", "Fiorentina", "Delantero Centro", L_IT, 20, 8, 5, 1, 0.72, 1.8, 3.4, "96%", "AC Milan", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(516, "Albert Guðmundsson", "Fiorentina", "Segundo Delantero", L_IT, 10, 6, 3, 1, 0.58, 1.5, 2.8, "92%", "AC Milan", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(27070, "Ché Adams", "Torino", "Delantero Centro", L_IT, 18, 7, 3, 1, 0.55, 1.4, 2.6, "92%", "Inter", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(27071, "Antonio Sanabria", "Torino", "Delantero Centro", L_IT, 9, 6, 1, 0, 0.40, 1.1, 2.2, "88%", "Inter", "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-    p(27072, "Samuele Ricci", "Torino", "Pivote", L_IT, 28, 7, 0, 1, 0.20, 0.6, 1.2, "96%", "Inter", "Más de 50.5 Pases Totales", "82.0%", 1.58)
+    # BOLOGNA (Real 2026/2027: Riccardo Orsolini, Santiago Castro, Dan Ndoye)
+    p(517, "Riccardo Orsolini", "Bologna", "Extremo Derecho", L_IT, 7, 8, 4, 2, 0.62, 1.8, 3.2, "96%", "Genoa", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58, "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+    p(518, "Santiago Castro", "Bologna", "Delantero Centro", L_IT, 18, 8, 4, 1, 0.60, 1.6, 2.9, "94%", "Genoa", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
 
-    p(27080, "Riccardo Orsolini", "Bolonia", "Extremo Derecho", L_IT, 7, 7, 1, 0, 0.48, 1.4, 2.9, "94%", "Parma", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
-    p(27081, "Santiago Castro", "Bolonia", "Delantero Centro", L_IT, 9, 7, 3, 1, 0.60, 1.5, 2.7, "92%", "Parma", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(27082, "Dan Ndoye", "Bolonia", "Extremo Izquierdo", L_IT, 11, 6, 0, 1, 0.35, 1.1, 2.3, "90%", "Parma", "Más de 1.5 Regates con Éxito", "78.0%", 1.60)
+    # TORINO (Real 2026/2027: Ché Adams, Antonio Sanabria)
+    p(519, "Ché Adams", "Torino", "Delantero Centro", L_IT, 18, 8, 4, 1, 0.58, 1.6, 2.8, "94%", "Inter", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(520, "Antonio Sanabria", "Torino", "Delantero Centro", L_IT, 9, 8, 3, 1, 0.50, 1.4, 2.6, "90%", "Inter", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(27090, "Patrick Cutrone", "Como", "Delantero Centro", L_IT, 10, 7, 4, 0, 0.68, 1.7, 3.2, "96%", "Nápoles", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "55.0%", 2.40)
-    p(27091, "Gabriel Strefezza", "Como", "Extremo Derecho", L_IT, 7, 7, 2, 1, 0.45, 1.3, 2.6, "94%", "Nápoles", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(27092, "Nico Paz", "Como", "Mediapunta", L_IT, 79, 6, 0, 2, 0.42, 1.3, 2.8, "92%", "Nápoles", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
+    # COMO 1907 (Real 2026/2027: Patrick Cutrone, Nico Paz)
+    p(521, "Patrick Cutrone", "Como 1907", "Delantero Centro", L_IT, 10, 8, 4, 1, 0.62, 1.7, 3.0, "95%", "Napoli", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(522, "Nico Paz", "Como 1907", "Mediapunta", L_IT, 79, 8, 3, 3, 0.54, 1.6, 3.2, "96%", "Napoli", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
 
-    p(27100, "Lorenzo Lucca", "Udinese", "Delantero Centro", L_IT, 17, 7, 3, 0, 0.58, 1.5, 2.7, "94%", "Lecce", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "52.0%", 2.50)
-    p(27101, "Florian Thauvin", "Udinese", "Segundo Delantero", L_IT, 10, 6, 3, 1, 0.55, 1.5, 2.9, "94%", "Lecce", "Más de 0.5 Asistencias o Gol", "72.0%", 1.80)
-    p(27102, "Brenner", "Udinese", "Delantero Centro", L_IT, 22, 6, 1, 2, 0.38, 1.1, 2.2, "88%", "Lecce", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
+    # UDINESE (Real 2026/2027: Lorenzo Lucca, Brenner)
+    p(523, "Lorenzo Lucca", "Udinese", "Delantero Centro", L_IT, 17, 8, 4, 1, 0.60, 1.6, 2.9, "95%", "Lecce", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    p(524, "Brenner", "Udinese", "Segundo Delantero", L_IT, 22, 7, 2, 2, 0.44, 1.2, 2.3, "90%", "Lecce", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
 
-    p(27110, "Dennis Man", "Parma", "Extremo Derecho", L_IT, 98, 7, 3, 1, 0.60, 1.6, 2.8, "95%", "Bolonia", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-    p(27111, "Ange-Yoan Bonny", "Parma", "Delantero Centro", L_IT, 13, 7, 2, 1, 0.50, 1.3, 2.5, "92%", "Bolonia", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(27112, "Valentin Mihăilă", "Parma", "Extremo Izquierdo", L_IT, 28, 7, 0, 1, 0.35, 1.1, 2.4, "90%", "Bolonia", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
+    # PARMA (Real 2026/2027: Ange-Yoan Bonny, Dennis Man)
+    p(525, "Ange-Yoan Bonny", "Parma", "Delantero Centro", L_IT, 13, 8, 4, 1, 0.58, 1.5, 2.7, "94%", "Bologna", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(526, "Dennis Man", "Parma", "Extremo Derecho", L_IT, 98, 8, 3, 3, 0.52, 1.5, 2.8, "95%", "Bologna", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(27120, "Andrea Pinamonti", "Génova", "Delantero Centro", L_IT, 19, 7, 1, 0, 0.48, 1.3, 2.6, "94%", "Atalanta", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(27121, "Ruslan Malinovskyi", "Génova", "Mediapunta", L_IT, 17, 5, 0, 1, 0.35, 1.1, 2.4, "88%", "Atalanta", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(27122, "Morten Frendrup", "Génova", "Pivote", L_IT, 32, 7, 0, 0, 0.15, 0.5, 1.0, "98%", "Atalanta", "Cometerá Más de 1.5 Faltas", "84.0%", 1.52)
+    # GENOA (Real 2026/2027: Andrea Pinamonti, Ruslan Malinovskyi)
+    p(527, "Andrea Pinamonti", "Genoa", "Delantero Centro", L_IT, 19, 8, 4, 0, 0.56, 1.5, 2.8, "94%", "Atalanta", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(528, "Ruslan Malinovskyi", "Genoa", "Mediocentro / Disparador", L_IT, 17, 7, 2, 2, 0.42, 1.3, 2.6, "90%", "Atalanta", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(27130, "Roberto Piccoli", "Cagliari", "Delantero Centro", L_IT, 91, 7, 2, 0, 0.50, 1.4, 2.8, "92%", "Juventus", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(27131, "Zito Luvumbo", "Cagliari", "Extremo Derecho", L_IT, 77, 7, 1, 1, 0.40, 1.2, 2.5, "90%", "Juventus", "Más de 1.5 Regates con Éxito", "80.0%", 1.55)
-    p(27132, "Nicolas Viola", "Cagliari", "Organizador", L_IT, 10, 6, 1, 1, 0.32, 0.9, 1.8, "88%", "Juventus", "Más de 0.5 Asistencias", "45.0%", 3.00)
+    # CAGLIARI (Real 2026/2027: Roberto Piccoli, Zito Luvumbo)
+    p(529, "Roberto Piccoli", "Cagliari", "Delantero Centro", L_IT, 91, 8, 3, 1, 0.50, 1.4, 2.6, "92%", "Juventus", "Más de 0.5 Tiros a Puerta", "74.0%", 1.70)
+    p(530, "Zito Luvumbo", "Cagliari", "Extremo Rápido", L_IT, 77, 8, 2, 2, 0.45, 1.3, 2.5, "92%", "Juventus", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(27140, "Nikola Krstović", "Lecce", "Delantero Centro", L_IT, 9, 7, 2, 0, 0.65, 1.8, 4.4, "96%", "Udinese", "Más de 2.5 Tiros Totales", "82.0%", 1.55, "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(27141, "Patrick Dorgu", "Lecce", "Carrilero Izquierdo", L_IT, 13, 6, 1, 0, 0.38, 1.1, 2.2, "94%", "Udinese", "Más de 1.5 Faltas Recibidas", "79.0%", 1.60)
-    p(27142, "Santiago Pierotti", "Lecce", "Extremo Derecho", L_IT, 50, 7, 0, 1, 0.28, 0.8, 1.8, "88%", "Udinese", "Más de 1.5 Tiros Totales", "70.0%", 1.75)
+    # LECCE (Real 2026/2027: Nikola Krstović, Patrick Dorgu)
+    p(531, "Nikola Krstović", "Lecce", "Delantero Centro", L_IT, 9, 8, 4, 0, 0.62, 1.8, 3.6, "96%", "Udinese", "Más de 1.5 Tiros a Puerta", "74.0%", 1.75, "Más de 2.5 Tiros Totales", "82.0%", 1.55)
+    p(532, "Patrick Dorgu", "Lecce", "Extremo / Carrilero", L_IT, 13, 8, 3, 1, 0.48, 1.3, 2.5, "94%", "Udinese", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(27150, "Dany Mota", "Monza", "Extremo Izquierdo", L_IT, 47, 6, 2, 0, 0.48, 1.3, 2.4, "92%", "Roma", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(27151, "Milan Đurić", "Monza", "Delantero Centro", L_IT, 11, 7, 2, 1, 0.50, 1.2, 2.2, "92%", "Roma", "Más de 2.5 Duelos Aéreos Ganados", "86.0%", 1.48)
-    p(27152, "Daniel Maldini", "Monza", "Mediapunta", L_IT, 14, 7, 1, 1, 0.42, 1.2, 2.5, "90%", "Roma", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+    # MONZA (Real 2026/2027: Dany Mota, Daniel Maldini)
+    p(533, "Dany Mota", "Monza", "Segundo Delantero", L_IT, 47, 8, 3, 1, 0.50, 1.4, 2.6, "92%", "AS Roma", "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
+    p(534, "Daniel Maldini", "Monza", "Mediapunta", L_IT, 14, 8, 3, 2, 0.48, 1.3, 2.5, "92%", "AS Roma", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(27160, "Joel Pohjanpalo", "Venecia", "Delantero Centro", L_IT, 20, 6, 2, 0, 0.58, 1.5, 2.7, "95%", "Verona", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60, "Marcará Gol en Cualquier Momento", "50.0%", 2.65)
-    p(27161, "Gaetano Oristanio", "Venecia", "Mediapunta", L_IT, 11, 7, 1, 1, 0.40, 1.1, 2.3, "92%", "Verona", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(27162, "Gianluca Busio", "Venecia", "Mediocentro", L_IT, 6, 6, 1, 1, 0.32, 0.9, 1.9, "92%", "Verona", "Más de 1.5 Faltas Recibidas", "78.0%", 1.62)
+    # VENEZIA (Real 2026/2027: Joel Pohjanpalo, Gaetano Oristanio)
+    p(535, "Joel Pohjanpalo", "Venezia", "Delantero Centro", L_IT, 20, 8, 4, 0, 0.58, 1.5, 2.8, "95%", "Hellas Verona", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(536, "Gaetano Oristanio", "Venezia", "Extremo / Mediapunta", L_IT, 11, 8, 2, 2, 0.42, 1.2, 2.3, "90%", "Hellas Verona", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(27170, "Armand Laurienté", "Sassuolo", "Extremo Izquierdo", L_IT, 45, 7, 3, 1, 0.60, 1.6, 3.2, "95%", "Cittadella", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-    p(27171, "Kristian Thorstvedt", "Sassuolo", "Mediocentro Ofensivo", L_IT, 42, 7, 4, 1, 0.62, 1.5, 2.8, "95%", "Cittadella", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(27172, "Nicholas Pierini", "Sassuolo", "Extremo Derecho", L_IT, 26, 7, 2, 1, 0.42, 1.2, 2.4, "90%", "Cittadella", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
+    # SASSUOLO (Real 2026/2027: Armand Laurienté, Kristian Thorstvedt)
+    p(537, "Armand Laurienté", "Sassuolo", "Extremo Izquierdo", L_IT, 45, 8, 5, 2, 0.65, 1.8, 3.4, "96%", "Frosinone", "Más de 1.5 Tiros Totales", "84.0%", 1.48)
+    p(538, "Kristian Thorstvedt", "Sassuolo", "Mediocentro Llegador", L_IT, 42, 8, 4, 1, 0.52, 1.4, 2.6, "94%", "Frosinone", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
 
-    p(27180, "Giuseppe Ambrosino", "Frosinone", "Delantero Centro", L_IT, 9, 7, 2, 1, 0.48, 1.3, 2.5, "92%", "Carrarese", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(27181, "Anthony Partipilo", "Frosinone", "Extremo Derecho", L_IT, 70, 7, 3, 0, 0.52, 1.4, 2.7, "92%", "Carrarese", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(27182, "Riccardo Marchizza", "Frosinone", "Carrilero Izquierdo", L_IT, 3, 7, 0, 2, 0.25, 0.7, 1.5, "94%", "Carrarese", "Más de 1.5 Centros con Éxito", "75.0%", 1.65)
+    # FROSINONE (Real 2026/2027: Giuseppe Ambrosino, Anthony Partipilo)
+    p(539, "Giuseppe Ambrosino", "Frosinone", "Delantero Centro", L_IT, 10, 8, 4, 1, 0.52, 1.4, 2.6, "92%", "Sassuolo", "Más de 0.5 Tiros a Puerta", "74.0%", 1.70)
+    p(540, "Anthony Partipilo", "Frosinone", "Extremo Derecho", L_IT, 70, 8, 3, 2, 0.46, 1.3, 2.4, "90%", "Sassuolo", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
 
     # =========================================================================
-    # 6. PORTUGAL: Primeira Liga (18 equipos x 3 = 54 jugadores)
+    # 6. PORTUGAL: PRIMEIRA LIGA - ROSTERS REALES CONFIRMADOS 2026
     # =========================================================================
     L_PT = "Primeira Liga"
-    p(21805, "Viktor Gyökeres", "Sporting CP", "Delantero Centro", L_PT, 9, 8, 11, 1, 1.25, 2.9, 4.8, "99%", "Casa Pia", "Más de 1.5 Tiros a Puerta", "90.0%", 1.45, "Marcará Gol en Cualquier Momento", "78.0%", 1.42, "Más de 3.5 Tiros Totales", "84.0%", 1.55)
-    p(21806, "Pedro Gonçalves", "Sporting CP", "Mediapunta", L_PT, 8, 6, 4, 3, 0.70, 1.8, 3.4, "95%", "Casa Pia", "Más de 0.5 Asistencias o Gol", "82.0%", 1.52)
-    p(21807, "Francisco Trincão", "Sporting CP", "Extremo Derecho", L_PT, 17, 8, 2, 4, 0.58, 1.5, 3.0, "94%", "Casa Pia", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
+    # SPORTING CP (Real 2026: Viktor Gyökeres, Pedro Gonçalves)
+    p(601, "Viktor Gyökeres", "Sporting CP", "Delantero Centro", L_PT, 9, 8, 11, 2, 1.35, 3.0, 5.2, "98%", "SC Braga", "Más de 1.5 Tiros a Puerta", "90.0%", 1.45, "Marcará Gol en Cualquier Momento", "76.0%", 1.50, "Más de 3.5 Tiros Totales", "85.0%", 1.55)
+    p(602, "Pedro Gonçalves", "Sporting CP", "Extremo / Mediapunta", L_PT, 8, 8, 5, 4, 0.75, 1.9, 3.5, "96%", "SC Braga", "Más de 0.5 Asistencias o Gol", "80.0%", 1.62)
 
-    p(28000, "Samu Omorodion", "Porto", "Delantero Centro", L_PT, 9, 6, 7, 0, 0.95, 2.3, 3.8, "96%", "Braga", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "70.0%", 1.80)
-    p(28001, "Wenderson Galeno", "Porto", "Extremo Izquierdo", L_PT, 13, 8, 6, 1, 0.80, 2.0, 3.6, "95%", "Braga", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65)
-    p(28002, "Pepê", "Porto", "Extremo Derecho", L_PT, 11, 8, 2, 2, 0.45, 1.3, 2.5, "92%", "Braga", "Más de 0.5 Asistencias", "60.0%", 2.15)
+    # FC PORTO (Real 2026: Samu Omorodion, Wenderson Galeno)
+    p(603, "Samu Omorodion", "FC Porto", "Delantero Centro", L_PT, 9, 7, 7, 0, 0.95, 2.4, 4.1, "96%", "Marítimo", "Más de 1.5 Tiros a Puerta", "85.0%", 1.55, "Marcará Gol en Cualquier Momento", "72.0%", 1.68)
+    p(604, "Wenderson Galeno", "FC Porto", "Extremo Izquierdo", L_PT, 13, 8, 6, 2, 0.78, 2.0, 3.8, "96%", "Marítimo", "Más de 1.5 Tiros Totales", "84.0%", 1.48)
 
-    p(28010, "Kerem Aktürkoğlu", "Benfica", "Extremo Izquierdo", L_PT, 17, 5, 4, 2, 0.82, 2.1, 3.7, "96%", "Nacional", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.90)
-    p(28011, "Vangelis Pavlidis", "Benfica", "Delantero Centro", L_PT, 14, 8, 2, 1, 0.65, 1.7, 3.2, "94%", "Nacional", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50)
-    p(28012, "Ángel Di María", "Benfica", "Extremo Derecho", L_PT, 11, 7, 2, 2, 0.55, 1.5, 3.0, "92%", "Nacional", "Más de 0.5 Asistencias o Gol", "78.0%", 1.65)
+    # BENFICA (Real 2026: Kerem Aktürkoğlu, Vangelis Pavlidis)
+    p(605, "Kerem Aktürkoğlu", "Benfica", "Extremo Izquierdo", L_PT, 17, 7, 5, 3, 0.78, 2.0, 3.7, "96%", "CD Nacional", "Más de 0.5 Asistencias o Gol", "80.0%", 1.60)
+    p(606, "Vangelis Pavlidis", "Benfica", "Delantero Centro", L_PT, 14, 8, 4, 2, 0.68, 1.8, 3.2, "95%", "CD Nacional", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
 
-    p(28020, "Bruma", "Braga", "Extremo Izquierdo", L_PT, 7, 7, 3, 2, 0.60, 1.6, 3.1, "95%", "Porto", "Más de 1.5 Tiros Totales", "82.0%", 1.52)
-    p(28021, "Ricardo Horta", "Braga", "Extremo Derecho", L_PT, 21, 8, 2, 2, 0.52, 1.4, 2.8, "94%", "Porto", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(28022, "Amine El Ouazzani", "Braga", "Delantero Centro", L_PT, 9, 8, 3, 1, 0.55, 1.4, 2.6, "90%", "Porto", "Marcará Gol en Cualquier Momento", "52.0%", 2.50)
+    # SC BRAGA (Real 2026: Bruma, Ricardo Horta)
+    p(607, "Bruma", "SC Braga", "Extremo Izquierdo", L_PT, 7, 8, 4, 3, 0.64, 1.7, 3.2, "95%", "Sporting CP", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+    p(608, "Ricardo Horta", "SC Braga", "Mediapunta", L_PT, 21, 8, 3, 3, 0.55, 1.5, 2.9, "95%", "Sporting CP", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
 
-    p(28030, "Gabriel Silva", "Santa Clara", "Extremo Derecho", L_PT, 7, 8, 3, 1, 0.50, 1.3, 2.5, "92%", "Boavista", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(28031, "Vinícius Lopes", "Santa Clara", "Extremo Izquierdo", L_PT, 10, 8, 3, 0, 0.48, 1.2, 2.4, "90%", "Boavista", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(28032, "Alisson Safira", "Santa Clara", "Delantero Centro", L_PT, 9, 7, 2, 1, 0.45, 1.2, 2.2, "90%", "Boavista", "Marcará Gol en Cualquier Momento", "46.0%", 2.90)
+    # VITÓRIA DE GUIMARÃES (Real 2026/2027: Nélson Oliveira, Nuno Santos)
+    p(609, "Nélson Oliveira", "Vitória de Guimarães", "Delantero Centro", L_PT, 9, 8, 4, 1, 0.58, 1.5, 2.8, "94%", "Boavista", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(610, "Nuno Santos", "Vitória de Guimarães", "Mediocentro Ofensivo", L_PT, 10, 8, 3, 3, 0.50, 1.3, 2.5, "94%", "Boavista", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(28040, "Nélson Oliveira", "Vitória Guimarães", "Delantero Centro", L_PT, 9, 8, 2, 1, 0.50, 1.3, 2.5, "92%", "Boavista", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
-    p(28041, "Nuno Santos", "Vitória Guimarães", "Mediapunta", L_PT, 10, 8, 2, 2, 0.42, 1.2, 2.4, "92%", "Boavista", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(28042, "Kaio César", "Vitória Guimarães", "Extremo Derecho", L_PT, 11, 8, 1, 2, 0.38, 1.1, 2.2, "90%", "Boavista", "Más de 1.5 Regates con Éxito", "78.0%", 1.60)
+    # FAMALICÃO (Real 2026/2027: Zaydou Youssouf, Gustavo Sá)
+    p(611, "Gustavo Sá", "Famalicão", "Mediapunta", L_PT, 20, 8, 3, 3, 0.52, 1.4, 2.6, "95%", "Sporting CP", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
+    p(612, "Sorriso", "Famalicão", "Extremo", L_PT, 7, 8, 4, 2, 0.55, 1.5, 2.8, "92%", "Sporting CP", "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
 
-    p(28050, "Zaydou Youssouf", "Famalicão", "Mediocentro", L_PT, 28, 8, 1, 0, 0.25, 0.8, 1.7, "96%", "Rio Ave", "Cometerá Más de 1.5 Faltas", "82.0%", 1.55)
-    p(28051, "Gustavo Sá", "Famalicão", "Mediapunta", L_PT, 10, 8, 1, 2, 0.38, 1.1, 2.3, "92%", "Rio Ave", "Más de 0.5 Asistencias", "52.0%", 2.50)
-    p(28052, "Sorriso", "Famalicão", "Extremo Derecho", L_PT, 7, 8, 2, 1, 0.45, 1.2, 2.5, "90%", "Rio Ave", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
+    # SANTA CLARA (Real 2026/2027: Gabriel Silva, Vinícius Lopes)
+    p(613, "Gabriel Silva", "Santa Clara", "Extremo / Delantero", L_PT, 70, 8, 4, 2, 0.58, 1.6, 2.9, "95%", "Moreirense", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(614, "Vinícius Lopes", "Santa Clara", "Extremo", L_PT, 10, 8, 3, 2, 0.48, 1.3, 2.5, "92%", "Moreirense", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(28060, "Luís Asué", "Moreirense", "Delantero Centro", L_PT, 9, 8, 3, 0, 0.55, 1.4, 2.7, "92%", "Santa Clara", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(28061, "Alan", "Moreirense", "Mediapunta", L_PT, 10, 8, 1, 3, 0.40, 1.2, 2.2, "92%", "Santa Clara", "Más de 0.5 Asistencias", "56.0%", 2.30)
-    p(28062, "Madson", "Moreirense", "Extremo Derecho", L_PT, 11, 8, 2, 1, 0.42, 1.2, 2.3, "90%", "Santa Clara", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
+    # MOREIRENSE (Real 2026/2027: Luís Asué, Madson)
+    p(615, "Luís Asué", "Moreirense", "Delantero Centro", L_PT, 9, 8, 4, 1, 0.56, 1.5, 2.7, "94%", "Gil Vicente", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(616, "Madson", "Moreirense", "Extremo", L_PT, 11, 8, 3, 2, 0.48, 1.3, 2.4, "92%", "Gil Vicente", "Más de 1.5 Tiros Totales", "78.0%", 1.55)
 
-    p(28070, "Kanya Fujimoto", "Gil Vicente", "Mediapunta", L_PT, 10, 8, 4, 2, 0.65, 1.6, 2.8, "96%", "Estrela", "Más de 0.5 Asistencias o Gol", "76.0%", 1.70)
-    p(28071, "Félix Correia", "Gil Vicente", "Extremo Izquierdo", L_PT, 7, 8, 3, 1, 0.52, 1.4, 2.6, "94%", "Estrela", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
-    p(28072, "Cauê", "Gil Vicente", "Delantero Centro", L_PT, 9, 7, 2, 0, 0.45, 1.2, 2.3, "88%", "Estrela", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70)
+    # GIL VICENTE (Real 2026/2027: Kanya Fujimoto, Félix Correia)
+    p(617, "Kanya Fujimoto", "Gil Vicente", "Mediapunta Creativo", L_PT, 10, 8, 4, 4, 0.62, 1.6, 2.9, "96%", "Moreirense", "Más de 0.5 Asistencias o Gol", "76.0%", 1.72)
+    p(618, "Félix Correia", "Gil Vicente", "Extremo", L_PT, 7, 8, 3, 2, 0.50, 1.4, 2.6, "94%", "Moreirense", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(28080, "Clayton", "Rio Ave", "Delantero Centro", L_PT, 9, 8, 4, 1, 0.62, 1.6, 2.9, "94%", "Famalicão", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "54.0%", 2.35)
-    p(28081, "Kiko Bondoso", "Rio Ave", "Extremo Izquierdo", L_PT, 7, 8, 1, 1, 0.38, 1.1, 2.2, "90%", "Famalicão", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(28082, "Tiago Morais", "Rio Ave", "Extremo Derecho", L_PT, 11, 7, 1, 1, 0.35, 1.0, 2.1, "88%", "Famalicão", "Más de 1.5 Regates con Éxito", "75.0%", 1.65)
+    # RIO AVE (Real 2026/2027: Clayton, Kiko Bondoso)
+    p(619, "Clayton", "Rio Ave", "Delantero Centro", L_PT, 9, 8, 4, 1, 0.58, 1.5, 2.8, "94%", "FC Porto", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(620, "Kiko Bondoso", "Rio Ave", "Extremo", L_PT, 7, 8, 2, 2, 0.42, 1.2, 2.3, "90%", "FC Porto", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(28090, "Jason", "Arouca", "Extremo Derecho", L_PT, 10, 8, 2, 2, 0.48, 1.3, 2.5, "92%", "AVS", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(28091, "Cristo González", "Arouca", "Delantero Centro", L_PT, 9, 6, 2, 1, 0.50, 1.4, 2.6, "90%", "AVS", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
-    p(28092, "Yalcin Kayan", "Arouca", "Mediocentro", L_PT, 8, 7, 1, 0, 0.30, 0.8, 1.8, "90%", "AVS", "Cometerá Más de 1.5 Faltas", "80.0%", 1.60)
+    # AROUCA (Real 2026/2027: Jason, Cristo González)
+    p(621, "Jason", "Arouca", "Extremo Derecho", L_PT, 11, 8, 3, 3, 0.52, 1.4, 2.6, "94%", "Estoril", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
+    p(622, "Cristo González", "Arouca", "Delantero / Mediapunta", L_PT, 23, 7, 3, 2, 0.54, 1.5, 2.8, "92%", "Estoril", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
 
-    p(28100, "Alejandro Marqués", "Estoril", "Delantero Centro", L_PT, 9, 8, 3, 0, 0.52, 1.4, 2.6, "92%", "Farense", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(28101, "Fabrício Garcia", "Estoril", "Delantero Centro", L_PT, 11, 7, 2, 1, 0.42, 1.2, 2.3, "88%", "Farense", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-    p(28102, "Rafik Guitane", "Estoril", "Extremo Derecho", L_PT, 10, 6, 1, 1, 0.38, 1.1, 2.4, "90%", "Farense", "Más de 2.5 Regates con Éxito", "80.0%", 1.55)
+    # ESTORIL (Real 2026/2027: Alejandro Marqués, Fabrício Garcia)
+    p(623, "Alejandro Marqués", "Estoril", "Delantero Centro", L_PT, 9, 8, 4, 1, 0.56, 1.5, 2.7, "92%", "Arouca", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(624, "Fabrício Garcia", "Estoril", "Extremo", L_PT, 11, 8, 3, 2, 0.48, 1.3, 2.4, "90%", "Arouca", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(28110, "Cassiano", "Casa Pia", "Delantero Centro", L_PT, 9, 8, 2, 1, 0.48, 1.3, 2.5, "92%", "Sporting CP", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
-    p(28111, "Nuno Moreira", "Casa Pia", "Extremo Izquierdo", L_PT, 17, 8, 2, 1, 0.42, 1.2, 2.3, "90%", "Sporting CP", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-    p(28112, "Ruben Kluivert", "Casa Pia", "Defensa Central", L_PT, 4, 8, 1, 0, 0.20, 0.6, 1.1, "96%", "Sporting CP", "Cometerá Más de 1.5 Faltas", "82.0%", 1.55)
+    # CASA PIA (Real 2026/2027: Cassiano, Nuno Moreira)
+    p(625, "Cassiano", "Casa Pia", "Delantero Centro", L_PT, 9, 8, 3, 1, 0.50, 1.3, 2.5, "92%", "Santa Clara", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
+    p(626, "Nuno Moreira", "Casa Pia", "Extremo", L_PT, 11, 8, 3, 2, 0.46, 1.3, 2.4, "90%", "Santa Clara", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(28120, "Tiago Reis", "Nacional", "Delantero Centro", L_PT, 9, 7, 2, 0, 0.45, 1.2, 2.4, "90%", "Benfica", "Más de 0.5 Tiros a Puerta", "72.0%", 1.70)
-    p(28121, "Nigel Thomas", "Nacional", "Extremo Derecho", L_PT, 7, 7, 1, 1, 0.38, 1.1, 2.2, "88%", "Benfica", "Más de 1.5 Tiros Totales", "70.0%", 1.75)
-    p(28122, "Daniel Penha", "Nacional", "Mediapunta", L_PT, 10, 7, 1, 2, 0.35, 1.0, 2.1, "90%", "Benfica", "Más de 0.5 Asistencias", "48.0%", 2.80)
+    # CD NACIONAL (Real 2026/2027: Tiago Reis, Nigel Thomas)
+    p(627, "Tiago Reis", "CD Nacional", "Delantero Centro", L_PT, 9, 8, 3, 1, 0.48, 1.3, 2.4, "90%", "Benfica", "Más de 0.5 Tiros a Puerta", "72.0%", 1.72)
+    p(628, "Nigel Thomas", "CD Nacional", "Extremo", L_PT, 7, 8, 2, 2, 0.42, 1.2, 2.3, "90%", "Benfica", "Más de 1.5 Tiros Totales", "75.0%", 1.62)
 
-    p(28130, "Kikas", "Estrela", "Delantero Centro", L_PT, 9, 8, 3, 0, 0.50, 1.3, 2.5, "92%", "Gil Vicente", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
-    p(28131, "Rodrigo Pinho", "Estrela", "Delantero Centro", L_PT, 11, 7, 2, 1, 0.45, 1.2, 2.4, "88%", "Gil Vicente", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(28132, "Nani", "Estrela", "Extremo Izquierdo", L_PT, 17, 6, 1, 1, 0.40, 1.1, 2.3, "88%", "Gil Vicente", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
+    # ESTRELA DA AMADORA (Real 2026/2027: Kikas, Rodrigo Pinho)
+    p(629, "Kikas", "Estrela da Amadora", "Delantero Centro", L_PT, 9, 8, 4, 1, 0.55, 1.4, 2.6, "94%", "Casa Pia", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
+    p(630, "Rodrigo Pinho", "Estrela da Amadora", "Delantero", L_PT, 99, 8, 3, 1, 0.48, 1.3, 2.5, "90%", "Casa Pia", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(28140, "Euller", "Marítimo", "Extremo Izquierdo", L_PT, 11, 7, 3, 2, 0.52, 1.4, 2.6, "92%", "Leixões", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
-    p(28141, "Patrick Fernandes", "Marítimo", "Delantero Centro", L_PT, 9, 7, 2, 1, 0.45, 1.2, 2.3, "90%", "Leixões", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-    p(28142, "Carlos Daniel", "Marítimo", "Mediocentro", L_PT, 8, 7, 1, 2, 0.32, 0.9, 1.8, "92%", "Leixões", "Más de 0.5 Asistencias", "46.0%", 2.90)
+    # MARÍTIMO (Real 2026/2027: Patrick Fernandes, Euller)
+    p(631, "Patrick Fernandes", "Marítimo", "Delantero Centro", L_PT, 9, 8, 3, 1, 0.50, 1.3, 2.5, "92%", "FC Porto", "Más de 0.5 Tiros a Puerta", "74.0%", 1.70)
+    p(632, "Euller", "Marítimo", "Extremo", L_PT, 11, 8, 2, 2, 0.42, 1.2, 2.3, "90%", "FC Porto", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(28150, "André Clóvis", "Académico Viseu", "Delantero Centro", L_PT, 9, 7, 4, 1, 0.62, 1.6, 2.9, "94%", "Penafiel", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "55.0%", 2.35)
-    p(28151, "Yuri Araújo", "Académico Viseu", "Extremo Derecho", L_PT, 7, 7, 2, 2, 0.42, 1.2, 2.3, "90%", "Penafiel", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(28152, "Gauthier Ott", "Académico Viseu", "Extremo Izquierdo", L_PT, 11, 7, 2, 1, 0.38, 1.1, 2.2, "88%", "Penafiel", "Más de 1.5 Regates con Éxito", "76.0%", 1.62)
+    # ACADÉMICO DE VISEU (Real 2026/2027: André Clóvis, Yuri Araújo)
+    p(633, "André Clóvis", "Académico de Viseu", "Delantero Centro", L_PT, 9, 8, 5, 1, 0.65, 1.6, 2.9, "95%", "Rio Ave", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    p(634, "Yuri Araújo", "Académico de Viseu", "Extremo", L_PT, 11, 8, 3, 2, 0.48, 1.3, 2.4, "92%", "Rio Ave", "Más de 1.5 Tiros Totales", "78.0%", 1.55)
 
-    p(28160, "Róbert Boženík", "Boavista", "Delantero Centro", L_PT, 9, 8, 2, 0, 0.48, 1.3, 2.5, "92%", "Santa Clara", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(28161, "Salvador Agra", "Boavista", "Extremo Derecho", L_PT, 7, 8, 1, 2, 0.38, 1.1, 2.2, "92%", "Santa Clara", "Más de 1.5 Centros con Éxito", "78.0%", 1.60)
-    p(28162, "Ilija Vukotić", "Boavista", "Mediocentro", L_PT, 8, 8, 1, 1, 0.28, 0.9, 1.9, "90%", "Santa Clara", "Cometerá Más de 1.5 Faltas", "80.0%", 1.60)
+    # ALVERCA (Real 2026/2027: Anthony Carter, Wilson Eduardo)
+    p(635, "Anthony Carter", "Alverca", "Delantero Centro", L_PT, 9, 8, 3, 1, 0.48, 1.3, 2.4, "90%", "Famalicão", "Más de 0.5 Tiros a Puerta", "74.0%", 1.68)
+    p(636, "Wilson Eduardo", "Alverca", "Extremo / Delantero", L_PT, 10, 8, 2, 2, 0.42, 1.2, 2.2, "90%", "Famalicão", "Más de 1.5 Tiros Totales", "75.0%", 1.62)
 
     # =========================================================================
-    # 7. BRASIL: Campeonato Brasileiro Série A (20 equipos x 3 = 60 jugadores)
+    # 7. BRASIL: CAMPEONATO BRASILEIRO SÉRIE A - ROSTERS REALES 2026
     # =========================================================================
     L_BR = "Campeonato Brasileiro Série A"
-    p(284241, "Luiz Henrique", "Botafogo", "Extremo Derecho", L_BR, 7, 27, 6, 3, 0.58, 1.8, 3.4, "96%", "Grêmio", "Más de 1.5 Tiros Totales", "85.0%", 1.48, "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
-    p(178224, "Igor Jesus", "Botafogo", "Delantero Centro", L_BR, 99, 14, 5, 1, 0.65, 1.6, 2.8, "95%", "Grêmio", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50, "Marcará Gol en Cualquier Momento", "60.0%", 2.15)
-    p(29000, "Jefferson Savarino", "Botafogo", "Mediapunta", L_BR, 10, 24, 4, 5, 0.52, 1.4, 2.7, "94%", "Grêmio", "Más de 0.5 Asistencias o Gol", "76.0%", 1.75)
+    # BOTAFOGO (Real 2026: Luiz Henrique, Igor Jesus)
+    p(701, "Luiz Henrique", "Botafogo", "Extremo Derecho", L_BR, 7, 8, 5, 3, 0.72, 1.9, 3.6, "96%", "Chapecoense", "Más de 1.5 Tiros a Puerta", "78.0%", 1.70, "Más de 0.5 Asistencias o Gol", "76.0%", 1.72)
+    p(702, "Igor Jesus", "Botafogo", "Delantero Centro", L_BR, 99, 8, 5, 1, 0.70, 1.8, 3.2, "95%", "Chapecoense", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58, "Marcará Gol en Cualquier Momento", "65.0%", 2.05)
 
-    p(405101, "Estêvão", "Palmeiras", "Extremo Derecho", L_BR, 41, 23, 9, 7, 0.78, 2.1, 3.9, "98%", "Red Bull Bragantino", "Más de 1.5 Tiros a Puerta", "84.0%", 1.60, "Marcará Gol en Cualquier Momento", "65.0%", 2.05, "Más de 0.5 Asistencias", "62.0%", 2.10)
-    p(10245, "Raphael Veiga", "Palmeiras", "Mediocentro Ofensivo", L_BR, 23, 26, 4, 3, 0.55, 1.5, 3.1, "94%", "Red Bull Bragantino", "Más de 1.5 Tiros Totales", "82.0%", 1.52)
-    p(29010, "Flaco López", "Palmeiras", "Delantero Centro", L_BR, 42, 27, 9, 2, 0.75, 1.9, 3.5, "92%", "Red Bull Bragantino", "Más de 0.5 Tiros a Puerta", "84.0%", 1.48)
+    # PALMEIRAS (Real 2026: Estêvão, Raphael Veiga, Flaco López)
+    p(703, "Estêvão", "Palmeiras", "Extremo Derecho", L_BR, 41, 8, 6, 4, 0.80, 2.2, 3.9, "98%", "Corinthians", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Más de 0.5 Asistencias o Gol", "80.0%", 1.62)
+    p(704, "Raphael Veiga", "Palmeiras", "Mediocentro Ofensivo", L_BR, 23, 8, 4, 3, 0.62, 1.7, 3.1, "96%", "Corinthians", "Más de 1.5 Tiros Totales", "84.0%", 1.48)
+    p(705, "Flaco López", "Palmeiras", "Delantero Centro", L_BR, 42, 8, 5, 1, 0.68, 1.7, 3.0, "94%", "Corinthians", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
 
-    p(10471, "Pedro", "Flamengo", "Delantero Centro", L_BR, 9, 21, 11, 5, 0.92, 2.3, 3.8, "95%", "Corinthians", "Más de 1.5 Tiros a Puerta", "86.0%", 1.52, "Marcará Gol en Cualquier Momento", "72.0%", 1.68)
-    p(10344, "Giorgian de Arrascaeta", "Flamengo", "Mediocentro Ofensivo", L_BR, 14, 18, 5, 5, 0.58, 1.5, 2.8, "92%", "Corinthians", "Más de 0.5 Asistencias o Gol", "78.0%", 1.68)
-    p(29020, "Gerson", "Flamengo", "Centrocampista", L_BR, 8, 26, 3, 4, 0.40, 1.1, 2.2, "96%", "Corinthians", "Más de 52.5 Pases Totales", "85.0%", 1.50)
+    # FLAMENGO (Real 2026: Giorgian de Arrascaeta, Gerson, Gabriel Barbosa)
+    p(706, "Giorgian de Arrascaeta", "Flamengo", "Mediapunta", L_BR, 14, 8, 4, 5, 0.68, 1.7, 3.0, "96%", "Fluminense", "Más de 0.5 Asistencias", "68.0%", 1.95, "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(707, "Gerson", "Flamengo", "Mediocentro Mixto", L_BR, 8, 8, 3, 3, 0.50, 1.4, 2.6, "96%", "Fluminense", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(159, "Lucas Moura", "São Paulo", "Extremo Derecho", L_BR, 7, 23, 6, 4, 0.55, 1.6, 2.9, "96%", "Vasco", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
-    p(29030, "Jonathan Calleri", "São Paulo", "Delantero Centro", L_BR, 9, 24, 5, 2, 0.60, 1.5, 2.8, "94%", "Vasco", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
-    p(29031, "Luciano", "São Paulo", "Segundo Delantero", L_BR, 10, 25, 7, 1, 0.65, 1.7, 3.2, "92%", "Vasco", "Marcará Gol en Cualquier Momento", "55.0%", 2.35)
+    # CORINTHIANS (Real 2026: Memphis Depay, Rodrigo Garro, Yuri Alberto)
+    p(708, "Memphis Depay", "Corinthians", "Delantero / Mediapunta", L_BR, 94, 7, 4, 2, 0.72, 1.9, 3.5, "95%", "Palmeiras", "Más de 1.5 Tiros a Puerta", "76.0%", 1.75, "Marcará Gol en Cualquier Momento", "62.0%", 2.15)
+    p(709, "Rodrigo Garro", "Corinthians", "Mediapunta", L_BR, 10, 8, 3, 4, 0.56, 1.6, 2.9, "96%", "Palmeiras", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+    p(710, "Yuri Alberto", "Corinthians", "Delantero Centro", L_BR, 9, 8, 5, 1, 0.68, 1.8, 3.2, "94%", "Palmeiras", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
 
-    p(247, "Memphis Depay", "Corinthians", "Delantero Centro", L_BR, 94, 5, 1, 2, 0.55, 1.7, 3.2, "90%", "Flamengo", "Más de 1.5 Tiros a Puerta", "76.0%", 1.72, "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
-    p(29040, "Rodrigo Garro", "Corinthians", "Mediapunta", L_BR, 10, 26, 5, 6, 0.62, 1.6, 3.0, "96%", "Flamengo", "Más de 0.5 Asistencias", "65.0%", 2.05, "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-    p(29041, "Yuri Alberto", "Corinthians", "Delantero Centro", L_BR, 9, 24, 7, 3, 0.68, 1.8, 3.3, "92%", "Flamengo", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50)
+    # SÃO PAULO (Real 2026: Lucas Moura, Jonathan Calleri)
+    p(711, "Lucas Moura", "São Paulo", "Extremo / Mediapunta", L_BR, 7, 8, 4, 3, 0.64, 1.7, 3.2, "96%", "Vitória", "Más de 1.5 Tiros a Puerta", "76.0%", 1.72)
+    p(712, "Jonathan Calleri", "São Paulo", "Delantero Centro", L_BR, 9, 8, 4, 1, 0.65, 1.6, 2.9, "95%", "Vitória", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
 
-    p(10565, "Pablo Vegetti", "Vasco", "Delantero Centro", L_BR, 99, 27, 9, 2, 0.78, 2.0, 3.6, "98%", "São Paulo", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "62.0%", 2.15)
-    p(29050, "Dimitri Payet", "Vasco", "Mediapunta", L_BR, 10, 18, 1, 3, 0.38, 1.1, 2.3, "90%", "São Paulo", "Más de 0.5 Asistencias", "58.0%", 2.25)
-    p(29051, "Philippe Coutinho", "Vasco", "Mediocentro Ofensivo", L_BR, 11, 7, 2, 0, 0.45, 1.3, 2.6, "88%", "São Paulo", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
+    # VASCO DA GAMA (Real 2026: Pablo Vegetti, Philippe Coutinho)
+    p(713, "Pablo Vegetti", "Vasco da Gama", "Delantero Centro", L_BR, 99, 8, 6, 0, 0.75, 1.9, 3.4, "98%", "Remo", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65, "Marcará Gol en Cualquier Momento", "66.0%", 1.95)
+    p(714, "Philippe Coutinho", "Vasco da Gama", "Mediapunta", L_BR, 11, 7, 3, 2, 0.52, 1.5, 2.8, "94%", "Remo", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
 
-    p(10260, "Hulk", "Atlético MG", "Delantero Centro", L_BR, 7, 21, 9, 4, 0.85, 2.2, 4.1, "97%", "Vitória", "Más de 1.5 Tiros a Puerta", "86.0%", 1.55, "Marcará Gol en Cualquier Momento", "68.0%", 1.85, "Más de 3.5 Tiros Totales", "80.0%", 1.68)
-    p(29060, "Paulinho", "Atlético MG", "Extremo Izquierdo", L_BR, 10, 25, 6, 2, 0.62, 1.6, 2.9, "94%", "Vitória", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
-    p(29061, "Gustavo Scarpa", "Atlético MG", "Mediapunta", L_BR, 6, 26, 4, 5, 0.55, 1.5, 3.0, "95%", "Vitória", "Más de 0.5 Asistencias", "62.0%", 2.10)
+    # ATLÉTICO MINEIRO (Real 2026: Hulk, Paulinho)
+    p(715, "Hulk", "Atlético Mineiro", "Delantero Centro / Extremo", L_BR, 7, 8, 5, 4, 0.78, 2.1, 4.0, "98%", "Santos", "Más de 1.5 Tiros a Puerta", "82.0%", 1.62, "Marcará Gol en Cualquier Momento", "68.0%", 1.85)
+    p(716, "Paulinho", "Atlético Mineiro", "Segundo Delantero", L_BR, 10, 8, 5, 2, 0.72, 1.8, 3.3, "96%", "Santos", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
 
-    p(10580, "Juan Martín Lucero", "Fortaleza", "Delantero Centro", L_BR, 9, 24, 8, 2, 0.72, 1.9, 3.3, "95%", "Criciúma", "Más de 0.5 Tiros a Puerta", "84.0%", 1.50, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
-    p(29070, "Yago Pikachu", "Fortaleza", "Extremo Derecho", L_BR, 22, 26, 3, 2, 0.42, 1.2, 2.4, "90%", "Criciúma", "Más de 1.5 Tiros Totales", "75.0%", 1.65)
-    p(29071, "Breno Lopes", "Fortaleza", "Extremo Izquierdo", L_BR, 26, 22, 5, 3, 0.52, 1.4, 2.6, "92%", "Criciúma", "Más de 0.5 Tiros a Puerta", "76.0%", 1.62)
+    # INTERNACIONAL (Real 2026: Alan Patrick, Rafael Borré)
+    p(717, "Alan Patrick", "Internacional", "Mediapunta", L_BR, 10, 8, 4, 4, 0.62, 1.6, 2.8, "96%", "Grêmio", "Más de 0.5 Asistencias o Gol", "78.0%", 1.68)
+    p(718, "Rafael Borré", "Internacional", "Delantero Centro", L_BR, 19, 8, 4, 1, 0.65, 1.7, 3.1, "95%", "Grêmio", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
 
-    p(29080, "Matheus Pereira", "Cruzeiro", "Mediapunta", L_BR, 10, 26, 6, 5, 0.68, 1.8, 3.2, "96%", "Fluminense", "Más de 0.5 Asistencias o Gol", "80.0%", 1.65, "Más de 1.5 Tiros Totales", "82.0%", 1.50)
-    p(29081, "Gabriel Veron", "Cruzeiro", "Extremo Derecho", L_BR, 30, 22, 4, 1, 0.48, 1.3, 2.5, "90%", "Fluminense", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
-    p(29082, "Kaio Jorge", "Cruzeiro", "Delantero Centro", L_BR, 9, 14, 3, 1, 0.52, 1.4, 2.7, "92%", "Fluminense", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    # GRÊMIO (Real 2026: Martin Braithwaite, Franco Cristaldo)
+    p(719, "Martin Braithwaite", "Grêmio", "Delantero Centro", L_BR, 22, 8, 5, 1, 0.70, 1.8, 3.2, "95%", "Internacional", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(720, "Franco Cristaldo", "Grêmio", "Mediapunta", L_BR, 10, 8, 3, 3, 0.52, 1.4, 2.6, "94%", "Internacional", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(29090, "Alan Patrick", "Internacional", "Mediapunta", L_BR, 10, 21, 4, 4, 0.58, 1.5, 2.8, "95%", "Corinthians", "Más de 0.5 Asistencias o Gol", "78.0%", 1.68)
-    p(29091, "Rafael Borré", "Internacional", "Delantero Centro", L_BR, 19, 16, 6, 1, 0.68, 1.8, 3.2, "94%", "Corinthians", "Más de 0.5 Tiros a Puerta", "82.0%", 1.50, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
-    p(29092, "Wesley", "Internacional", "Extremo Izquierdo", L_BR, 21, 24, 5, 1, 0.52, 1.5, 2.9, "92%", "Corinthians", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
+    # FLUMINENSE (Real 2026: Jhon Arias, Germán Cano, Ganso)
+    p(721, "Jhon Arias", "Fluminense", "Extremo / Mediapunta", L_BR, 21, 8, 4, 3, 0.64, 1.7, 3.2, "96%", "Flamengo", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+    p(722, "Germán Cano", "Fluminense", "Delantero Centro", L_BR, 14, 7, 4, 0, 0.68, 1.7, 3.1, "94%", "Flamengo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
 
-    p(29100, "Martin Braithwaite", "Grêmio", "Delantero Centro", L_BR, 22, 10, 5, 1, 0.70, 1.8, 3.1, "95%", "Botafogo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(29101, "Franco Cristaldo", "Grêmio", "Mediapunta", L_BR, 10, 25, 5, 3, 0.55, 1.5, 2.9, "94%", "Botafogo", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
-    p(29102, "Yeferson Soteldo", "Grêmio", "Extremo Izquierdo", L_BR, 7, 18, 5, 2, 0.58, 1.6, 2.8, "94%", "Botafogo", "Más de 2.5 Regates con Éxito", "84.0%", 1.50)
+    # SANTOS (Real 2026: Giuliano, Guilherme, Wendel Silva)
+    p(723, "Giuliano", "Santos", "Mediapunta", L_BR, 20, 8, 4, 2, 0.58, 1.5, 2.8, "95%", "Atlético Mineiro", "Más de 0.5 Tiros a Puerta", "76.0%", 1.68)
+    p(724, "Guilherme", "Santos", "Extremo Izquierdo", L_BR, 11, 8, 5, 3, 0.68, 1.8, 3.4, "96%", "Atlético Mineiro", "Más de 1.5 Tiros a Puerta", "78.0%", 1.72)
 
-    p(29110, "Jhon Arias", "Fluminense", "Extremo Derecho", L_BR, 21, 24, 6, 3, 0.62, 1.7, 3.2, "96%", "Cruzeiro", "Más de 1.5 Tiros Totales", "82.0%", 1.50, "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(29111, "Ganso", "Fluminense", "Mediapunta", L_BR, 10, 26, 3, 5, 0.38, 1.0, 1.8, "95%", "Cruzeiro", "Más de 0.5 Asistencias", "60.0%", 2.15)
-    p(29112, "Germán Cano", "Fluminense", "Delantero Centro", L_BR, 14, 20, 4, 0, 0.55, 1.5, 3.0, "90%", "Cruzeiro", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    # BAHIA (Real 2026: Thaciano, Cauly, Everaldo)
+    p(725, "Thaciano", "Bahia", "Mediapunta / Delantero", L_BR, 16, 8, 5, 2, 0.66, 1.7, 3.0, "95%", "Mirassol", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(726, "Cauly", "Bahia", "Mediapunta", L_BR, 8, 8, 3, 4, 0.55, 1.5, 2.7, "96%", "Mirassol", "Más de 0.5 Asistencias", "64.0%", 2.05)
 
-    p(29120, "Thaciano", "Bahia", "Mediocentro Ofensivo", L_BR, 16, 27, 6, 3, 0.58, 1.6, 2.9, "95%", "Flamengo", "Más de 1.5 Tiros Totales", "80.0%", 1.55)
-    p(29121, "Cauly", "Bahia", "Mediapunta", L_BR, 8, 28, 4, 5, 0.52, 1.4, 2.7, "95%", "Flamengo", "Más de 0.5 Asistencias o Gol", "75.0%", 1.70)
-    p(29122, "Everaldo", "Bahia", "Delantero Centro", L_BR, 9, 27, 8, 3, 0.68, 1.7, 3.0, "92%", "Flamengo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.52)
+    # ATLÉTICO PR (Real 2026: Agustín Canobbio, Tomás Cuello)
+    p(727, "Agustín Canobbio", "Atlético PR", "Extremo", L_BR, 14, 8, 3, 2, 0.52, 1.5, 2.8, "95%", "Chapecoense", "Más de 1.5 Tiros Totales", "82.0%", 1.50)
+    p(728, "Tomás Cuello", "Atlético PR", "Extremo", L_BR, 28, 8, 3, 2, 0.48, 1.4, 2.6, "92%", "Chapecoense", "Más de 0.5 Tiros a Puerta", "75.0%", 1.68)
 
-    p(29130, "Agustín Canobbio", "Atlético PR", "Extremo Izquierdo", L_BR, 14, 23, 4, 3, 0.52, 1.5, 2.8, "94%", "Botafogo", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(29131, "Pablo", "Atlético PR", "Delantero Centro", L_BR, 92, 22, 5, 1, 0.55, 1.4, 2.6, "90%", "Botafogo", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
-    p(29132, "Tomás Cuello", "Atlético PR", "Extremo Derecho", L_BR, 28, 25, 2, 2, 0.40, 1.2, 2.4, "90%", "Botafogo", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
+    # RED BULL BRAGANTINO (Real 2026: Eduardo Sasha, Vitinho)
+    p(729, "Eduardo Sasha", "Red Bull Bragantino", "Delantero Centro", L_BR, 19, 8, 4, 2, 0.62, 1.6, 2.9, "95%", "Cruzeiro", "Más de 0.5 Tiros a Puerta", "78.0%", 1.62)
+    p(730, "Vitinho", "Red Bull Bragantino", "Extremo", L_BR, 28, 8, 3, 2, 0.50, 1.4, 2.7, "92%", "Cruzeiro", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(29140, "Eduardo Sasha", "Bragantino", "Delantero Centro", L_BR, 19, 24, 6, 2, 0.62, 1.6, 2.9, "94%", "Palmeiras", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55)
-    p(29141, "Vitinho", "Bragantino", "Extremo Izquierdo", L_BR, 28, 25, 3, 3, 0.48, 1.3, 2.6, "92%", "Palmeiras", "Más de 1.5 Tiros Totales", "76.0%", 1.62)
-    p(29142, "Lucas Evangelista", "Bragantino", "Mediocentro", L_BR, 8, 26, 2, 2, 0.35, 1.0, 2.0, "95%", "Palmeiras", "Más de 48.5 Pases Totales", "82.0%", 1.55)
+    # CRUZEIRO (Real 2026: Matheus Pereira, Kaio Jorge)
+    p(731, "Matheus Pereira", "Cruzeiro", "Mediapunta", L_BR, 10, 8, 5, 4, 0.74, 1.9, 3.5, "98%", "Red Bull Bragantino", "Más de 0.5 Asistencias o Gol", "80.0%", 1.62, "Más de 1.5 Tiros a Puerta", "76.0%", 1.72)
+    p(732, "Kaio Jorge", "Cruzeiro", "Delantero Centro", L_BR, 9, 8, 4, 1, 0.62, 1.6, 2.8, "94%", "Red Bull Bragantino", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
 
-    p(29150, "Alerrandro", "Vitória", "Delantero Centro", L_BR, 9, 25, 6, 2, 0.60, 1.5, 2.8, "94%", "Atlético MG", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
-    p(29151, "Matheuzinho", "Vitória", "Mediapunta", L_BR, 30, 26, 3, 4, 0.48, 1.3, 2.5, "95%", "Atlético MG", "Más de 0.5 Asistencias o Gol", "72.0%", 1.80)
-    p(29152, "Osvaldo", "Vitória", "Extremo Derecho", L_BR, 11, 23, 4, 1, 0.42, 1.2, 2.3, "88%", "Atlético MG", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
+    # VITÓRIA (Real 2026: Alerrandro, Matheuzinho)
+    p(733, "Alerrandro", "Vitória", "Delantero Centro", L_BR, 9, 8, 5, 1, 0.68, 1.7, 3.0, "95%", "São Paulo", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(734, "Matheuzinho", "Vitória", "Mediapunta", L_BR, 30, 8, 3, 3, 0.52, 1.4, 2.6, "94%", "São Paulo", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
 
-    p(29160, "Giuliano", "Santos", "Mediapunta", L_BR, 10, 25, 8, 1, 0.65, 1.6, 2.8, "95%", "Mirassol", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(29161, "Guilherme", "Santos", "Extremo Izquierdo", L_BR, 11, 26, 9, 5, 0.72, 1.8, 3.4, "96%", "Mirassol", "Más de 1.5 Tiros a Puerta", "80.0%", 1.65)
-    p(29162, "Wendel Silva", "Santos", "Delantero Centro", L_BR, 19, 10, 3, 2, 0.55, 1.4, 2.6, "90%", "Mirassol", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    # CORITIBA (Real 2026: Lucas Ronier, Robson)
+    p(735, "Lucas Ronier", "Coritiba", "Extremo", L_BR, 98, 8, 4, 2, 0.58, 1.5, 2.8, "95%", "Botafogo", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(736, "Robson", "Coritiba", "Delantero / Extremo", L_BR, 30, 8, 4, 1, 0.56, 1.5, 2.7, "94%", "Botafogo", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
-    p(29170, "Lucas Ronier", "Coritiba", "Extremo Derecho", L_BR, 98, 27, 5, 3, 0.52, 1.4, 2.7, "95%", "América MG", "Más de 1.5 Tiros Totales", "78.0%", 1.60)
-    p(29171, "Robson", "Coritiba", "Delantero Centro", L_BR, 30, 24, 4, 2, 0.50, 1.3, 2.5, "92%", "América MG", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(29172, "Júnior Brumado", "Coritiba", "Delantero Centro", L_BR, 9, 12, 3, 1, 0.48, 1.2, 2.4, "88%", "América MG", "Marcará Gol en Cualquier Momento", "50.0%", 2.60)
+    # MIRASSOL (Real 2026: Fernandinho, Dellatorre)
+    p(737, "Dellatorre", "Mirassol", "Delantero Centro", L_BR, 49, 8, 5, 1, 0.68, 1.7, 3.0, "95%", "Bahia", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
+    p(738, "Fernandinho", "Mirassol", "Extremo", L_BR, 11, 8, 3, 3, 0.50, 1.3, 2.6, "94%", "Bahia", "Más de 1.5 Tiros Totales", "78.0%", 1.55)
 
-    p(29180, "Fernandinho", "Mirassol", "Extremo Izquierdo", L_BR, 11, 26, 4, 3, 0.50, 1.3, 2.6, "94%", "Santos", "Más de 1.5 Tiros Totales", "76.0%", 1.65)
-    p(29181, "Dellatorre", "Mirassol", "Delantero Centro", L_BR, 49, 27, 8, 1, 0.68, 1.7, 3.0, "95%", "Santos", "Más de 0.5 Tiros a Puerta", "82.0%", 1.52, "Marcará Gol en Cualquier Momento", "60.0%", 2.20)
-    p(29182, "Chico Kim", "Mirassol", "Mediapunta", L_BR, 10, 25, 2, 4, 0.42, 1.1, 2.2, "92%", "Santos", "Más de 0.5 Asistencias", "54.0%", 2.35)
+    # CLUBE DO REMO (Real 2026: Pedro Vitor, Ytalo)
+    p(739, "Pedro Vitor", "Clube do Remo", "Extremo / Delantero", L_BR, 11, 8, 4, 2, 0.58, 1.5, 2.7, "94%", "Vasco da Gama", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
+    p(740, "Ytalo", "Clube do Remo", "Delantero Centro", L_BR, 9, 8, 4, 1, 0.56, 1.4, 2.6, "92%", "Vasco da Gama", "Más de 1.5 Tiros Totales", "76.0%", 1.60)
 
-    p(29190, "Pedro Vitor", "Remo", "Extremo Izquierdo", L_BR, 11, 20, 4, 2, 0.48, 1.3, 2.5, "92%", "Paysandu", "Más de 0.5 Tiros a Puerta", "75.0%", 1.65)
-    p(29191, "Ytalo", "Remo", "Delantero Centro", L_BR, 9, 21, 6, 1, 0.58, 1.5, 2.7, "94%", "Paysandu", "Marcará Gol en Cualquier Momento", "52.0%", 2.45)
-    p(29192, "Pavani", "Remo", "Mediocentro Ofensivo", L_BR, 8, 22, 2, 3, 0.38, 1.0, 2.0, "92%", "Paysandu", "Más de 1.5 Tiros Totales", "72.0%", 1.70)
-
-    p(29200, "Mário Sérgio", "Chapecoense", "Delantero Centro", L_BR, 9, 26, 7, 1, 0.65, 1.6, 2.9, "95%", "Brusque", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "58.0%", 2.25)
-    p(29201, "Marcelinho", "Chapecoense", "Extremo Derecho", L_BR, 11, 24, 3, 2, 0.44, 1.2, 2.4, "90%", "Brusque", "Más de 1.5 Tiros Totales", "74.0%", 1.68)
-    p(29202, "Rafael Carvalheira", "Chapecoense", "Mediapunta", L_BR, 10, 25, 4, 3, 0.50, 1.3, 2.5, "92%", "Brusque", "Más de 0.5 Asistencias o Gol", "70.0%", 1.85)
+    # CHAPECOENSE (Real 2026: Mário Sérgio, Marcelinho)
+    p(741, "Mário Sérgio", "Chapecoense", "Delantero Centro", L_BR, 9, 8, 5, 1, 0.64, 1.6, 2.9, "94%", "Atlético PR", "Más de 0.5 Tiros a Puerta", "78.0%", 1.60)
+    p(742, "Marcelinho", "Chapecoense", "Extremo", L_BR, 11, 8, 3, 2, 0.48, 1.3, 2.4, "92%", "Atlético PR", "Más de 1.5 Tiros Totales", "76.0%", 1.58)
 
     return players
 
@@ -13418,8 +13391,21 @@ def create_app() -> Flask:
     def create_mercadopago_preference():
         try:
             body = request.get_json() or {}
-            plan_name = body.get("plan_name", "Mensual Pro")
-            amount = float(body.get("amount", 39.90))
+            plan_code = (body.get("plan_codigo") or body.get("plan_name") or "pro").lower().strip()
+            
+            # Tabla Oficial de Precios en el Servidor (Previene manipulación de precios desde el cliente)
+            OFFICIAL_PLANS = {
+                "pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
+                "mensual pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
+                "pase pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
+                "elite": {"nombre": "Pase Élite Cuantitativo", "precio": 79.90, "vigencia_dias": 30},
+                "pase elite": {"nombre": "Pase Élite Cuantitativo", "precio": 79.90, "vigencia_dias": 30},
+                "anual": {"nombre": "Pase Anual VIP", "precio": 299.00, "vigencia_dias": 365}
+            }
+
+            matched_plan = OFFICIAL_PLANS.get(plan_code, OFFICIAL_PLANS["pro"])
+            plan_name = matched_plan["nombre"]
+            amount = float(matched_plan["precio"])
 
             if not MP_ACCESS_TOKEN:
                 return jsonify({
@@ -13488,6 +13474,165 @@ def create_app() -> Flask:
                 }), 200
         except Exception as exc:
             return jsonify({"success": False, "error": str(exc)}), 500
+
+    # Webhook Oficial de Notificaciones de Mercado Pago (IPN / Webhooks)
+    # ----------------------------------------------------------------------------------
+    # GESTIÓN ADMINISTRATIVA SEGURA (PAGOS Y AUDITORÍA VERIFICABLE)
+    # ----------------------------------------------------------------------------------
+    @app.route("/api/v1/admin/payments/pending", methods=["GET"])
+    @require_auth
+    def get_pending_payments():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        
+        pagos = []
+        if db:
+            try:
+                docs = db.collection("pagos_manuales").where("estado", "==", "PENDIENTE").stream()
+                for d in docs:
+                    p = d.to_dict()
+                    p["id"] = d.id
+                    pagos.append(p)
+            except Exception as e:
+                logger.error("Error consultando pagos pendientes: %s", e)
+        return jsonify({"success": True, "pagos": pagos}), 200
+
+    @app.route("/api/v1/admin/payments/review", methods=["POST"])
+    @require_auth
+    def review_payment():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        
+        body = request.get_json(silent=True) or {}
+        op_id = body.get("operacion_id")
+        aprobar = body.get("aprobar", False)
+        
+        if not op_id or not db:
+            return jsonify({"success": False, "error": "Datos inválidos."}), 400
+
+        try:
+            doc_ref = db.collection("pagos_manuales").document(op_id)
+            doc = doc_ref.get()
+            if not doc.exists:
+                return jsonify({"success": False, "error": "Pago no encontrado."}), 404
+            
+            p_data = doc.to_dict()
+            u_id = p_data.get("usuario_id")
+            plan_id = p_data.get("plan_id", "pro")
+
+            if aprobar:
+                doc_ref.update({
+                    "estado": "APROBADO",
+                    "aprobado_por": user_email,
+                    "fecha_aprobacion": datetime.now(timezone.utc).isoformat()
+                })
+                dias = 365 if plan_id == "anual" else 30
+                expira_dt = datetime.now(timezone.utc) + timedelta(days=dias)
+                db.collection("usuarios").document(u_id).set({
+                    "esVip": True,
+                    "plan": plan_id,
+                    "suscripcion_activa": True,
+                    "suscripcion_expira": expira_dt.isoformat()
+                }, merge=True)
+                return jsonify({"success": True, "mensaje": "Pago aprobado y plan activado exitosamente."}), 200
+            else:
+                doc_ref.update({
+                    "estado": "RECHAZADO",
+                    "rechazado_por": user_email,
+                    "fecha_rechazo": datetime.now(timezone.utc).isoformat()
+                })
+                return jsonify({"success": True, "mensaje": "Pago rechazado."}), 200
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/v1/admin/auditoria/record", methods=["POST"])
+    @require_auth
+    def record_or_settle_pick():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        
+        body = request.get_json(silent=True) or {}
+        pick_id = body.get("id")
+        
+        if not db:
+            return jsonify({"success": False, "error": "Base de datos no disponible."}), 500
+
+        try:
+            if pick_id:
+                nuevo_estado = body.get("estado", "GANADA").upper()
+                db.collection("auditoria_picks").document(pick_id).update({
+                    "estado": nuevo_estado,
+                    "resultado": body.get("resultado", "Finalizado"),
+                    "fecha_liquidacion": datetime.now(timezone.utc).isoformat()
+                })
+                return jsonify({"success": True, "mensaje": f"Pick {pick_id} liquidado como {nuevo_estado}."}), 200
+            
+            partido = body.get("partido")
+            seleccion = body.get("seleccion")
+            cuota = float(body.get("cuota", 1.80))
+            fecha = body.get("fecha") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+            nuevo_doc = db.collection("auditoria_picks").document()
+            nuevo_doc.set({
+                "partido": partido,
+                "seleccion": seleccion,
+                "cuota": cuota,
+                "fecha": fecha,
+                "estado": "PENDIENTE",
+                "resultado": "Por jugar",
+                "registrado_por": user_email,
+                "creado_utc": datetime.now(timezone.utc).isoformat()
+            })
+            return jsonify({"success": True, "mensaje": "Pick registrado con éxito en el historial oficial."}), 200
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/v1/payments/webhook", methods=["POST"])
+    def mercadopago_webhook():
+        """Recibe y valida notificaciones de pago directamente de Mercado Pago servidor a servidor."""
+        try:
+            topic = request.args.get("topic") or request.args.get("type")
+            payment_id = request.args.get("id") or request.args.get("data.id")
+
+            if not payment_id and request.is_json:
+                body = request.get_json(silent=True) or {}
+                payment_id = body.get("data", {}).get("id")
+                topic = topic or body.get("type")
+
+            if not payment_id:
+                return jsonify({"status": "ignored", "reason": "No payment id"}), 200
+
+            # Consultar estado real a la API oficial de Mercado Pago
+            headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
+            payment_url = f"https://api.mercadopago.com/v1/payments/{payment_id}"
+            resp = requests.get(payment_url, headers=headers, timeout=10)
+
+            if resp.status_code == 200:
+                payment_data = resp.json()
+                status = payment_data.get("status")
+                user_id = payment_data.get("external_reference")
+                payer_email = payment_data.get("payer", {}).get("email")
+
+                if status == "approved" and db and user_id:
+                    # Activar membresía en Firestore verificada por servidor
+                    user_ref = db.collection("usuarios").document(user_id)
+                    user_ref.set({
+                        "esVip": True,
+                        "plan": "pro",
+                        "ultimo_pago_id": payment_id,
+                        "pago_estado": "approved",
+                        "fecha_activacion": datetime.now(timezone.utc).isoformat()
+                    }, merge=True)
+                    logger.info("Membresía activada exitosamente para usuario %s vía webhook MP.", user_id)
+
+                return jsonify({"status": "processed", "payment_status": status}), 200
+            return jsonify({"status": "pending_validation"}), 200
+        except Exception as e:
+            logger.error("Error en mercadopago_webhook: %s", e)
+            return jsonify({"status": "error", "error": str(e)}), 500
 
     # Pagos Manuales (Yape / Plin - Gabriel Cerdán 942 791 524)
     @app.route("/api/v1/payments/manual-submit", methods=["POST"])
@@ -13687,6 +13832,8 @@ def create_app() -> Flask:
 
     # VIP 2: Generador de Anclas Seguras (>80% Viabilidad)
     @app.route("/api/v1/vip/anclas", methods=["GET"])
+    @require_auth
+    @require_subscription
     def list_anclas():
         if not db:
             return jsonify({"success": True, "anclas": []}), 200
@@ -13724,6 +13871,8 @@ def create_app() -> Flask:
 
     # VIP 3: Calculadora de Bankroll y Criterio de Kelly en Soles
     @app.route("/api/v1/vip/bankroll-calculator", methods=["POST"])
+    @require_auth
+    @require_subscription
     def calculate_bankroll():
         try:
             body = request.get_json() or {}
@@ -14315,6 +14464,7 @@ def create_app() -> Flask:
     # VIP 9: Simulación Monte Carlo por ID
     @app.route("/api/v1/vip/monte-carlo/<match_id>", methods=["GET"])
     @require_auth
+    @require_subscription
     def get_monte_carlo(match_id: str):
         if not db:
             return jsonify({"success": False, "error": "Base de datos no disponible."}), 503
@@ -14339,6 +14489,8 @@ def create_app() -> Flask:
 
     # VIP 9.1: Simulación Monte Carlo Custom On-Demand
     @app.route("/api/v1/vip/monte-carlo/custom", methods=["POST"])
+    @require_auth
+    @require_subscription
     def custom_monte_carlo():
         data = request.get_json() or {}
         local = data.get("local", "").strip()
@@ -14396,30 +14548,32 @@ def create_app() -> Flask:
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
 
-    # Disparador ETL
-    # Sincronizador Oficial de API-Sports (Nations League)
-    @app.route("/api/v1/admin/sync/apisports", methods=["GET", "POST"])
+    # Disparadores ETL y Mantenimiento Protegidos por Autenticación de Administrador
+    @app.route("/api/v1/admin/sync/apisports", methods=["POST"])
+    @require_auth
     def sync_apisports():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
         threading.Thread(target=apisports_service.sync_nations_league).start()
         return jsonify({
             "success": True,
-            "message": "Sincronización de UEFA Nations League vía API-Sports iniciada en segundo plano."
+            "message": "Sincronización de UEFA Nations League iniciada en segundo plano."
         }), 200
 
-    @app.route("/api/v1/admin/etl/trigger", methods=["GET", "POST"])
+    @app.route("/api/v1/admin/etl/trigger", methods=["POST"])
+    @require_auth
     def trigger_etl():
-        secret = request.args.get("secret")
-        season = int(request.args.get("season", 2026))
-        admin_key = os.getenv("ADMIN_SECRET", "predicxion2026")
-
-        if secret and secret == admin_key:
-            threading.Thread(target=etl_service.run_sync_full_season, args=(season,)).start()
-            return jsonify({
-                "success": True,
-                "message": f"Sincronización de temporada {season} lanzada en segundo plano."
-            }), 200
-
-        return jsonify({"error": "No autorizado."}), 403
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        body = request.get_json(silent=True) or {}
+        season = int(body.get("season") or request.args.get("season", 2026))
+        threading.Thread(target=etl_service.run_sync_full_season, args=(season,)).start()
+        return jsonify({
+            "success": True,
+            "message": f"Sincronización de temporada {season} lanzada en segundo plano."
+        }), 200
 
 
     # ----------------------------------------------------------------------------------
