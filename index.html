@@ -2088,13 +2088,19 @@
                 if (cont && (!globalTodosPartidos || Object.keys(globalTodosPartidos).length === 0)) {
                     cont.innerHTML = `
                         <div class="p-4 text-center text-slate-400 text-xs">
-                            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg mb-2"></i>
-                            <p>Sincronizando cartelera oficial...</p>
+                            <i class="fa-solid fa-spinner fa-spin text-accentGreen text-lg mb-2"></i>
+                            <p>Conectando con la cartelera oficial...</p>
                             <button onclick="cargarDatosCartelera()" class="mt-3 px-3 py-1.5 bg-accentGreen/20 text-accentGreen rounded-lg hover:bg-accentGreen/30 text-xs font-semibold">
-                                <i class="fa-solid fa-rotate-right mr-1"></i> Reintentar conexión
+                                <i class="fa-solid fa-rotate-right mr-1"></i> Reintentar ahora
                             </button>
                         </div>
                     `;
+                    // Auto-reintento defensivo para reconectar inmediatamente si el servidor estaba iniciando
+                    setTimeout(() => {
+                        if (!globalTodosPartidos || Object.keys(globalTodosPartidos).length === 0) {
+                            cargarDatosCartelera();
+                        }
+                    }, 2500);
                 }
             }
         }
