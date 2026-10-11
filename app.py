@@ -11557,14 +11557,17 @@ class SportsAnalyticsEngine:
 
                 # DETECCIÓN CUANTITATIVA DE TRAMPA DE FAVORITO (TRAP MATCH WARNING)
         alerta_trampa = {"activa": False}
+        p_home_win = float(p1x2.get("1", 40.0))
+        p_away_win = float(p1x2.get("2", 30.0))
+        p_draw = float(p1x2.get("X", 25.0))
+        p_fav = max(p_home_win, p_away_win)
         fav_team = home if lh >= la else away
         opp_team = away if lh >= la else home
         fav_is_away = (fav_team == away)
-        p_fav = max(p1, p2)
         odd_fav = round(100.0 / max(5.0, p_fav), 2)
         opp_xg = la if fav_team == home else lh
 
-        if (p_fav >= 60.0 and odd_fav <= 1.52) and (opp_xg >= 1.15 or (fav_is_away and a_stat.get("ga_last3", 2) >= 3) or pX >= 22.0):
+        if (p_fav >= 60.0 and odd_fav <= 1.52) and (opp_xg >= 1.15 or (fav_is_away and a_stat.get("ga_last3", 2) >= 3) or p_draw >= 22.0):
             alerta_trampa = {
                 "activa": True,
                 "favorito": fav_team,
@@ -14248,6 +14251,13 @@ def create_app() -> Flask:
             matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
             if not matches_day:
                 matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == today_str]
+            if not matches_day:
+                fechas_futuras = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= today_str)))
+                if fechas_futuras:
+                    target_date = fechas_futuras[0]
+                    matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
+                elif ALL_FIXTURES_POOL:
+                    matches_day = ALL_FIXTURES_POOL[:15]
 
             ranked = []
             for m in matches_day:
