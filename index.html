@@ -1491,6 +1491,18 @@
                 if (destacados.length > 0) renderizarCarrusel(destacados);
             } catch (e) {
                 console.error("Error en cargarDatosCartelera:", e);
+                const cont = document.getElementById('sidebar-matches');
+                if (cont && (!globalTodosPartidos || Object.keys(globalTodosPartidos).length === 0)) {
+                    cont.innerHTML = `
+                        <div class="p-4 text-center text-slate-400 text-xs">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg mb-2"></i>
+                            <p>Sincronizando cartelera oficial...</p>
+                            <button onclick="cargarDatosCartelera()" class="mt-3 px-3 py-1.5 bg-accentGreen/20 text-accentGreen rounded-lg hover:bg-accentGreen/30 text-xs font-semibold">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> Reintentar conexión
+                            </button>
+                        </div>
+                    `;
+                }
             }
         }
 
@@ -2195,7 +2207,7 @@
             cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando el Top 5 del día...</div>`;
 
             try {
-                const url = fechaTop3Activa ? `/api/v1/top3/daily?fecha=${fechaTop3Activa}` : `/api/v1/top3/daily`;
+                const url = fechaTop3Activa ? `${API_BASE}/api/v1/top3/daily?fecha=${fechaTop3Activa}` : `${API_BASE}/api/v1/top3/daily`;
                 const res = await fetch(url, { headers: await authHeaders() });
                 const data = await res.json();
                 if (data.fecha) {
