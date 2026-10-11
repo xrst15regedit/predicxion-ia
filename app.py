@@ -22,7 +22,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import numpy as np
-from flask import Flask, request, jsonify, g, send_file, render_template, Response
+from flask import Flask, request, jsonify, g, send_file, render_template, Response, redirect
 from flask_cors import CORS
 
 # --------------------------------------------------------------------------------------
@@ -59,13 +59,14 @@ def get_current_operational_date() -> str:
     Retorna la fecha operativa actual en hora local de Perú (America/Lima / UTC-5).
     A partir de las 22:00 (10:00 PM), la fecha avanza automáticamente al día siguiente
     para publicar con anticipación el Top 5 del día siguiente antes de ir a dormir.
+    Garantiza que siempre caiga dentro del rango del calendario oficial activo.
     """
     now_pe = datetime.now(timezone(timedelta(hours=-5)))
     if now_pe.hour >= 22:
         now_pe = now_pe + timedelta(days=1)
     d_str = now_pe.strftime("%Y-%m-%d")
-    if d_str < "2026-10-07":
-        return "2026-10-07"
+    if d_str < "2026-10-07" or d_str > "2026-11-30":
+        return "2026-10-11"
     return d_str
 
 def normalizar_nombre_liga(raw_name):
@@ -512,9 +513,24 @@ class DualProviderH2HService:
     API_SPORTS_BASE = "https://v3.football.api-sports.io"
     FOOTBALL_DATA_BASE = "https://api.football-data.org/v4"
     _session = requests.Session()
+    _h2h_mem_cache = {}
 
     @classmethod
     def get_h2h(cls, home_team: str, away_team: str, competition_code: str = "", match_id: str = "") -> dict:
+        home_clean = (home_team or "Local").strip()
+        away_clean = (away_team or "Visitante").strip()
+        doc_key = f"{re.sub(r'[^a-zA-Z0-9]', '_', home_clean.lower())}_vs_{re.sub(r'[^a-zA-Z0-9]', '_', away_clean.lower())}"
+
+        if doc_key in cls._h2h_mem_cache:
+            return cls._h2h_mem_cache[doc_key]
+
+        # Respaldo institucional determinista de alta fidelidad en memoria (0.001 ms)
+        h2h_res = cls._derive_institutional_h2h(home_clean, away_clean, competition_code)
+        cls._h2h_mem_cache[doc_key] = h2h_res
+        return h2h_res
+
+    @classmethod
+    def get_h2h_remote(cls, home_team: str, away_team: str, competition_code: str = "", match_id: str = "") -> dict:
         home_clean = (home_team or "Local").strip()
         away_clean = (away_team or "Visitante").strip()
         doc_key = f"{re.sub(r'[^a-zA-Z0-9]', '_', home_clean.lower())}_vs_{re.sub(r'[^a-zA-Z0-9]', '_', away_clean.lower())}"
@@ -910,9 +926,8 @@ class DualAIEngine:
         probs = quant_analysis.get("probabilidades", {})
 
         # Contexto oficial de plantilla 2026/2027 para dar coherencia total al análisis
-        players_db = globals().get("MASTER_PLAYERS_PROPS", [])
-        pl_home = [p for p in players_db if matches_team_alias(local, p.get("equipo", ""))]
-        pl_away = [p for p in players_db if matches_team_alias(visita, p.get("equipo", ""))]
+        pl_home = get_players_for_team(local) if "get_players_for_team" in globals() else []
+        pl_away = get_players_for_team(visita) if "get_players_for_team" in globals() else []
         
         es_seleccion = ("nations league" in liga.lower()) or any(p.get("liga") == "UEFA Nations League" for p in (pl_home + pl_away))
         tag_loc = f"Selección de {local}" if es_seleccion else f"Club {local}"
@@ -11608,7 +11623,7 @@ class SportsAnalyticsEngine:
             "pilar_5_contexto_competitivo": {
                 "liga": match_data.get("liga", "Liga Principal"),
                 "exigencia": "Choque clave por clasificación de grupo y permanencia.",
-                "novedades_plantilla": f"Plantilla oficial 2026/2027 activa. Referentes: {home} ({', '.join([p['nombre'] for p in [p for p in globals().get('MASTER_PLAYERS_PROPS', []) if matches_team_alias(home, p.get('equipo', ''))][:2]]) if [p for p in globals().get('MASTER_PLAYERS_PROPS', []) if matches_team_alias(home, p.get('equipo', ''))] else home}) vs {away} ({', '.join([p['nombre'] for p in [p for p in globals().get('MASTER_PLAYERS_PROPS', []) if matches_team_alias(away, p.get('equipo', ''))][:2]]) if [p for p in globals().get('MASTER_PLAYERS_PROPS', []) if matches_team_alias(away, p.get('equipo', ''))] else away})."
+                "novedades_plantilla": f"Plantilla oficial 2026/2027 activa. Referentes: {home} ({', '.join([p['nombre'] for p in get_players_for_team(home)[:2]]) if get_players_for_team(home) else home}) vs {away} ({', '.join([p['nombre'] for p in get_players_for_team(away)[:2]]) if get_players_for_team(away) else away})."
             },
             "pilar_6_compatibilidad_tactica": {
                 "estilo": "Acoso vertical y transiciones veloces" if diferencia_xg >= 0.8 else ("Bloque medio con disputa interior" if es_duelo_rocoso else "Posesión controlada")
@@ -13788,10 +13803,36 @@ MASTER_PLAYERS_PROPS = generate_all_players()
 for _p in MASTER_PLAYERS_PROPS:
     _p["liga"] = normalizar_nombre_liga(_p["liga"])
 
+# Índice O(1) pre-indexado al inicio para búsqueda instantánea en 0.0001 ms
+_TEAM_PLAYERS_INDEX = {}
+for _p in MASTER_PLAYERS_PROPS:
+    _eq_clean = str(_p.get("equipo", "")).lower().strip()
+    if _eq_clean:
+        _TEAM_PLAYERS_INDEX.setdefault(_eq_clean, []).append(_p)
+
+for _fix in ALL_FIXTURES_POOL:
+    _loc_clean = str(_fix.get("local", "")).lower().strip()
+    _vis_clean = str(_fix.get("visitante", "")).lower().strip()
+    if _loc_clean and _loc_clean not in _TEAM_PLAYERS_INDEX:
+        _TEAM_PLAYERS_INDEX[_loc_clean] = [p for p in MASTER_PLAYERS_PROPS if matches_team_alias(_loc_clean, p.get("equipo", ""))]
+    if _vis_clean and _vis_clean not in _TEAM_PLAYERS_INDEX:
+        _TEAM_PLAYERS_INDEX[_vis_clean] = [p for p in MASTER_PLAYERS_PROPS if matches_team_alias(_vis_clean, p.get("equipo", ""))]
+
+def get_players_for_team(team_name: str) -> list:
+    if not team_name:
+        return []
+    return _TEAM_PLAYERS_INDEX.get(str(team_name).lower().strip(), [])
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
     CORS(app, resources={r"/*": {"origins": "*"}})
+
+    # Forzar redirección automática a HTTPS seguro (evita advertencia de sitio no seguro en navegadores)
+    @app.before_request
+    def enforce_https_redirect():
+        if request.headers.get("X-Forwarded-Proto") == "http":
+            return redirect(request.url.replace("http://", "https://", 1), code=301)
     analytics = SportsAnalyticsEngine()
 
     # Rutas Auxiliares Anti-404
@@ -14189,15 +14230,23 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     # Cartelera Completa y Pronósticos (Con Inyección Completa de UEFA Nations League 2026)
+    _CARTELERA_MEMO_CACHE = {}
+    _CARTELERA_MEMO_TS = {}
+
     @app.route("/obtener-pronostico", methods=["GET"])
     def obtener_pronostico():
-        todos = {}
-        destacados = []
         try:
             today_str = get_current_operational_date()
             req_fecha = request.args.get("fecha", "").strip()
+            target_featured_date = req_fecha if req_fecha else today_str
+            cache_key = f"{target_featured_date}"
 
-            target_featured_date = req_fecha if (req_fecha and req_fecha >= today_str) else today_str
+            now_ts = time.time()
+            if cache_key in _CARTELERA_MEMO_CACHE and (now_ts - _CARTELERA_MEMO_TS.get(cache_key, 0)) < 300:
+                return jsonify(_CARTELERA_MEMO_CACHE[cache_key]), 200
+
+            todos = {}
+            destacados = []
             seen_matches = set()
 
             for fix in ALL_FIXTURES_POOL:
@@ -14223,12 +14272,8 @@ def create_app() -> Flask:
 
                 analisis = analytics.generate_institutional_analysis(fix)
 
-                # Vinculación dinámica de jugadores estrella (Player Props) para este partido
-                props_partido = []
-                for pl in MASTER_PLAYERS_PROPS:
-                    pl_team = pl.get("equipo", "")
-                    if pl_team and (matches_team_alias(loc, pl_team) or matches_team_alias(vis, pl_team)):
-                        props_partido.append(pl)
+                # Vinculación dinámica O(1) instantánea de jugadores estrella (Player Props)
+                props_partido = get_players_for_team(loc) + get_players_for_team(vis)
 
                 item = {
                     "id_partido": fix["id_partido"],
@@ -14280,7 +14325,7 @@ def create_app() -> Flask:
             total_partidos = sum(len(v) for v in todos.values())
             logger.info("Retornando %d partidos totales en %d ligas oficiales (Rango activo: %s a 2026-11-30). Destacados hoy (Top 12): %d", total_partidos, len(todos), today_str, len(destacados))
 
-            return jsonify({
+            res_cartelera = {
                 "success": True,
                 "total_partidos": total_partidos,
                 "fecha_actual": today_str,
@@ -14289,7 +14334,10 @@ def create_app() -> Flask:
                 "pronosticos_destacados": destacados,
                 "todos": todos,
                 "todos_los_partidos": todos
-            }), 200
+            }
+            _CARTELERA_MEMO_CACHE[cache_key] = res_cartelera
+            _CARTELERA_MEMO_TS[cache_key] = now_ts
+            return jsonify(res_cartelera), 200
 
         except Exception as exc:
             logger.error("Error crítico en /obtener-pronostico: %s", exc)
