@@ -14050,6 +14050,7 @@ def create_app() -> Flask:
                 odd_val = round(100.0 / max(5.0, prob_num), 2)
                 ranked.append({
                     "match_id": m.get("id_partido"),
+                    "partido": f"{m.get('local')} vs {m.get('visitante')}",
                     "local": m.get("local"),
                     "visitante": m.get("visitante"),
                     "liga": m.get("liga"),
