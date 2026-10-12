@@ -13,7 +13,6 @@ import math
 import time
 import json
 import base64
-import zlib
 import logging
 import threading
 from datetime import datetime, timedelta, timezone
@@ -66,8 +65,8 @@ def get_current_operational_date() -> str:
     if now_pe.hour >= 22:
         now_pe = now_pe + timedelta(days=1)
     d_str = now_pe.strftime("%Y-%m-%d")
-    if d_str < "2026-10-12":
-        return "2026-10-12"
+    if d_str < "2026-10-07" or d_str > "2026-11-30":
+        return "2026-10-11"
     return d_str
 
 def normalizar_nombre_liga(raw_name):
@@ -186,43 +185,7 @@ OWNER_EMAILS = set(filter(None, [e.strip().lower() for e in (os.getenv("OWNER_EM
 
 def _verificar_es_admin() -> bool:
     """Verifica si la solicitud proviene del dueño por Firebase o por clave/PIN de admin."""
-    # 1. Clave secreta o PIN enviado en header X-Admin-Key o query
-    admin_key = (request.headers.get("X-Admin-Key") or request.args.get("admin_key") or "").strip()
-    valid_keys = {
-        (os.getenv("ADMIN_SECRET_KEY") or "2026").strip(),
-        "2026",
-        "predicxion_master_2026",
-        "admin2026",
-        "fabian2026"
-    }
-    if admin_key and (admin_key in valid_keys or len(admin_key) >= 4):
-        return True
-
-    # 2. Token de Firebase Auth
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header.split("Bearer ")[1].strip()
-        if token in valid_keys:
-            return True
-        try:
-            ensure_firebase_initialized()
-            if auth and firebase_admin and firebase_admin._apps:
-                decoded = auth.verify_id_token(token, clock_skew_seconds=60)
-                email = (decoded.get("email") or "").strip().lower()
-                if email in OWNER_EMAILS or "fabian" in email:
-                    return True
-        except Exception as exc:
-            logger.warning("Fallo verificación id_token en _verificar_es_admin: %s", exc)
-
-    user_email = (getattr(g, "user_email", None) or "").strip().lower()
-    if user_email in OWNER_EMAILS or "fabian" in user_email:
-        return True
-
-    # 3. Fallback permisivo si la petición se origina con credenciales locales válidas
-    if request.headers.get("X-Admin-Key") or request.headers.get("Authorization"):
-        return True
-
-    return True
+    return _is_owner()
 
 
 # --------------------------------------------------------------------------------------
@@ -450,58 +413,134 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-def require_subscription(f):
+PLANES = {
+    "pro": {"nombre": "Pase Pro", "precio": 39.90},
+    "elite": {"nombre": "Pase Élite", "precio": 79.90},
+    "anual": {"nombre": "Pase Anual VIP", "precio": 299.00, "dias": 365},
+}
+PLAN_RANK = {"free": 0, "pro": 1, "elite": 2}
+SUSCRIPCION_DIAS = 30
+
+# Limitador simple en memoria (por proceso). Frena abuso básico.
+_rate_hits = {}
+_rate_lock = threading.Lock()
+
+
+def rate_limited(key, limit, window_s):
+    now = time.time()
+    with _rate_lock:
+        hits = [t for t in _rate_hits.get(key, []) if now - t < window_s]
+        if len(hits) >= limit:
+            _rate_hits[key] = hits
+            return True
+        hits.append(now)
+        _rate_hits[key] = hits
+        return False
+
+
+def _safe_err(exc):
+    """Registra el error real en logs y devuelve un mensaje genérico al cliente."""
+    logger.error("Error interno: %s", exc, exc_info=True)
+    return "Error interno del servidor. Inténtalo de nuevo en unos minutos."
+
+
+def _is_owner():
+    """Dueño = correo de OWNER_EMAILS Y correo verificado por Firebase."""
+    return (getattr(g, "user_email", "") or "").lower() in OWNER_EMAILS and bool(getattr(g, "email_verified", False))
+
+
+def _as_utc(value):
+    dt = datetime.fromisoformat(value) if isinstance(value, str) else value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _plan_from_doc(data):
+    """Plan efectivo según Firestore, respetando la fecha de vencimiento."""
+    if not data or not data.get("suscripcion_activa"):
+        return "free"
+    expira = data.get("suscripcion_expira")
+    try:
+        if expira and _as_utc(expira) <= datetime.now(timezone.utc):
+            return "free"
+    except Exception:
+        return "free"
+    plan = str(data.get("plan", "pro")).lower()
+    return plan if plan in ("pro", "elite") else "pro"
+
+
+def _resolve_plan(user_id, email, verified):
+    if verified and (email or "").lower() in OWNER_EMAILS:
+        return "elite"
+    if not user_id or not db:
+        return "free"
+    doc = db.collection("usuarios").document(user_id).get()
+    return _plan_from_doc(doc.to_dict()) if doc.exists else "free"
+
+
+def _optional_plan():
+    """Plan del visitante si envía un token válido; 'free' en cualquier otro caso."""
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return "free"
+    try:
+        ensure_firebase_initialized()
+        d = auth.verify_id_token(header.split("Bearer ", 1)[1].strip(), clock_skew_seconds=60)
+        uid = d.get("uid") or d.get("user_id") or d.get("sub")
+        return _resolve_plan(uid, (d.get("email") or "").strip().lower(), bool(d.get("email_verified")))
+    except Exception:
+        return "free"
+
+
+def require_subscription(min_plan="pro"):
+    """Exige plan mínimo EN EL SERVIDOR. Si no puede verificar, deniega (no regala acceso)."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not getattr(g, "user_id", None):
+                return jsonify({"success": False, "error": "Identidad no verificada."}), 401
+            if not db:
+                return jsonify({"success": False, "error": "Servicio temporalmente no disponible."}), 503
+            try:
+                plan = _resolve_plan(g.user_id, getattr(g, "user_email", ""), getattr(g, "email_verified", False))
+            except Exception as exc:
+                logger.error("Error verificando suscripción de %s: %s", g.user_id, exc)
+                return jsonify({"success": False, "error": "Servicio temporalmente no disponible."}), 503
+            if _jr_pausado(g.user_id):
+                return jsonify({"success": False, "error": "Tu cuenta tiene una pausa de juego responsable activa."}), 403
+            g.plan = plan
+            if PLAN_RANK.get(plan, 0) < PLAN_RANK.get(min_plan, 1):
+                return jsonify({
+                    "success": False,
+                    "error": "Esta función requiere un plan superior.",
+                    "paywall": True,
+                    "plan_requerido": min_plan
+                }), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+
+def require_owner(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        user_id = getattr(g, "user_id", None)
-        user_email = (getattr(g, "user_email", None) or "").strip().lower()
-
-        # Solo fabiancermaz@gmail.com exacto tiene pase maestro
-        if user_email in OWNER_EMAILS:
-            g.is_owner = True
-            return f(*args, **kwargs)
-
-        g.is_owner = False
-        if not user_id:
-            return jsonify({"success": False, "error": "Identidad no verificada."}), 401
-
-        if not db:
-            return jsonify({"success": True, "notice": "Modo offline temporal."}), 200
-
-        try:
-            doc = db.collection("usuarios").document(user_id).get()
-            if not doc.exists:
-                return jsonify({
-                    "success": False,
-                    "error": "Usuario sin suscripción activa registrada.",
-                    "paywall": True
-                }), 403
-
-            data = doc.to_dict()
-            activo = data.get("suscripcion_activa", False)
-            expira = data.get("suscripcion_expira", None)
-
-            valido = False
-            if activo:
-                if expira:
-                    dt_expira = datetime.fromisoformat(expira) if isinstance(expira, str) else expira
-                    if dt_expira > datetime.now(timezone.utc):
-                        valido = True
-                else:
-                    valido = True
-
-            if not valido:
-                return jsonify({
-                    "success": False,
-                    "error": "Acceso restringido: Requiere Membresía Pro o Élite activa.",
-                    "paywall": True
-                }), 403
-        except Exception as exc:
-            logger.error("Error verificando suscripción para %s: %s", user_id, exc)
-            return jsonify({"success": False, "error": "Error interno validando credenciales."}), 500
-
+        if not _is_owner():
+            return jsonify({"success": False, "error": "Acceso restringido al administrador."}), 403
         return f(*args, **kwargs)
     return decorated
+
+
+def limit_user(limit, window_s):
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            who = getattr(g, "user_id", None) or request.remote_addr
+            if rate_limited(f"{f.__name__}:{who}", limit, window_s):
+                return jsonify({"success": False, "error": "Demasiadas solicitudes. Espera un momento."}), 429
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
 
 # --------------------------------------------------------------------------------------
 # 4. MOTOR CUANTITATIVO MATEMÁTICO (POISSON, MONTE CARLO, 7 PILARES, SUREBETS Y KELLY)
@@ -552,14 +591,12 @@ class DualProviderH2HService:
 
         h2h_result = None
 
-        # 2. Intento 1: API-Sports / RapidAPI Football
-        client = get_football_api_client()
-        if client:
+        # 2. Intento 1: API-Sports (Cubre clubes y selecciones de Nations League)
+        if api_sports_key:
             try:
-                headers = client["headers"]
-                base_u = client["base_url"]
+                headers = {"x-apisports-key": api_sports_key}
                 # Consultar H2H directo
-                url = f"{base_u}/fixtures/headtohead?h2h={home_clean}-{away_clean}"
+                url = f"{cls.API_SPORTS_BASE}/fixtures/headtohead?h2h={home_clean}-{away_clean}"
                 resp = cls._session.get(url, headers=headers, timeout=6)
                 if resp.status_code == 200:
                     items = resp.json().get("response", [])
@@ -11693,8 +11730,29 @@ class SportsAnalyticsEngine:
                 "recomendacion_cobertura": f"Evitar victoria simple de {fav_team}. Se recomienda Hándicap Asiático a favor de {opp_team} o Doble Oportunidad para proteger capital."
             }
 
+        def _pct(x):
+            try:
+                return round(float(x), 1)
+            except (TypeError, ValueError):
+                return None
+
+        mercados_completos = [
+            {"mercado": "Gana local (1)", "probabilidad": _pct(p1x2.get("1"))},
+            {"mercado": "Empate (X)", "probabilidad": _pct(p1x2.get("X"))},
+            {"mercado": "Gana visitante (2)", "probabilidad": _pct(p1x2.get("2"))},
+            {"mercado": "Más de 1.5 goles", "probabilidad": _pct(pGoles15.get("over"))},
+            {"mercado": "Menos de 1.5 goles", "probabilidad": _pct(pGoles15.get("under"))},
+            {"mercado": "Más de 2.5 goles", "probabilidad": _pct(pGoles.get("over"))},
+            {"mercado": "Menos de 2.5 goles", "probabilidad": _pct(pGoles.get("under"))},
+            {"mercado": "Ambos equipos anotan: Sí", "probabilidad": _pct(pBtts.get("yes"))},
+            {"mercado": "Ambos equipos anotan: No", "probabilidad": _pct(pBtts.get("no"))},
+        ]
+        mercados_completos = [m for m in mercados_completos if m["probabilidad"] is not None]
+        mercados_completos.sort(key=lambda m: m["probabilidad"], reverse=True)
+
         return {
             "probabilidades": probs,
+            "mercados_completos": mercados_completos,
             "dobles_oportunidades": {
                 "1X": p1X,
                 "X2": pX2,
@@ -11831,860 +11889,923 @@ def build_all_unl_fixtures():
 
 NATIONS_LEAGUE_FIXTURES = build_all_unl_fixtures()
 
-_CURRENT_ACTIVE_WINDOW = {
-    "start_date": os.getenv("CALENDAR_WINDOW_START", "2026-10-12"),
-    "end_date": os.getenv("CALENDAR_WINDOW_END", "2026-11-30"),
-    "fase_nombre": "Fase 1 (12 Octubre - 30 Noviembre 2026)"
-}
-
-OFFICIAL_ACTIVE_MATCHES_RAW = [
-    ("sa-2026-j6-ata-ven_1063", "Atalanta", "Venezia", "2026-10-12T11:30:00Z", "Jornada 6", "Serie A", "SA"),
-    ("sa-2026-j6-tor-udi_1064", "Torino", "Udinese", "2026-10-12T13:45:00Z", "Jornada 6", "Serie A", "SA"),
-    ("bsa-2026-j30-cor-bot_1874", "Coritiba", "Botafogo", "2026-10-12T14:00:00Z", "Jornada 30", "Campeonato Brasileiro Série A", "BSA"),
-    ("pd-2026-j8-lev-sev_179", "Levante", "Sevilla", "2026-10-12T14:00:00Z", "Jornada 8", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j6-cov-new_481", "Coventry", "Newcastle", "2026-10-12T14:00:00Z", "Jornada 6", "Premier League", "PL"),
-    ("ppl-2026-j8-fam-alv_1637", "Famalicão", "Alverca", "2026-10-12T14:15:00Z", "Jornada 8", "Primeira Liga", "PPL"),
-    ("bsa-2026-j30-cha-atl_1875", "Chapecoense", "Atlético Paranaense", "2026-10-12T17:30:00Z", "Jornada 30", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j30-red-cru_1876", "Red Bull Bragantino", "Cruzeiro", "2026-10-12T19:00:00Z", "Jornada 30", "Campeonato Brasileiro Série A", "BSA"),
-    ("ucl-2026-j2-len-spo_53", "Lens", "Sporting CP", "2026-10-13T11:45:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-sab-sla_54", "Sabah Baku", "Slavia Praga", "2026-10-13T11:45:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-ars-lil_55", "Arsenal", "Lille", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-atl-man_56", "Atlético de Madrid", "Manchester United", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-gal-bar_57", "Galatasaray", "Barcelona", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-int-clu_58", "Inter", "Club Brujas", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-lei-psv_59", "Leipzig", "PSV", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-vik-bay_60", "Viking", "Bayern Múnich", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-vil-náp_61", "Villarreal", "Nápoles", "2026-10-13T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-fey-com_62", "Feyenoord", "Como", "2026-10-14T11:45:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-las-liv_63", "LASK", "Liverpool", "2026-10-14T11:45:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-ast-fen_64", "Aston Villa", "Fenerbahçe", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-bod-bor_65", "Bodo/Glimt", "Borussia Dortmund", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-man-psg_66", "Manchester City", "PSG", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-rea-por_67", "Real Betis", "Porto", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-rom-rea_68", "Roma", "Real Madrid", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-sha-aek_69", "Shakhtar", "AEK", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j2-slo-stu_70", "Slovan Bratislava", "Stuttgart", "2026-10-14T14:00:00Z", "Jornada 2", "UEFA Champions League", "UCL"),
-    ("bl1-2026-j6-ein-col_802", "Eintracht Frankfurt", "Colonia", "2026-10-16T13:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("fl1-2026-j7-le -tou_1385", "Le Mans", "Toulouse", "2026-10-16T13:45:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("sa-2026-j7-fro-sas_1065", "Frosinone", "Sassuolo", "2026-10-16T13:45:00Z", "Jornada 7", "Serie A", "SA"),
-    ("pd-2026-j9-dep-lev_180", "Deportivo de La Coruña", "Levante", "2026-10-16T14:00:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("bsa-2026-j31-mir-int_1877", "Mirassol", "Internacional", "2026-10-16T18:00:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("pl-2026-j7-eve-che_482", "Everton", "Chelsea", "2026-10-17T06:30:00Z", "Jornada 7", "Premier League", "PL"),
-    ("pd-2026-j9-esp-atl_181", "Espanyol", "Atlético de Madrid", "2026-10-17T07:00:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("sa-2026-j7-ven-náp_1066", "Venezia", "Nápoles", "2026-10-17T08:00:00Z", "Jornada 7", "Serie A", "SA"),
-    ("bl1-2026-j6-elv-aug_803", "Elversberg", "Augsburgo", "2026-10-17T08:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("bl1-2026-j6-ham-stu_804", "Hamburgo", "Stuttgart", "2026-10-17T08:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("bl1-2026-j6-sch-mai_805", "Schalke", "Mainz", "2026-10-17T08:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("bl1-2026-j6-uni-bor_806", "Union Berlin", "Borussia Dortmund", "2026-10-17T08:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("bl1-2026-j6-wer-pad_807", "Werder Bremen", "Paderborn", "2026-10-17T08:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("pl-2026-j7-bre-liv_483", "Brentford", "Liverpool", "2026-10-17T09:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("pl-2026-j7-ful-hul_484", "Fulham", "Hull", "2026-10-17T09:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("pl-2026-j7-man-ips_485", "Manchester City", "Ipswich", "2026-10-17T09:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("pd-2026-j9-vil-elc_182", "Villarreal", "Elche", "2026-10-17T09:15:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j7-est-psg_1386", "Estrasburgo", "PSG", "2026-10-17T10:15:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("sa-2026-j7-bol-int_1067", "Bolonia", "Inter", "2026-10-17T11:00:00Z", "Jornada 7", "Serie A", "SA"),
-    ("bl1-2026-j6-bay-rb _808", "Bayern Múnich", "RB Leipzig", "2026-10-17T11:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("pd-2026-j9-rea-bar_183", "Real Betis", "Barcelona", "2026-10-17T11:30:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j7-new-ast_486", "Newcastle", "Aston Villa", "2026-10-17T11:30:00Z", "Jornada 7", "Premier League", "PL"),
-    ("fl1-2026-j7-lil-bre_1387", "Lille", "Brest", "2026-10-17T13:45:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("fl1-2026-j7-tro-len_1388", "Troyes", "Lens", "2026-10-17T13:45:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("sa-2026-j7-rom-gen_1068", "Roma", "Genoa", "2026-10-17T13:45:00Z", "Jornada 7", "Serie A", "SA"),
-    ("pd-2026-j9-val-ath_184", "Valencia", "Athletic Club", "2026-10-17T14:00:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("bsa-2026-j31-bot-cha_1878", "Botafogo", "Chapecoense", "2026-10-17T16:00:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j31-atl-cor_1879", "Atlético Mineiro", "Coritiba", "2026-10-17T16:30:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j31-atl-pal_1880", "Atlético Paranaense", "Palmeiras", "2026-10-17T17:30:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j31-são-vas_1881", "São Paulo", "Vasco", "2026-10-17T19:00:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j7-udi-lec_1069", "Udinese", "Lecce", "2026-10-18T05:30:00Z", "Jornada 7", "Serie A", "SA"),
-    ("pd-2026-j9-osa-rac_185", "Osasuna", "Racing de Santander", "2026-10-18T07:00:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j7-ang-mar_1389", "Angers", "Marsella", "2026-10-18T08:00:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("pl-2026-j7-bou-sun_487", "Bournemouth", "Sunderland", "2026-10-18T08:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("pl-2026-j7-bri-cry_488", "Brighton", "Crystal Palace", "2026-10-18T08:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("pl-2026-j7-lee-man_489", "Leeds United", "Manchester United", "2026-10-18T08:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("sa-2026-j7-fio-com_1070", "Fiorentina", "Como", "2026-10-18T08:00:00Z", "Jornada 7", "Serie A", "SA"),
-    ("bl1-2026-j6-bay-fri_809", "Bayer Leverkusen", "Friburgo", "2026-10-18T08:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("pd-2026-j9-cel-ala_186", "Celta de Vigo", "Alavés", "2026-10-18T09:15:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j7-le -aux_1390", "Le Havre", "Auxerre", "2026-10-18T10:15:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("fl1-2026-j7-lor-món_1391", "Lorient", "Mónaco", "2026-10-18T10:15:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("fl1-2026-j7-par-ren_1392", "París FC", "Rennes", "2026-10-18T10:15:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("bl1-2026-j6-bor-hof_810", "Borussia M'gladbach", "Hoffenheim", "2026-10-18T10:30:00Z", "Jornada 6", "Bundesliga", "BL1"),
-    ("pl-2026-j7-not-ars_490", "Nottingham Forest", "Arsenal", "2026-10-18T10:30:00Z", "Jornada 7", "Premier League", "PL"),
-    ("sa-2026-j7-ac -ata_1071", "AC Milan", "Atalanta", "2026-10-18T11:00:00Z", "Jornada 7", "Serie A", "SA"),
-    ("pd-2026-j9-mál-rea_187", "Málaga CF", "Real Sociedad", "2026-10-18T11:30:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j7-lyo-niz_1393", "Lyon", "Niza", "2026-10-18T13:45:00Z", "Jornada 7", "Ligue 1", "FL1"),
-    ("sa-2026-j7-juv-laz_1072", "Juventus", "Lazio", "2026-10-18T13:45:00Z", "Jornada 7", "Serie A", "SA"),
-    ("bsa-2026-j31-flu-san_1882", "Fluminense", "Santos", "2026-10-18T14:00:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j31-gre-cru_1883", "Gremio", "Cruzeiro", "2026-10-18T14:00:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("pd-2026-j9-rea-sev_188", "Real Madrid", "Sevilla", "2026-10-18T14:00:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("bsa-2026-j31-bah-fla_1884", "Bahia", "Flamengo", "2026-10-18T16:30:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j31-rem-red_1885", "Remo", "Red Bull Bragantino", "2026-10-18T17:30:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j7-mon-cag_1073", "Monza", "Cagliari", "2026-10-19T11:30:00Z", "Jornada 7", "Serie A", "SA"),
-    ("sa-2026-j7-par-tor_1074", "Parma", "Torino", "2026-10-19T13:45:00Z", "Jornada 7", "Serie A", "SA"),
-    ("pd-2026-j9-get-ray_189", "Getafe", "Rayo Vallecano", "2026-10-19T14:00:00Z", "Jornada 9", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j7-tot-cov_491", "Tottenham", "Coventry", "2026-10-19T14:00:00Z", "Jornada 7", "Premier League", "PL"),
-    ("ppl-2026-j2-spo-gil_1638", "Sporting Braga", "Gil Vicente", "2026-10-19T14:15:00Z", "Jornada 2", "Primeira Liga", "PPL"),
-    ("bsa-2026-j31-cor-vit_1886", "Corinthians", "Vitória BA", "2026-10-19T18:00:00Z", "Jornada 31", "Campeonato Brasileiro Série A", "BSA"),
-    ("ucl-2026-j3-fen-sla_71", "Fenerbahçe", "Slavia Praga", "2026-10-20T11:45:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-sab-bor_72", "Sabah Baku", "Borussia Dortmund", "2026-10-20T11:45:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-liv-vil_73", "Liverpool", "Villarreal", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-man-aek_74", "Manchester City", "AEK", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-náp-bod_75", "Nápoles", "Bodo/Glimt", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-psg-bar_77", "PSG", "Barcelona", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-por-psv_76", "Porto", "PSV", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-rom-slo_78", "Roma", "Slovan Bratislava", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-stu-atl_79", "Stuttgart", "Atlético de Madrid", "2026-10-20T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-com-man_80", "Como", "Manchester United", "2026-10-21T11:45:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-lil-gal_81", "Lille", "Galatasaray", "2026-10-21T11:45:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("pd-2026-j6-lev-ath_190", "Levante", "Athletic Club", "2026-10-21T13:00:00Z", "Jornada 6", "LaLiga EA Sports", "PD"),
-    ("ucl-2026-j3-ast-vik_82", "Aston Villa", "Viking", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-bay-ars_83", "Bayern Múnich", "Arsenal", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-clu-len_84", "Club Brujas", "Lens", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-int-sha_85", "Inter", "Shakhtar", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-rea-fey_86", "Real Betis", "Feyenoord", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-rea-rb _87", "Real Madrid", "RB Leipzig", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j3-spo-las_88", "Sporting CP", "LASK", "2026-10-21T14:00:00Z", "Jornada 3", "UEFA Champions League", "UCL"),
-    ("bl1-2026-j7-stu-bor_811", "Stuttgart", "Borussia M'gladbach", "2026-10-23T13:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("fl1-2026-j8-bre-niz_1394", "Brest", "Niza", "2026-10-23T13:45:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("sa-2026-j8-tor-mon_1075", "Torino", "Monza", "2026-10-23T13:45:00Z", "Jornada 8", "Serie A", "SA"),
-    ("pd-2026-j10-ala-mál_191", "Alavés", "Málaga CF", "2026-10-23T14:00:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j8-ips-not_492", "Ipswich", "Nottingham Forest", "2026-10-23T14:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("ppl-2026-j9-vit-mar_1639", "Vitória de Guimarães", "Marítimo", "2026-10-23T14:45:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("bsa-2026-j32-cru-rem_1887", "Cruzeiro", "Remo", "2026-10-23T18:00:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("pl-2026-j8-ast-man_493", "Aston Villa", "Manchester City", "2026-10-24T06:30:00Z", "Jornada 8", "Premier League", "PL"),
-    ("pd-2026-j10-ray-elc_192", "Rayo Vallecano", "Elche", "2026-10-24T07:00:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("sa-2026-j8-cag-bol_1076", "Cagliari", "Bolonia", "2026-10-24T08:00:00Z", "Jornada 8", "Serie A", "SA"),
-    ("sa-2026-j8-com-sas_1077", "Como", "Sassuolo", "2026-10-24T08:00:00Z", "Jornada 8", "Serie A", "SA"),
-    ("bl1-2026-j7-aug-uni_812", "Augsburgo", "Union Berlin", "2026-10-24T08:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("bl1-2026-j7-col-sch_813", "Colonia", "Schalke", "2026-10-24T08:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("bl1-2026-j7-mai-wer_814", "Mainz", "Werder Bremen", "2026-10-24T08:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("bl1-2026-j7-pad-ham_815", "Paderborn", "Hamburgo", "2026-10-24T08:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("bl1-2026-j7-rb -elv_816", "RB Leipzig", "Elversberg", "2026-10-24T08:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("pl-2026-j8-ars-eve_494", "Arsenal", "Everton", "2026-10-24T09:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("pl-2026-j8-cov-ful_495", "Coventry", "Fulham", "2026-10-24T09:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("pd-2026-j10-rac-esp_193", "Racing de Santander", "Espanyol", "2026-10-24T09:15:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j9-est-cas_1640", "Estrela", "Casa Pia", "2026-10-24T09:30:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("fl1-2026-j8-tou-tro_1395", "Toulouse", "Troyes", "2026-10-24T10:15:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("sa-2026-j8-náp-rom_1078", "Nápoles", "Roma", "2026-10-24T11:00:00Z", "Jornada 8", "Serie A", "SA"),
-    ("bl1-2026-j7-bor-ein_817", "Borussia Dortmund", "Eintracht Frankfurt", "2026-10-24T11:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("pd-2026-j10-val-vil_194", "Valencia", "Villarreal", "2026-10-24T11:30:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j8-che-tot_496", "Chelsea", "Tottenham", "2026-10-24T11:30:00Z", "Jornada 8", "Premier League", "PL"),
-    ("ppl-2026-j9-alv-aro_1641", "Alverca", "Arouca", "2026-10-24T12:00:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("fl1-2026-j8-len-par_1396", "Lens", "París FC", "2026-10-24T13:45:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("sa-2026-j8-laz-par_1079", "Lazio", "Parma", "2026-10-24T13:45:00Z", "Jornada 8", "Serie A", "SA"),
-    ("pd-2026-j10-atl-dep_195", "Atlético de Madrid", "Deportivo de La Coruña", "2026-10-24T14:00:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("bsa-2026-j32-int-bot_1888", "Internacional", "Botafogo", "2026-10-24T14:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j32-mir-são_1889", "Mirassol", "São Paulo", "2026-10-24T14:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j32-vit-atl_1890", "Vitória BA", "Atlético Paranaense", "2026-10-24T14:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("ppl-2026-j9-gil-por_1642", "Gil Vicente", "Porto", "2026-10-24T14:30:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("bsa-2026-j32-pal-red_1891", "Palmeiras", "Red Bull Bragantino", "2026-10-24T16:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j32-vas-cor_1892", "Vasco", "Corinthians", "2026-10-24T16:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j32-cha-flu_1893", "Chapecoense", "Fluminense", "2026-10-24T17:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j32-san-bah_1894", "Santos", "Bahia", "2026-10-24T19:00:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j8-int-fio_1080", "Inter", "Fiorentina", "2026-10-25T06:30:00Z", "Jornada 8", "Serie A", "SA"),
-    ("pd-2026-j10-ath-get_196", "Athletic Club", "Getafe", "2026-10-25T08:00:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j8-món-lil_1397", "Mónaco", "Lille", "2026-10-25T09:00:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("pl-2026-j8-cry-new_497", "Crystal Palace", "Newcastle", "2026-10-25T09:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("pl-2026-j8-hul-bre_498", "Hull", "Brentford", "2026-10-25T09:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("pl-2026-j8-liv-bri_499", "Liverpool", "Brighton", "2026-10-25T09:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("pl-2026-j8-man-bou_500", "Manchester United", "Bournemouth", "2026-10-25T09:00:00Z", "Jornada 8", "Premier League", "PL"),
-    ("sa-2026-j8-ata-fro_1081", "Atalanta", "Frosinone", "2026-10-25T09:00:00Z", "Jornada 8", "Serie A", "SA"),
-    ("sa-2026-j8-gen-ven_1082", "Genoa", "Venezia", "2026-10-25T09:00:00Z", "Jornada 8", "Serie A", "SA"),
-    ("bl1-2026-j7-hof-bay_818", "Hoffenheim", "Bayer Leverkusen", "2026-10-25T09:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("pd-2026-j10-cel-rea_197", "Celta de Vigo", "Real Betis", "2026-10-25T10:15:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j9-est-mor_1643", "Estoril", "Moreirense", "2026-10-25T10:30:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("fl1-2026-j8-ang-lor_1398", "Angers", "Lorient", "2026-10-25T11:15:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("fl1-2026-j8-aux-le _1399", "Auxerre", "Le Mans", "2026-10-25T11:15:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("fl1-2026-j8-mar-le _1400", "Marsella", "Le Havre", "2026-10-25T11:15:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("fl1-2026-j8-ren-est_1401", "Rennes", "Estrasburgo", "2026-10-25T11:15:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("bl1-2026-j7-fri-bay_819", "Friburgo", "Bayern Múnich", "2026-10-25T11:30:00Z", "Jornada 7", "Bundesliga", "BL1"),
-    ("pl-2026-j8-sun-lee_501", "Sunderland", "Leeds United", "2026-10-25T11:30:00Z", "Jornada 8", "Premier League", "PL"),
-    ("sa-2026-j8-lec-juv_1083", "Lecce", "Juventus", "2026-10-25T12:00:00Z", "Jornada 8", "Serie A", "SA"),
-    ("pd-2026-j10-rea-lev_198", "Real Sociedad", "Levante", "2026-10-25T12:30:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j9-nac-spo_1644", "Nacional", "Sporting Braga", "2026-10-25T13:00:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("ppl-2026-j9-rio-fam_1645", "Rio Ave", "Famalicão", "2026-10-25T13:00:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("fl1-2026-j8-psg-lyo_1402", "PSG", "Lyon", "2026-10-25T14:45:00Z", "Jornada 8", "Ligue 1", "FL1"),
-    ("sa-2026-j8-udi-ac _1084", "Udinese", "AC Milan", "2026-10-25T14:45:00Z", "Jornada 8", "Serie A", "SA"),
-    ("pd-2026-j10-bar-rea_199", "Barcelona", "Real Madrid", "2026-10-25T15:00:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j9-spo-aca_1646", "Sporting CP", "Academico Viseu", "2026-10-25T15:30:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("ppl-2026-j9-san-ben_1647", "Santa Clara", "Benfica", "2026-10-26T13:45:00Z", "Jornada 9", "Primeira Liga", "PPL"),
-    ("pd-2026-j10-sev-osa_200", "Sevilla", "Osasuna", "2026-10-26T15:00:00Z", "Jornada 10", "LaLiga EA Sports", "PD"),
-    ("bsa-2026-j32-cor-gre_1895", "Coritiba", "Gremio", "2026-10-26T17:30:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j32-fla-atl_1896", "Flamengo", "Atlético Mineiro", "2026-10-26T18:00:00Z", "Jornada 32", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j9-sas-laz_1085", "Sassuolo", "Lazio", "2026-10-27T12:30:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-rom-cag_1086", "Roma", "Cagliari", "2026-10-27T14:45:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-tor-com_1087", "Torino", "Como", "2026-10-27T14:45:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-ac -bol_1088", "AC Milan", "Bolonia", "2026-10-28T12:30:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-par-udi_1089", "Parma", "Udinese", "2026-10-28T12:30:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-ven-int_1090", "Venezia", "Inter", "2026-10-28T12:30:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-gen-juv_1091", "Genoa", "Juventus", "2026-10-28T14:45:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-mon-náp_1092", "Monza", "Nápoles", "2026-10-28T14:45:00Z", "Jornada 9", "Serie A", "SA"),
-    ("bsa-2026-j33-flu-int_1898", "Fluminense", "Internacional", "2026-10-28T17:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-red-cha_1897", "Red Bull Bragantino", "Chapecoense", "2026-10-28T17:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-san-pal_1899", "Santos", "Palmeiras", "2026-10-28T17:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-bah-são_1900", "Bahia", "São Paulo", "2026-10-28T19:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-rem-bot_1901", "Remo", "Botafogo", "2026-10-28T19:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j9-fro-lec_1093", "Frosinone", "Lecce", "2026-10-29T12:30:00Z", "Jornada 9", "Serie A", "SA"),
-    ("sa-2026-j9-fio-ata_1094", "Fiorentina", "Atalanta", "2026-10-29T14:45:00Z", "Jornada 9", "Serie A", "SA"),
-    ("bsa-2026-j33-atl-cru_1902", "Atlético Mineiro", "Cruzeiro", "2026-10-29T17:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-cor-vit_1903", "Coritiba", "Vitória BA", "2026-10-29T17:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-vas-fla_1904", "Vasco", "Flamengo", "2026-10-29T18:00:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j33-gre-atl_1905", "Gremio", "Atlético Paranaense", "2026-10-29T19:30:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("fl1-2026-j9-le -psg_1403", "Le Havre", "PSG", "2026-10-30T13:00:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("bl1-2026-j8-elv-mai_820", "Elversberg", "Mainz", "2026-10-30T14:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("pd-2026-j11-vil-esp_201", "Villarreal", "Espanyol", "2026-10-30T15:00:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j9-lil-len_1404", "Lille", "Lens", "2026-10-30T15:05:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("ppl-2026-j10-cas-spo_1648", "Casa Pia", "Sporting CP", "2026-10-30T15:15:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("bsa-2026-j33-cor-mir_1906", "Corinthians", "Mirassol", "2026-10-30T18:00:00Z", "Jornada 33", "Campeonato Brasileiro Série A", "BSA"),
-    ("pl-2026-j9-che-man_502", "Chelsea", "Manchester United", "2026-10-31T07:30:00Z", "Jornada 9", "Premier League", "PL"),
-    ("pd-2026-j11-lev-atl_202", "Levante", "Atlético de Madrid", "2026-10-31T08:00:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("sa-2026-j10-bol-mon_1095", "Bolonia", "Monza", "2026-10-31T09:00:00Z", "Jornada 10", "Serie A", "SA"),
-    ("bl1-2026-j8-aug-fri_821", "Augsburgo", "Friburgo", "2026-10-31T09:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("bl1-2026-j8-bay-stu_822", "Bayer Leverkusen", "Stuttgart", "2026-10-31T09:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("bl1-2026-j8-bor-pad_823", "Borussia M'gladbach", "Paderborn", "2026-10-31T09:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("bl1-2026-j8-sch-rb _824", "Schalke", "RB Leipzig", "2026-10-31T09:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("bl1-2026-j8-wer-hof_825", "Werder Bremen", "Hoffenheim", "2026-10-31T09:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("pl-2026-j9-bou-lee_503", "Bournemouth", "Leeds United", "2026-10-31T10:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("pl-2026-j9-bre-not_504", "Brentford", "Nottingham Forest", "2026-10-31T10:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("pl-2026-j9-cov-sun_505", "Coventry", "Sunderland", "2026-10-31T10:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("pl-2026-j9-hul-ips_506", "Hull", "Ipswich", "2026-10-31T10:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("pl-2026-j9-man-bri_507", "Manchester City", "Brighton", "2026-10-31T10:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("pd-2026-j11-ray-cel_203", "Rayo Vallecano", "Celta de Vigo", "2026-10-31T10:15:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j10-mor-est_1649", "Moreirense", "Estrela", "2026-10-31T10:30:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("fl1-2026-j9-niz-ren_1405", "Niza", "Rennes", "2026-10-31T11:15:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("sa-2026-j10-udi-rom_1096", "Udinese", "Roma", "2026-10-31T12:00:00Z", "Jornada 10", "Serie A", "SA"),
-    ("bl1-2026-j8-bay-bor_826", "Bayern Múnich", "Borussia Dortmund", "2026-10-31T12:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("pd-2026-j11-rea-mál_204", "Real Betis", "Málaga CF", "2026-10-31T12:30:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j9-tot-cry_508", "Tottenham", "Crystal Palace", "2026-10-31T12:30:00Z", "Jornada 9", "Premier League", "PL"),
-    ("fl1-2026-j9-lor-bre_1406", "Lorient", "Brest", "2026-10-31T14:45:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("fl1-2026-j9-lyo-ang_1407", "Lyon", "Angers", "2026-10-31T14:45:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("fl1-2026-j9-tro-le _1408", "Troyes", "Le Mans", "2026-10-31T14:45:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("sa-2026-j10-ac -int_1097", "AC Milan", "Inter", "2026-10-31T14:45:00Z", "Jornada 10", "Serie A", "SA"),
-    ("pd-2026-j11-bar-ala_205", "Barcelona", "Alavés", "2026-10-31T15:00:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j9-ast-ful_509", "Aston Villa", "Fulham", "2026-10-31T15:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("ppl-2026-j10-por-est_1650", "Porto", "Estoril", "2026-10-31T15:30:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("sa-2026-j10-com-ven_1098", "Como", "Venezia", "2026-11-01T06:30:00Z", "Jornada 10", "Serie A", "SA"),
-    ("pd-2026-j11-get-sev_206", "Getafe", "Sevilla", "2026-11-01T08:00:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j9-est-aux_1409", "Estrasburgo", "Auxerre", "2026-11-01T09:00:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("sa-2026-j10-fro-tor_1099", "Frosinone", "Torino", "2026-11-01T09:00:00Z", "Jornada 10", "Serie A", "SA"),
-    ("sa-2026-j10-laz-cag_1100", "Lazio", "Cagliari", "2026-11-01T09:00:00Z", "Jornada 10", "Serie A", "SA"),
-    ("bl1-2026-j8-uni-col_827", "Union Berlin", "Colonia", "2026-11-01T09:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("pd-2026-j11-rac-rea_207", "Racing de Santander", "Real Madrid", "2026-11-01T10:15:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j10-aro-nac_1651", "Arouca", "Nacional", "2026-11-01T10:30:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("fl1-2026-j9-par-món_1410", "París FC", "Mónaco", "2026-11-01T11:15:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("bl1-2026-j8-ein-ham_828", "Eintracht Frankfurt", "Hamburgo", "2026-11-01T11:30:00Z", "Jornada 8", "Bundesliga", "BL1"),
-    ("pl-2026-j9-liv-ars_510", "Liverpool", "Arsenal", "2026-11-01T11:30:00Z", "Jornada 9", "Premier League", "PL"),
-    ("sa-2026-j10-lec-gen_1101", "Lecce", "Genoa", "2026-11-01T12:00:00Z", "Jornada 10", "Serie A", "SA"),
-    ("pd-2026-j11-elc-val_208", "Elche", "Valencia", "2026-11-01T12:30:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j10-aca-rio_1652", "Academico Viseu", "Rio Ave", "2026-11-01T13:00:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("ppl-2026-j10-mar-san_1653", "Marítimo", "Santa Clara", "2026-11-01T13:00:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("fl1-2026-j9-mar-tou_1411", "Marsella", "Toulouse", "2026-11-01T14:45:00Z", "Jornada 9", "Ligue 1", "FL1"),
-    ("sa-2026-j10-juv-náp_1102", "Juventus", "Nápoles", "2026-11-01T14:45:00Z", "Jornada 10", "Serie A", "SA"),
-    ("pd-2026-j11-ath-rea_209", "Athletic Club", "Real Sociedad", "2026-11-01T15:00:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("ppl-2026-j10-spo-fam_1654", "Sporting Braga", "Famalicão", "2026-11-01T15:30:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("sa-2026-j10-sas-fio_1103", "Sassuolo", "Fiorentina", "2026-11-02T12:30:00Z", "Jornada 10", "Serie A", "SA"),
-    ("sa-2026-j10-ata-par_1104", "Atalanta", "Parma", "2026-11-02T14:45:00Z", "Jornada 10", "Serie A", "SA"),
-    ("pd-2026-j11-dep-osa_210", "Deportivo de La Coruña", "Osasuna", "2026-11-02T15:00:00Z", "Jornada 11", "LaLiga EA Sports", "PD"),
-    ("pl-2026-j9-new-eve_511", "Newcastle", "Everton", "2026-11-02T15:00:00Z", "Jornada 9", "Premier League", "PL"),
-    ("ppl-2026-j10-ben-alv_1655", "Benfica", "Alverca", "2026-11-02T15:15:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("ppl-2026-j10-gil-vit_1656", "Gil Vicente", "Vitória de Guimarães", "2026-11-02T15:15:00Z", "Jornada 10", "Primeira Liga", "PPL"),
-    ("bsa-2026-j34-red-san_1907", "Red Bull Bragantino", "Santos", "2026-11-02T18:00:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("ucl-2026-j4-gal-stu_89", "Galatasaray", "Stuttgart", "2026-11-03T12:45:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-sha-spo_90", "Shakhtar", "Sporting CP", "2026-11-03T12:45:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-atl-bay_91", "Atlético de Madrid", "Bayern Múnich", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-bar-ast_92", "Barcelona", "Aston Villa", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-bod-lil_93", "Bodo/Glimt", "Lille", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-fey-int_94", "Feyenoord", "Inter", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-las-slo_95", "LASK", "Slovan Bratislava", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-man-rom_96", "Manchester United", "Roma", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-vil-psg_97", "Villarreal", "PSG", "2026-11-03T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("bsa-2026-j34-cha-mir_1908", "Chapecoense", "Mirassol", "2026-11-03T17:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j34-int-cor_1909", "Internacional", "Coritiba", "2026-11-03T19:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("ucl-2026-j4-aek-rea_98", "AEK", "Real Madrid", "2026-11-04T12:45:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-fen-liv_99", "Fenerbahçe", "Liverpool", "2026-11-04T12:45:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-bor-rea_100", "Borussia Dortmund", "Real Betis", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-len-com_101", "Lens", "Como", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-psv-clu_103", "PSV", "Club Brujas", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-por-náp_102", "Porto", "Nápoles", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-rb -man_104", "RB Leipzig", "Manchester City", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-sla-ars_105", "Slavia Praga", "Arsenal", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j4-vik-sab_106", "Viking", "Sabah Baku", "2026-11-04T15:00:00Z", "Jornada 4", "UEFA Champions League", "UCL"),
-    ("bsa-2026-j34-atl-vas_1910", "Atlético Paranaense", "Vasco", "2026-11-04T17:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j34-fla-gre_1911", "Flamengo", "Gremio", "2026-11-04T17:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j34-bot-atl_1912", "Botafogo", "Atlético Mineiro", "2026-11-04T19:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j34-são-cor_1913", "São Paulo", "Corinthians", "2026-11-04T19:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j34-pal-rem_1914", "Palmeiras", "Remo", "2026-11-05T17:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j34-cru-bah_1915", "Cruzeiro", "Bahia", "2026-11-05T19:30:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("bl1-2026-j9-ham-bor_829", "Hamburgo", "Borussia M'gladbach", "2026-11-06T14:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("fl1-2026-j10-tou-est_1412", "Toulouse", "Estrasburgo", "2026-11-06T14:45:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("sa-2026-j11-ven-udi_1105", "Venezia", "Udinese", "2026-11-06T14:45:00Z", "Jornada 11", "Serie A", "SA"),
-    ("pl-2026-j10-eve-cov_512", "Everton", "Coventry", "2026-11-06T15:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("ppl-2026-j11-fam-aro_1657", "Famalicão", "Arouca", "2026-11-06T15:45:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("bsa-2026-j34-vit-flu_1916", "Vitória BA", "Fluminense", "2026-11-06T18:00:00Z", "Jornada 34", "Campeonato Brasileiro Série A", "BSA"),
-    ("pl-2026-j10-lee-tot_513", "Leeds United", "Tottenham", "2026-11-07T07:30:00Z", "Jornada 10", "Premier League", "PL"),
-    ("sa-2026-j11-cag-fro_1106", "Cagliari", "Frosinone", "2026-11-07T09:00:00Z", "Jornada 11", "Serie A", "SA"),
-    ("sa-2026-j11-tor-lec_1107", "Torino", "Lecce", "2026-11-07T09:00:00Z", "Jornada 11", "Serie A", "SA"),
-    ("bl1-2026-j9-bor-elv_830", "Borussia Dortmund", "Elversberg", "2026-11-07T09:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("bl1-2026-j9-mai-bay_831", "Mainz", "Bayern Múnich", "2026-11-07T09:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("bl1-2026-j9-pad-ein_832", "Paderborn", "Eintracht Frankfurt", "2026-11-07T09:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("bl1-2026-j9-rb -aug_833", "RB Leipzig", "Augsburgo", "2026-11-07T09:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("pl-2026-j10-ars-hul_514", "Arsenal", "Hull", "2026-11-07T10:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("pl-2026-j10-ful-new_515", "Fulham", "Newcastle", "2026-11-07T10:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("ppl-2026-j11-nac-aca_1658", "Nacional", "Academico Viseu", "2026-11-07T10:30:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("fl1-2026-j10-aux-par_1413", "Auxerre", "París FC", "2026-11-07T11:15:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("sa-2026-j11-par-bol_1108", "Parma", "Bolonia", "2026-11-07T12:00:00Z", "Jornada 11", "Serie A", "SA"),
-    ("bl1-2026-j9-stu-wer_834", "Stuttgart", "Werder Bremen", "2026-11-07T12:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("pl-2026-j10-not-man_516", "Nottingham Forest", "Manchester City", "2026-11-07T12:30:00Z", "Jornada 10", "Premier League", "PL"),
-    ("ppl-2026-j11-alv-cas_1659", "Alverca", "Casa Pia", "2026-11-07T13:00:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("fl1-2026-j10-psg-tro_1414", "PSG", "Troyes", "2026-11-07T14:45:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("sa-2026-j11-rom-sas_1109", "Roma", "Sassuolo", "2026-11-07T14:45:00Z", "Jornada 11", "Serie A", "SA"),
-    ("ppl-2026-j11-spo-mor_1660", "Sporting CP", "Moreirense", "2026-11-07T15:30:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("sa-2026-j11-náp-laz_1110", "Nápoles", "Lazio", "2026-11-08T06:30:00Z", "Jornada 11", "Serie A", "SA"),
-    ("fl1-2026-j10-ren-lil_1415", "Rennes", "Lille", "2026-11-08T09:00:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("pl-2026-j10-bri-bre_517", "Brighton", "Brentford", "2026-11-08T09:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("pl-2026-j10-cry-liv_518", "Crystal Palace", "Liverpool", "2026-11-08T09:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("pl-2026-j10-ips-bou_519", "Ipswich", "Bournemouth", "2026-11-08T09:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("pl-2026-j10-sun-che_520", "Sunderland", "Chelsea", "2026-11-08T09:00:00Z", "Jornada 10", "Premier League", "PL"),
-    ("sa-2026-j11-gen-ac _1111", "Genoa", "AC Milan", "2026-11-08T09:00:00Z", "Jornada 11", "Serie A", "SA"),
-    ("sa-2026-j11-mon-ata_1112", "Monza", "Atalanta", "2026-11-08T09:00:00Z", "Jornada 11", "Serie A", "SA"),
-    ("bl1-2026-j9-col-bay_835", "Colonia", "Bayer Leverkusen", "2026-11-08T09:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("ppl-2026-j11-est-mar_1661", "Estoril", "Marítimo", "2026-11-08T10:30:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("ppl-2026-j11-san-gil_1662", "Santa Clara", "Gil Vicente", "2026-11-08T10:30:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("pd-2026-j12-atl-bar_211", "Atlético de Madrid", "Barcelona", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-cel-lev_212", "Celta de Vigo", "Levante", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-elc-rea_213", "Elche", "Real Betis", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-esp-dep_214", "Espanyol", "Deportivo de La Coruña", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-mál-rac_215", "Málaga CF", "Racing de Santander", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-osa-ath_216", "Osasuna", "Athletic Club", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-rea-ray_217", "Real Sociedad", "Rayo Vallecano", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-sev-ala_218", "Sevilla", "Alavés", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-val-rea_219", "Valencia", "Real Madrid", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j12-vil-get_220", "Villarreal", "Getafe", "2026-11-08T11:00:00Z", "Jornada 12", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j10-ang-niz_1416", "Angers", "Niza", "2026-11-08T11:15:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("fl1-2026-j10-bre-lyo_1417", "Brest", "Lyon", "2026-11-08T11:15:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("fl1-2026-j10-le -lor_1418", "Le Havre", "Lorient", "2026-11-08T11:15:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("fl1-2026-j10-le -món_1419", "Le Mans", "Mónaco", "2026-11-08T11:15:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("bl1-2026-j9-fri-uni_836", "Friburgo", "Union Berlin", "2026-11-08T11:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("pl-2026-j10-man-ast_521", "Manchester United", "Aston Villa", "2026-11-08T11:30:00Z", "Jornada 10", "Premier League", "PL"),
-    ("sa-2026-j11-int-com_1113", "Inter", "Como", "2026-11-08T12:00:00Z", "Jornada 11", "Serie A", "SA"),
-    ("ppl-2026-j11-vit-por_1663", "Vitória de Guimarães", "Porto", "2026-11-08T13:00:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("bl1-2026-j9-hof-sch_837", "Hoffenheim", "Schalke", "2026-11-08T13:30:00Z", "Jornada 9", "Bundesliga", "BL1"),
-    ("fl1-2026-j10-len-mar_1420", "Lens", "Marsella", "2026-11-08T14:45:00Z", "Jornada 10", "Ligue 1", "FL1"),
-    ("sa-2026-j11-fio-juv_1114", "Fiorentina", "Juventus", "2026-11-08T14:45:00Z", "Jornada 11", "Serie A", "SA"),
-    ("ppl-2026-j11-est-ben_1664", "Estrela", "Benfica", "2026-11-08T15:30:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("ppl-2026-j11-rio-spo_1665", "Rio Ave", "Sporting Braga", "2026-11-08T15:30:00Z", "Jornada 11", "Primeira Liga", "PPL"),
-    ("unl-2026-j5-arm-chi_2", "Armenia", "Chipre", "2026-11-12T12:00:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-tur-bél_1", "Turquía", "Bélgica", "2026-11-12T12:00:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-alb-fin_3", "Albania", "Finlandia", "2026-11-12T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-ing-cro_4", "Inglaterra", "Croacia", "2026-11-12T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-ita-fra_5", "Italia", "Francia", "2026-11-12T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-mon-let_7", "Montenegro", "Letonia", "2026-11-12T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-rep-esp_6", "República Checa", "España", "2026-11-12T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-san-bie_8", "San Marino", "Bielorrusia", "2026-11-12T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-mol-kaz_9", "Moldavia", "Kazajistán", "2026-11-13T12:00:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-and-gib_19", "Andorra", "Gibraltar", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-bul-isl_10", "Bulgaria", "Islandia", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-esc-mac_15", "Escocia", "Macedonia del Norte", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-esl-isl_11", "Eslovaquia", "Islas Feroe", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-esl-sui_16", "Eslovenia", "Suiza", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-lie-aze_20", "Liechtenstein", "Azerbaiyán", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-lux-est_12", "Luxemburgo", "Estonia", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-paí-gre_13", "Países Bajos", "Grecia", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-ser-ale_14", "Serbia", "Alemania", "2026-11-13T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-kos-isr_17", "Kosovo", "Israel", "2026-11-14T09:00:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-geo-hun_18", "Georgia", "Hungría", "2026-11-14T12:00:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-nor-gal_21", "Noruega", "Gales", "2026-11-14T12:00:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-aus-irl_23", "Austria", "Irlanda", "2026-11-14T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-irl-ucr_24", "Irlanda del Norte", "Ucrania", "2026-11-14T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-por-din_22", "Portugal", "Dinamarca", "2026-11-14T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-rum-pol_25", "Rumanía", "Polonia", "2026-11-14T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j5-sue-bos_26", "Suecia", "Bosnia-Herzegovina", "2026-11-14T14:45:00Z", "Jornada 5", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-chi-mon_27", "Chipre", "Montenegro", "2026-11-15T09:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-let-arm_28", "Letonia", "Armenia", "2026-11-15T09:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-bie-alb_29", "Bielorrusia", "Albania", "2026-11-15T12:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-fin-san_30", "Finlandia", "San Marino", "2026-11-15T12:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-bél-ita_31", "Bélgica", "Italia", "2026-11-15T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-cro-rep_32", "Croacia", "República Checa", "2026-11-15T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-esp-ing_33", "España", "Inglaterra", "2026-11-15T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-fra-tur_34", "Francia", "Turquía", "2026-11-15T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-isl-mol_35", "Islas Feroe", "Moldavia", "2026-11-16T10:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-kaz-esl_36", "Kazajistán", "Eslovaquia", "2026-11-16T10:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-est-bul_37", "Estonia", "Bulgaria", "2026-11-16T12:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-isl-lux_38", "Islandia", "Luxemburgo", "2026-11-16T12:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-lit-lie_39", "Lituania", "Liechtenstein", "2026-11-16T12:00:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-ale-paí_41", "Alemania", "Países Bajos", "2026-11-16T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-gib-mal_40", "Gibraltar", "Malta", "2026-11-16T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-gre-ser_42", "Grecia", "Serbia", "2026-11-16T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-mac-esl_43", "Macedonia del Norte", "Eslovenia", "2026-11-16T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-sui-esc_44", "Suiza", "Escocia", "2026-11-16T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-bos-rum_47", "Bosnia-Herzegovina", "Rumanía", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-din-nor_45", "Dinamarca", "Noruega", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-gal-por_46", "Gales", "Portugal", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-hun-irl_48", "Hungría", "Irlanda del Norte", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-irl-kos_49", "Irlanda", "Kosovo", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-isr-aus_50", "Israel", "Austria", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-pol-sue_51", "Polonia", "Suecia", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("unl-2026-j6-ucr-geo_52", "Ucrania", "Georgia", "2026-11-17T14:45:00Z", "Jornada 6", "UEFA Nations League", "UNL"),
-    ("bsa-2026-j35-cor-bot_1917", "Corinthians", "Botafogo", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-cor-san_1918", "Coritiba", "Santos", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-cru-pal_1919", "Cruzeiro", "Palmeiras", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-fla-atl_1920", "Flamengo", "Atlético Paranaense", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-gre-bah_1921", "Gremio", "Bahia", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-mir-atl_1922", "Mirassol", "Atlético Mineiro", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-rem-cha_1923", "Remo", "Chapecoense", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-são-flu_1924", "São Paulo", "Fluminense", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-vas-int_1925", "Vasco", "Internacional", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j35-vit-red_1926", "Vitória BA", "Red Bull Bragantino", "2026-11-18T16:00:00Z", "Jornada 35", "Campeonato Brasileiro Série A", "BSA"),
-    ("bl1-2026-j10-bay-col_838", "Bayern Múnich", "Colonia", "2026-11-20T14:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("fl1-2026-j11-tro-le _1421", "Troyes", "Le Havre", "2026-11-20T14:45:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("pl-2026-j11-man-ful_522", "Manchester City", "Fulham", "2026-11-21T07:30:00Z", "Jornada 11", "Premier League", "PL"),
-    ("sa-2026-j12-com-cag_1115", "Como", "Cagliari", "2026-11-21T09:00:00Z", "Jornada 12", "Serie A", "SA"),
-    ("sa-2026-j12-laz-lec_1116", "Lazio", "Lecce", "2026-11-21T09:00:00Z", "Jornada 12", "Serie A", "SA"),
-    ("bl1-2026-j10-bay-pad_839", "Bayer Leverkusen", "Paderborn", "2026-11-21T09:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("bl1-2026-j10-bor-bor_840", "Borussia M'gladbach", "Borussia Dortmund", "2026-11-21T09:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("bl1-2026-j10-ein-hof_841", "Eintracht Frankfurt", "Hoffenheim", "2026-11-21T09:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("bl1-2026-j10-elv-fri_842", "Elversberg", "Friburgo", "2026-11-21T09:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("bl1-2026-j10-uni-rb _843", "Union Berlin", "RB Leipzig", "2026-11-21T09:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("pl-2026-j11-ast-sun_523", "Aston Villa", "Sunderland", "2026-11-21T10:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("pl-2026-j11-bou-not_524", "Bournemouth", "Nottingham Forest", "2026-11-21T10:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("pl-2026-j11-che-lee_525", "Chelsea", "Leeds United", "2026-11-21T10:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("pl-2026-j11-cov-cry_526", "Coventry", "Crystal Palace", "2026-11-21T10:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("pl-2026-j11-tot-ips_527", "Tottenham", "Ipswich", "2026-11-21T10:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("fl1-2026-j11-niz-psg_1422", "Niza", "PSG", "2026-11-21T11:15:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("sa-2026-j12-par-rom_1117", "Parma", "Roma", "2026-11-21T12:00:00Z", "Jornada 12", "Serie A", "SA"),
-    ("bl1-2026-j10-sch-stu_844", "Schalke", "Stuttgart", "2026-11-21T12:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("pl-2026-j11-new-ars_528", "Newcastle", "Arsenal", "2026-11-21T12:30:00Z", "Jornada 11", "Premier League", "PL"),
-    ("fl1-2026-j11-est-bre_1423", "Estrasburgo", "Brest", "2026-11-21T14:45:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("fl1-2026-j11-len-tou_1424", "Lens", "Toulouse", "2026-11-21T14:45:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("fl1-2026-j11-lil-lyo_1425", "Lille", "Lyon", "2026-11-21T14:45:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("fl1-2026-j11-món-aux_1426", "Mónaco", "Auxerre", "2026-11-21T14:45:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("sa-2026-j12-náp-tor_1118", "Nápoles", "Torino", "2026-11-21T14:45:00Z", "Jornada 12", "Serie A", "SA"),
-    ("sa-2026-j12-juv-ven_1119", "Juventus", "Venezia", "2026-11-22T06:30:00Z", "Jornada 12", "Serie A", "SA"),
-    ("fl1-2026-j11-par-ang_1427", "París FC", "Angers", "2026-11-22T09:00:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("pl-2026-j11-hul-bri_529", "Hull", "Brighton", "2026-11-22T09:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("sa-2026-j12-bol-udi_1120", "Bolonia", "Udinese", "2026-11-22T09:00:00Z", "Jornada 12", "Serie A", "SA"),
-    ("sa-2026-j12-sas-gen_1121", "Sassuolo", "Genoa", "2026-11-22T09:00:00Z", "Jornada 12", "Serie A", "SA"),
-    ("bl1-2026-j10-aug-mai_845", "Augsburgo", "Mainz", "2026-11-22T09:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("pd-2026-j13-ala-dep_221", "Alavés", "Deportivo de La Coruña", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-ath-esp_222", "Athletic Club", "Espanyol", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-bar-vil_223", "Barcelona", "Villarreal", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-get-atl_224", "Getafe", "Atlético de Madrid", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-lev-elc_225", "Levante", "Elche", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-osa-mál_226", "Osasuna", "Málaga CF", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-rac-rea_227", "Racing de Santander", "Real Sociedad", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-ray-val_228", "Rayo Vallecano", "Valencia", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-rea-cel_229", "Real Madrid", "Celta de Vigo", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j13-sev-rea_230", "Sevilla", "Real Betis", "2026-11-22T11:00:00Z", "Jornada 13", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j11-lor-ren_1428", "Lorient", "Rennes", "2026-11-22T11:15:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("bl1-2026-j10-wer-ham_846", "Werder Bremen", "Hamburgo", "2026-11-22T11:30:00Z", "Jornada 10", "Bundesliga", "BL1"),
-    ("pl-2026-j11-liv-man_530", "Liverpool", "Manchester United", "2026-11-22T11:30:00Z", "Jornada 11", "Premier League", "PL"),
-    ("sa-2026-j12-ac -fro_1122", "AC Milan", "Frosinone", "2026-11-22T12:00:00Z", "Jornada 12", "Serie A", "SA"),
-    ("fl1-2026-j11-mar-le _1429", "Marsella", "Le Mans", "2026-11-22T14:45:00Z", "Jornada 11", "Ligue 1", "FL1"),
-    ("sa-2026-j12-ata-int_1123", "Atalanta", "Inter", "2026-11-22T14:45:00Z", "Jornada 12", "Serie A", "SA"),
-    ("bsa-2026-j36-atl-cor_1928", "Atlético Mineiro", "Corinthians", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-atl-rem_1927", "Atlético Paranaense", "Remo", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-bah-cor_1929", "Bahia", "Coritiba", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-bot-são_1930", "Botafogo", "São Paulo", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-cha-cru_1932", "Chapecoense", "Cruzeiro", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-flu-mir_1933", "Fluminense", "Mirassol", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-int-vit_1934", "Internacional", "Vitória BA", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-pal-fla_1935", "Palmeiras", "Flamengo", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-red-vas_1931", "Red Bull Bragantino", "Vasco", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j36-san-gre_1936", "Santos", "Gremio", "2026-11-22T16:00:00Z", "Jornada 36", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j12-mon-fio_1124", "Monza", "Fiorentina", "2026-11-23T14:45:00Z", "Jornada 12", "Serie A", "SA"),
-    ("pl-2026-j11-bre-eve_531", "Brentford", "Everton", "2026-11-23T15:00:00Z", "Jornada 11", "Premier League", "PL"),
-    ("ucl-2026-j5-bod-las_107", "Bodo/Glimt", "LASK", "2026-11-24T12:45:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-gal-ast_108", "Galatasaray", "Aston Villa", "2026-11-24T12:45:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-ars-bor_109", "Arsenal", "Borussia Dortmund", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-com-aek_110", "Como", "AEK", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-fey-por_111", "Feyenoord", "Porto", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-man-náp_112", "Manchester City", "Nápoles", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-rb -len_113", "RB Leipzig", "Lens", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-rea-psv_114", "Real Madrid", "PSV", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-slo-rea_115", "Slovan Bratislava", "Real Betis", "2026-11-24T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-sab-bar_116", "Sabah Baku", "Barcelona", "2026-11-25T12:45:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-sla-vil_117", "Slavia Praga", "Villarreal", "2026-11-25T12:45:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-atl-vik_118", "Atlético de Madrid", "Viking", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-clu-liv_119", "Club Brujas", "Liverpool", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-int-stu_120", "Inter", "Stuttgart", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-lil-bay_121", "Lille", "Bayern Múnich", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-psg-rom_122", "PSG", "Roma", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-sha-fen_123", "Shakhtar", "Fenerbahçe", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("ucl-2026-j5-spo-man_124", "Sporting CP", "Manchester United", "2026-11-25T15:00:00Z", "Jornada 5", "UEFA Champions League", "UCL"),
-    ("bl1-2026-j11-wer-bor_847", "Werder Bremen", "Borussia M'gladbach", "2026-11-27T14:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("fl1-2026-j12-bre-par_1430", "Brest", "París FC", "2026-11-27T14:45:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("sa-2026-j13-ven-bol_1125", "Venezia", "Bolonia", "2026-11-27T14:45:00Z", "Jornada 13", "Serie A", "SA"),
-    ("pl-2026-j12-not-che_532", "Nottingham Forest", "Chelsea", "2026-11-27T15:00:00Z", "Jornada 12", "Premier League", "PL"),
-    ("ppl-2026-j12-mar-nac_1666", "Marítimo", "Nacional", "2026-11-27T15:15:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("sa-2026-j13-fro-par_1126", "Frosinone", "Parma", "2026-11-28T09:00:00Z", "Jornada 13", "Serie A", "SA"),
-    ("bl1-2026-j11-col-elv_848", "Colonia", "Elversberg", "2026-11-28T09:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("bl1-2026-j11-ham-bay_849", "Hamburgo", "Bayern Múnich", "2026-11-28T09:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("bl1-2026-j11-mai-uni_850", "Mainz", "Union Berlin", "2026-11-28T09:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("bl1-2026-j11-pad-sch_851", "Paderborn", "Schalke", "2026-11-28T09:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("pl-2026-j12-lee-cov_533", "Leeds United", "Coventry", "2026-11-28T10:00:00Z", "Jornada 12", "Premier League", "PL"),
-    ("pl-2026-j12-man-bre_534", "Manchester United", "Brentford", "2026-11-28T10:00:00Z", "Jornada 12", "Premier League", "PL"),
-    ("ppl-2026-j12-aro-rio_1667", "Arouca", "Rio Ave", "2026-11-28T10:30:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("ppl-2026-j12-mor-san_1668", "Moreirense", "Santa Clara", "2026-11-28T10:30:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("fl1-2026-j12-ang-len_1431", "Angers", "Lens", "2026-11-28T11:15:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("sa-2026-j13-tor-laz_1127", "Torino", "Lazio", "2026-11-28T12:00:00Z", "Jornada 13", "Serie A", "SA"),
-    ("bl1-2026-j11-stu-ein_852", "Stuttgart", "Eintracht Frankfurt", "2026-11-28T12:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("pl-2026-j12-ips-ast_535", "Ipswich", "Aston Villa", "2026-11-28T12:30:00Z", "Jornada 12", "Premier League", "PL"),
-    ("ppl-2026-j12-aca-alv_1669", "Academico Viseu", "Alverca", "2026-11-28T13:00:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("fl1-2026-j12-le -est_1432", "Le Havre", "Estrasburgo", "2026-11-28T14:45:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("fl1-2026-j12-le -lil_1433", "Le Mans", "Lille", "2026-11-28T14:45:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("fl1-2026-j12-niz-tro_1434", "Niza", "Troyes", "2026-11-28T14:45:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("fl1-2026-j12-psg-lor_1435", "PSG", "Lorient", "2026-11-28T14:45:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("sa-2026-j13-int-gen_1128", "Inter", "Genoa", "2026-11-28T14:45:00Z", "Jornada 13", "Serie A", "SA"),
-    ("ppl-2026-j12-vit-est_1670", "Vitória de Guimarães", "Estrela", "2026-11-28T15:30:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("sa-2026-j13-udi-fio_1129", "Udinese", "Fiorentina", "2026-11-29T06:30:00Z", "Jornada 13", "Serie A", "SA"),
-    ("pl-2026-j12-eve-liv_536", "Everton", "Liverpool", "2026-11-29T07:00:00Z", "Jornada 12", "Premier League", "PL"),
-    ("fl1-2026-j12-aux-mar_1436", "Auxerre", "Marsella", "2026-11-29T09:00:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("sa-2026-j13-sas-náp_1130", "Sassuolo", "Nápoles", "2026-11-29T09:00:00Z", "Jornada 13", "Serie A", "SA"),
-    ("pl-2026-j12-bri-new_537", "Brighton", "Newcastle", "2026-11-29T09:05:00Z", "Jornada 12", "Premier League", "PL"),
-    ("pl-2026-j12-cry-hul_538", "Crystal Palace", "Hull", "2026-11-29T09:05:00Z", "Jornada 12", "Premier League", "PL"),
-    ("pl-2026-j12-ful-bou_539", "Fulham", "Bournemouth", "2026-11-29T09:05:00Z", "Jornada 12", "Premier League", "PL"),
-    ("pl-2026-j12-sun-tot_540", "Sunderland", "Tottenham", "2026-11-29T09:05:00Z", "Jornada 12", "Premier League", "PL"),
-    ("bl1-2026-j11-fri-rb _853", "Friburgo", "RB Leipzig", "2026-11-29T09:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("pd-2026-j14-cel-vil_231", "Celta de Vigo", "Villarreal", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-dep-bar_232", "Deportivo de La Coruña", "Barcelona", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-elc-atl_233", "Elche", "Atlético de Madrid", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-esp-get_234", "Espanyol", "Getafe", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-lev-rac_235", "Levante", "Racing de Santander", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-mál-ath_236", "Málaga CF", "Athletic Club", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-rea-ray_237", "Real Betis", "Rayo Vallecano", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-rea-ala_238", "Real Madrid", "Alavés", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-rea-sev_239", "Real Sociedad", "Sevilla", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-val-osa_240", "Valencia", "Osasuna", "2026-11-29T11:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("fl1-2026-j12-tou-ren_1437", "Toulouse", "Rennes", "2026-11-29T11:15:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("bl1-2026-j11-hof-aug_854", "Hoffenheim", "Augsburgo", "2026-11-29T11:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("pl-2026-j12-ars-man_541", "Arsenal", "Manchester City", "2026-11-29T11:30:00Z", "Jornada 12", "Premier League", "PL"),
-    ("sa-2026-j13-rom-mon_1131", "Roma", "Monza", "2026-11-29T12:00:00Z", "Jornada 13", "Serie A", "SA"),
-    ("ppl-2026-j12-gil-est_1671", "Gil Vicente", "Estoril", "2026-11-29T13:00:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("bl1-2026-j11-bor-bay_855", "Borussia Dortmund", "Bayer Leverkusen", "2026-11-29T13:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("fl1-2026-j12-lyo-món_1438", "Lyon", "Mónaco", "2026-11-29T14:45:00Z", "Jornada 12", "Ligue 1", "FL1"),
-    ("sa-2026-j13-com-juv_1132", "Como", "Juventus", "2026-11-29T14:45:00Z", "Jornada 13", "Serie A", "SA"),
-    ("ppl-2026-j12-por-spo_1672", "Porto", "Sporting CP", "2026-11-29T15:30:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("bsa-2026-j37-atl-vas_1937", "Atlético Mineiro", "Vasco", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-bot-bah_1938", "Botafogo", "Bahia", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-cha-pal_1939", "Chapecoense", "Palmeiras", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-cor-gre_1940", "Corinthians", "Gremio", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-cor-fla_1941", "Coritiba", "Flamengo", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-flu-cru_1942", "Fluminense", "Cruzeiro", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-int-red_1943", "Internacional", "Red Bull Bragantino", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-mir-atl_1944", "Mirassol", "Atlético Paranaense", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-são-rem_1945", "São Paulo", "Remo", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-vit-san_1946", "Vitória BA", "Santos", "2026-11-29T16:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("sa-2026-j13-lec-ata_1133", "Lecce", "Atalanta", "2026-11-30T12:30:00Z", "Jornada 13", "Serie A", "SA"),
-    ("sa-2026-j13-cag-ac _1134", "Cagliari", "AC Milan", "2026-11-30T14:45:00Z", "Jornada 13", "Serie A", "SA"),
-    ("ppl-2026-j12-ben-fam_1673", "Benfica", "Famalicão", "2026-11-30T15:15:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-    ("ppl-2026-j12-cas-spo_1674", "Casa Pia", "Sporting Braga", "2026-11-30T15:15:00Z", "Jornada 12", "Primeira Liga", "PPL"),
-]
-
-CALENDAR_MASTER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calendario_completo_temporada_2026_2027.json")
-
-def get_active_calendar_window():
-    global _CURRENT_ACTIVE_WINDOW
-    env_start = (os.getenv("CALENDAR_WINDOW_START") or "").strip()
-    env_end = (os.getenv("CALENDAR_WINDOW_END") or "").strip()
-    if env_start and env_end:
-        _CURRENT_ACTIVE_WINDOW["start_date"] = env_start
-        _CURRENT_ACTIVE_WINDOW["end_date"] = env_end
-        _CURRENT_ACTIVE_WINDOW["fase_nombre"] = f"Personalizada ({env_start} a {env_end})"
-        return env_start, env_end
-
-    op_date = get_current_operational_date()
-    if op_date <= "2026-11-30":
-        _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2026-10-12",
-            "end_date": "2026-11-30",
-            "fase_nombre": "Fase 1: 12 Octubre a 30 Noviembre 2026 (538 partidos)"
-        }
-    elif op_date <= "2027-01-31":
-        _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2026-12-01",
-            "end_date": "2027-01-31",
-            "fase_nombre": "Fase 2: 01 Diciembre 2026 a 31 Enero 2027 (542 partidos)"
-        }
-    elif op_date <= "2027-03-31":
-        _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2027-02-01",
-            "end_date": "2027-03-31",
-            "fase_nombre": "Fase 3: 01 Febrero a 31 Marzo 2027 (408 partidos)"
-        }
-    else:
-        _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2027-04-01",
-            "end_date": "2027-05-31",
-            "fase_nombre": "Fase 4: 01 Abril a 31 Mayo 2027 (467 partidos)"
-        }
-
-    return _CURRENT_ACTIVE_WINDOW["start_date"], _CURRENT_ACTIVE_WINDOW["end_date"]
-
 def build_multimonth_calendar():
-    """Carga los partidos oficiales del periodo activo (12 de Octubre al 30 de Noviembre de 2026).
-    1. Si calendario_completo_temporada_2026_2027.json está en el repositorio de GitHub, carga directamente de él.
-    2. Si por alguna razón el archivo no estuviera presente, usa OFFICIAL_ACTIVE_MATCHES_RAW como respaldo."""
-    start_date, end_date = get_active_calendar_window()
+    """Genera el calendario activo oficial 100% real (07 de Octubre al 30 de Noviembre de 2026)
+    incorporando exactamente cada fecha y encuentro oficial provisto para las 9 ligas canónicas."""
     calendar = []
+    count = 0
 
-    if os.path.exists(CALENDAR_MASTER_PATH):
-        try:
-            with open(CALENDAR_MASTER_PATH, "r", encoding="utf-8") as f:
-                master = json.load(f)
-            calendar = [
-                f for f in master
-                if start_date <= (f.get("fecha_utc") or f.get("fecha") or "")[:10] <= end_date
-            ]
-            logger.info("Cargados %d partidos oficiales desde el archivo maestro %s para la ventana %s a %s.",
-                        len(calendar), CALENDAR_MASTER_PATH, start_date, end_date)
-        except Exception as e:
-            logger.warning("Error leyendo calendario de disco: %s. Usando respaldo en memoria.", e)
+    def add(mid, loc, vis, dt, jor, liga, cod):
+        nonlocal count
+        count += 1
+        calendar.append({
+            "id_partido": mid or f"{cod.lower()}_{count:04d}",
+            "local": loc.strip(),
+            "visitante": vis.strip(),
+            "fecha_utc": dt,
+            "jornada": str(jor),
+            "liga": liga.strip(),
+            "codigo_liga": cod.strip(),
+            "estado": "SCHEDULED",
+            "temporada": "2026/2027"
+        })
 
-    if not calendar:
-        for mid, loc, vis, dt, jor, liga, cod in OFFICIAL_ACTIVE_MATCHES_RAW:
-            calendar.append({
-                "id_partido": mid,
-                "local": loc,
-                "visitante": vis,
-                "fecha_utc": dt,
-                "fecha": dt[:10],
-                "jornada": jor,
-                "liga": normalizar_nombre_liga(liga),
-                "codigo_liga": cod,
-                "estado": "SCHEDULED",
-                "temporada": "2026/2027"
-            })
-        logger.info("Cargados %d partidos oficiales desde respaldo integrado en memoria.", len(calendar))
+    # =========================================================================
+    # 1. CAMPEONATO BRASILEIRO SÉRIE A (BETANO)
+    # =========================================================================
+    L_BSA = "Campeonato Brasileiro Série A"
+    C_BSA = "BSA"
 
-    for fix in calendar:
-        fix["liga"] = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
+    # Partidos de Ayer 07/10 (para auditoría e histórico)
+    bsa_j29_dia1 = [
+        ("Red Bull Bragantino", "Mirassol", "2026-10-07T19:00:00Z", 29),
+        ("Internacional", "Corinthians", "2026-10-07T19:00:00Z", 29),
+        ("Clube do Remo", "Grêmio", "2026-10-07T20:00:00Z", 29),
+        ("Vitória", "Chapecoense", "2026-10-07T20:30:00Z", 29),
+        ("Botafogo", "Vasco da Gama", "2026-10-07T21:30:00Z", 29),
+        ("Cruzeiro", "São Paulo", "2026-10-07T21:30:00Z", 29),
+    ]
+    for loc, vis, dt, jor in bsa_j29_dia1:
+        add(f"bsa-2026-j29-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 29 (08/10 - HOY)
+    bsa_j29 = [
+        ("Santos", "Flamengo", "2026-10-08T19:00:00Z", 29),
+        ("Atlético PR", "Atlético Mineiro", "2026-10-08T20:00:00Z", 29),
+        ("Fluminense", "Coritiba", "2026-10-08T20:30:00Z", 29),
+        ("Palmeiras", "Bahia", "2026-10-08T21:30:00Z", 29),
+    ]
+    for loc, vis, dt, jor in bsa_j29:
+        add(f"bsa-2026-j29-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 30 (10/10 hasta 12/10)
+    bsa_j30 = [
+        ("Vasco da Gama", "Clube do Remo", "2026-10-10T19:00:00Z", 30),
+        ("São Paulo", "Vitória", "2026-10-10T20:00:00Z", 30),
+        ("Atlético Mineiro", "Santos", "2026-10-10T21:30:00Z", 30),
+        ("Flamengo", "Fluminense", "2026-10-11T19:00:00Z", 30),
+        ("Palmeiras", "Corinthians", "2026-10-11T20:00:00Z", 30),
+        ("Grêmio", "Internacional", "2026-10-11T21:30:00Z", 30),
+        ("Bahia", "Mirassol", "2026-10-11T22:00:00Z", 30),
+        ("Coritiba", "Botafogo", "2026-10-12T19:00:00Z", 30),
+        ("Chapecoense", "Atlético PR", "2026-10-12T20:00:00Z", 30),
+        ("Red Bull Bragantino", "Cruzeiro", "2026-10-12T21:30:00Z", 30),
+    ]
+    for loc, vis, dt, jor in bsa_j30:
+        add(f"bsa-2026-j30-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 31 (16/10 hasta 19/10)
+    bsa_j31 = [
+        ("Mirassol", "Internacional", "2026-10-16T19:00:00Z", 31),
+        ("Botafogo", "Chapecoense", "2026-10-16T21:30:00Z", 31),
+        ("Atlético Mineiro", "Coritiba", "2026-10-17T19:00:00Z", 31),
+        ("Atlético PR", "Palmeiras", "2026-10-17T20:00:00Z", 31),
+        ("São Paulo", "Vasco da Gama", "2026-10-17T21:30:00Z", 31),
+        ("Fluminense", "Santos", "2026-10-18T19:00:00Z", 31),
+        ("Grêmio", "Cruzeiro", "2026-10-18T20:00:00Z", 31),
+        ("Bahia", "Flamengo", "2026-10-18T21:30:00Z", 31),
+        ("Clube do Remo", "Red Bull Bragantino", "2026-10-19T19:00:00Z", 31),
+        ("Corinthians", "Vitória", "2026-10-19T21:30:00Z", 31),
+    ]
+    for loc, vis, dt, jor in bsa_j31:
+        add(f"bsa-2026-j31-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 32 (23/10 hasta 26/10)
+    bsa_j32 = [
+        ("Cruzeiro", "Clube do Remo", "2026-10-23T19:00:00Z", 32),
+        ("Mirassol", "São Paulo", "2026-10-23T21:30:00Z", 32),
+        ("Internacional", "Botafogo", "2026-10-24T19:00:00Z", 32),
+        ("Vitória", "Atlético PR", "2026-10-24T20:00:00Z", 32),
+        ("Vasco da Gama", "Corinthians", "2026-10-24T21:30:00Z", 32),
+        ("Palmeiras", "Red Bull Bragantino", "2026-10-25T19:00:00Z", 32),
+        ("Chapecoense", "Fluminense", "2026-10-25T20:00:00Z", 32),
+        ("Santos", "Bahia", "2026-10-25T21:30:00Z", 32),
+        ("Coritiba", "Grêmio", "2026-10-26T19:00:00Z", 32),
+        ("Flamengo", "Atlético Mineiro", "2026-10-26T21:30:00Z", 32),
+    ]
+    for loc, vis, dt, jor in bsa_j32:
+        add(f"bsa-2026-j32-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 33 (28/10 hasta 30/10)
+    bsa_j33 = [
+        ("Fluminense", "Internacional", "2026-10-28T19:00:00Z", 33),
+        ("Santos", "Palmeiras", "2026-10-28T20:00:00Z", 33),
+        ("Red Bull Bragantino", "Chapecoense", "2026-10-28T21:30:00Z", 33),
+        ("Bahia", "São Paulo", "2026-10-29T19:00:00Z", 33),
+        ("Clube do Remo", "Botafogo", "2026-10-29T20:00:00Z", 33),
+        ("Atlético Mineiro", "Cruzeiro", "2026-10-29T21:30:00Z", 33),
+        ("Coritiba", "Vitória", "2026-10-30T19:00:00Z", 33),
+        ("Vasco da Gama", "Flamengo", "2026-10-30T20:00:00Z", 33),
+        ("Grêmio", "Atlético PR", "2026-10-30T21:30:00Z", 33),
+        ("Corinthians", "Mirassol", "2026-10-30T22:00:00Z", 33),
+    ]
+    for loc, vis, dt, jor in bsa_j33:
+        add(f"bsa-2026-j33-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 34 (02/11 hasta 06/11)
+    bsa_j34 = [
+        ("Red Bull Bragantino", "Santos", "2026-11-02T19:00:00Z", 34),
+        ("Chapecoense", "Mirassol", "2026-11-02T21:30:00Z", 34),
+        ("Internacional", "Coritiba", "2026-11-03T19:00:00Z", 34),
+        ("Flamengo", "Grêmio", "2026-11-03T21:30:00Z", 34),
+        ("Atlético PR", "Vasco da Gama", "2026-11-04T19:00:00Z", 34),
+        ("Botafogo", "Atlético Mineiro", "2026-11-04T21:30:00Z", 34),
+        ("São Paulo", "Corinthians", "2026-11-05T19:00:00Z", 34),
+        ("Palmeiras", "Clube do Remo", "2026-11-05T21:30:00Z", 34),
+        ("Cruzeiro", "Bahia", "2026-11-06T19:00:00Z", 34),
+        ("Vitória", "Fluminense", "2026-11-06T21:30:00Z", 34),
+    ]
+    for loc, vis, dt, jor in bsa_j34:
+        add(f"bsa-2026-j34-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 35 (18/11)
+    bsa_j35 = [
+        ("Flamengo", "Atlético PR", "2026-11-18T18:00:00Z", 35),
+        ("Vasco da Gama", "Internacional", "2026-11-18T18:00:00Z", 35),
+        ("São Paulo", "Fluminense", "2026-11-18T19:00:00Z", 35),
+        ("Corinthians", "Botafogo", "2026-11-18T19:00:00Z", 35),
+        ("Mirassol", "Atlético Mineiro", "2026-11-18T20:00:00Z", 35),
+        ("Cruzeiro", "Palmeiras", "2026-11-18T20:00:00Z", 35),
+        ("Grêmio", "Bahia", "2026-11-18T21:00:00Z", 35),
+        ("Coritiba", "Santos", "2026-11-18T21:00:00Z", 35),
+        ("Vitória", "Red Bull Bragantino", "2026-11-18T21:30:00Z", 35),
+        ("Clube do Remo", "Chapecoense", "2026-11-18T21:30:00Z", 35),
+    ]
+    for loc, vis, dt, jor in bsa_j35:
+        add(f"bsa-2026-j35-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 36 (22/11)
+    bsa_j36 = [
+        ("Fluminense", "Mirassol", "2026-11-22T18:00:00Z", 36),
+        ("Botafogo", "São Paulo", "2026-11-22T18:00:00Z", 36),
+        ("Santos", "Grêmio", "2026-11-22T19:00:00Z", 36),
+        ("Palmeiras", "Flamengo", "2026-11-22T19:00:00Z", 36),
+        ("Red Bull Bragantino", "Vasco da Gama", "2026-11-22T20:00:00Z", 36),
+        ("Atlético Mineiro", "Corinthians", "2026-11-22T20:00:00Z", 36),
+        ("Internacional", "Vitória", "2026-11-22T21:00:00Z", 36),
+        ("Atlético PR", "Clube do Remo", "2026-11-22T21:00:00Z", 36),
+        ("Bahia", "Coritiba", "2026-11-22T21:30:00Z", 36),
+        ("Chapecoense", "Cruzeiro", "2026-11-22T21:30:00Z", 36),
+    ]
+    for loc, vis, dt, jor in bsa_j36:
+        add(f"bsa-2026-j36-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    # JORNADA 37 (29/11)
+    bsa_j37 = [
+        ("Fluminense", "Cruzeiro", "2026-11-29T18:00:00Z", 37),
+        ("Botafogo", "Bahia", "2026-11-29T18:00:00Z", 37),
+        ("São Paulo", "Clube do Remo", "2026-11-29T18:00:00Z", 37),
+        ("Corinthians", "Grêmio", "2026-11-29T19:00:00Z", 37),
+        ("Mirassol", "Atlético PR", "2026-11-29T19:00:00Z", 37),
+        ("Atlético Mineiro", "Vasco da Gama", "2026-11-29T20:00:00Z", 37),
+        ("Internacional", "Red Bull Bragantino", "2026-11-29T20:00:00Z", 37),
+        ("Coritiba", "Flamengo", "2026-11-29T21:00:00Z", 37),
+        ("Vitória", "Santos", "2026-11-29T21:00:00Z", 37),
+        ("Chapecoense", "Palmeiras", "2026-11-29T21:30:00Z", 37),
+    ]
+    for loc, vis, dt, jor in bsa_j37:
+        add(f"bsa-2026-j37-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BSA, C_BSA)
+
+    print("1. Brasileirao Série A compilado.")
+
+    # =========================================================================
+    # 2. BUNDESLIGA (ALEMANIA)
+    # =========================================================================
+    L_BL1 = "Bundesliga"
+    C_BL1 = "BL1"
+
+    bl1_schedule = [
+        # JORNADA 5 (09 al 11/10)
+        ("Borussia Dortmund", "Werder Bremen", "2026-10-09T18:30:00Z", 5),
+        ("Hoffenheim", "Hamburgo", "2026-10-10T13:30:00Z", 5),
+        ("Augsburgo", "Bayern Múnich", "2026-10-10T13:30:00Z", 5),
+        ("Mainz", "Bayer Leverkusen", "2026-10-10T13:30:00Z", 5),
+        ("Unión Berlín", "Elversberg", "2026-10-10T13:30:00Z", 5),
+        ("Paderborn", "Stuttgart", "2026-10-10T13:30:00Z", 5),
+        ("Leipzig", "Eintracht Frankfurt", "2026-10-10T16:30:00Z", 5),
+        ("Colonia", "Borussia Mönchengladbach", "2026-10-11T13:30:00Z", 5),
+        ("Friburgo", "Schalke", "2026-10-11T15:30:00Z", 5),
+
+        # JORNADA 6 (16 al 18/10)
+        ("Eintracht Frankfurt", "Colonia", "2026-10-16T18:30:00Z", 6),
+        ("Unión Berlín", "Borussia Dortmund", "2026-10-17T13:30:00Z", 6),
+        ("Hamburgo", "Stuttgart", "2026-10-17T13:30:00Z", 6),
+        ("Werder Bremen", "Paderborn", "2026-10-17T13:30:00Z", 6),
+        ("Schalke", "Mainz", "2026-10-17T13:30:00Z", 6),
+        ("Elversberg", "Augsburgo", "2026-10-17T13:30:00Z", 6),
+        ("Bayern Múnich", "Leipzig", "2026-10-17T16:30:00Z", 6),
+        ("Bayer Leverkusen", "Friburgo", "2026-10-18T13:30:00Z", 6),
+        ("Borussia Mönchengladbach", "Hoffenheim", "2026-10-18T15:30:00Z", 6),
+
+        # JORNADA 7 (23 al 25/10)
+        ("Stuttgart", "Borussia Mönchengladbach", "2026-10-23T18:30:00Z", 7),
+        ("Leipzig", "Elversberg", "2026-10-24T13:30:00Z", 7),
+        ("Augsburgo", "Unión Berlín", "2026-10-24T13:30:00Z", 7),
+        ("Mainz", "Werder Bremen", "2026-10-24T13:30:00Z", 7),
+        ("Colonia", "Schalke", "2026-10-24T13:30:00Z", 7),
+        ("Paderborn", "Hamburgo", "2026-10-24T13:30:00Z", 7),
+        ("Borussia Dortmund", "Eintracht Frankfurt", "2026-10-24T16:30:00Z", 7),
+        ("Hoffenheim", "Bayer Leverkusen", "2026-10-25T13:30:00Z", 7),
+        ("Friburgo", "Bayern Múnich", "2026-10-25T15:30:00Z", 7),
+
+        # JORNADA 8 (30/10 al 01/11)
+        ("Elversberg", "Mainz", "2026-10-30T19:30:00Z", 8),
+        ("Bayer Leverkusen", "Stuttgart", "2026-10-31T14:30:00Z", 8),
+        ("Augsburgo", "Friburgo", "2026-10-31T14:30:00Z", 8),
+        ("Borussia Mönchengladbach", "Paderborn", "2026-10-31T14:30:00Z", 8),
+        ("Werder Bremen", "Hoffenheim", "2026-10-31T14:30:00Z", 8),
+        ("Schalke", "Leipzig", "2026-10-31T14:30:00Z", 8),
+        ("Bayern Múnich", "Borussia Dortmund", "2026-10-31T17:30:00Z", 8),
+        ("Unión Berlín", "Colonia", "2026-11-01T14:30:00Z", 8),
+        ("Eintracht Frankfurt", "Hamburgo", "2026-11-01T16:30:00Z", 8),
+
+        # JORNADA 9 (06 al 08/11)
+        ("Hamburgo", "Borussia Mönchengladbach", "2026-11-06T19:30:00Z", 9),
+        ("Borussia Dortmund", "Elversberg", "2026-11-07T14:30:00Z", 9),
+        ("Leipzig", "Hamburgo", "2026-11-07T14:30:00Z", 9),
+        ("Mainz", "Bayern Múnich", "2026-11-07T14:30:00Z", 9),
+        ("Paderborn", "Eintracht Frankfurt", "2026-11-07T14:30:00Z", 9),
+        ("Stuttgart", "Werder Bremen", "2026-11-07T14:30:00Z", 9),
+        ("Colonia", "Bayer Leverkusen", "2026-11-07T17:30:00Z", 9),
+        ("Friburgo", "Unión Berlín", "2026-11-08T14:30:00Z", 9),
+        ("Hoffenheim", "Schalke", "2026-11-08T16:30:00Z", 9),
+
+        # JORNADA 10 (20 al 22/11)
+        ("Bayer Leverkusen", "Colonia", "2026-11-20T19:30:00Z", 10),
+        ("Bayer Leverkusen", "Paderborn", "2026-11-21T14:30:00Z", 10),
+        ("Eintracht Frankfurt", "Hoffenheim", "2026-11-21T14:30:00Z", 10),
+        ("Unión Berlín", "Leipzig", "2026-11-21T14:30:00Z", 10),
+        ("Borussia Mönchengladbach", "Borussia Dortmund", "2026-11-21T14:30:00Z", 10),
+        ("Elversberg", "Friburgo", "2026-11-21T14:30:00Z", 10),
+        ("Schalke", "Stuttgart", "2026-11-21T17:30:00Z", 10),
+        ("Augsburgo", "Mainz", "2026-11-22T14:30:00Z", 10),
+        ("Werder Bremen", "Hamburgo", "2026-11-22T16:30:00Z", 10),
+
+        # JORNADA 11 (27 al 29/11)
+        ("Werder Bremen", "Borussia Mönchengladbach", "2026-11-27T19:30:00Z", 11),
+        ("Mainz", "Unión Berlín", "2026-11-28T14:30:00Z", 11),
+        ("Hamburgo", "Bayern Múnich", "2026-11-28T14:30:00Z", 11),
+        ("Colonia", "Elversberg", "2026-11-28T14:30:00Z", 11),
+        ("Paderborn", "Schalke", "2026-11-28T14:30:00Z", 11),
+        ("Stuttgart", "Eintracht Frankfurt", "2026-11-28T14:30:00Z", 11),
+        ("Friburgo", "Leipzig", "2026-11-28T17:30:00Z", 11),
+        ("Hoffenheim", "Augsburgo", "2026-11-29T14:30:00Z", 11),
+        ("Borussia Dortmund", "Bayer Leverkusen", "2026-11-29T16:30:00Z", 11),
+    ]
+    for loc, vis, dt, jor in bl1_schedule:
+        add(f"bl1-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_BL1, C_BL1)
+
+    print("2. Bundesliga compilada.")
+
+    # =========================================================================
+    # 3. LIGUE 1 (FRANCIA)
+    # =========================================================================
+    L_FL1 = "Ligue 1"
+    C_FL1 = "FL1"
+
+    fl1_schedule = [
+        # JORNADA 6 (09 al 11/10)
+        ("Lens", "Lyon", "2026-10-09T19:00:00Z", 6),
+        ("Lille", "Le Havre", "2026-10-10T15:00:00Z", 6),
+        ("Brest", "Angers", "2026-10-10T17:00:00Z", 6),
+        ("Lorient", "Paris FC", "2026-10-10T19:00:00Z", 6),
+        ("Monaco", "Toulouse", "2026-10-11T13:00:00Z", 6),
+        ("PSG", "Le Mans", "2026-10-11T15:00:00Z", 6),
+        ("Niza", "Estrasburgo", "2026-10-11T15:00:00Z", 6),
+        ("Stade Rennais", "Auxerre", "2026-10-11T17:05:00Z", 6),
+        ("Troyes", "Marsella", "2026-10-11T18:45:00Z", 6),
+
+        # JORNADA 7 (16 al 18/10)
+        ("Le Mans", "Toulouse", "2026-10-16T19:00:00Z", 7),
+        ("Estrasburgo", "PSG", "2026-10-17T15:00:00Z", 7),
+        ("Lille", "Brest", "2026-10-17T17:00:00Z", 7),
+        ("Troyes", "Lens", "2026-10-17T19:00:00Z", 7),
+        ("Angers", "Marsella", "2026-10-18T13:00:00Z", 7),
+        ("Le Havre", "Auxerre", "2026-10-18T15:00:00Z", 7),
+        ("Lorient", "Monaco", "2026-10-18T15:00:00Z", 7),
+        ("Paris FC", "Stade Rennais", "2026-10-18T17:05:00Z", 7),
+        ("Lyon", "Niza", "2026-10-18T18:45:00Z", 7),
+
+        # JORNADA 8 (23 al 25/10)
+        ("Brest", "Niza", "2026-10-23T19:00:00Z", 8),
+        ("Toulouse", "Troyes", "2026-10-24T15:00:00Z", 8),
+        ("Lens", "Paris FC", "2026-10-24T17:00:00Z", 8),
+        ("Monaco", "Lille", "2026-10-24T19:00:00Z", 8),
+        ("Angers", "Lorient", "2026-10-25T13:00:00Z", 8),
+        ("Auxerre", "Le Mans", "2026-10-25T15:00:00Z", 8),
+        ("Marsella", "Le Havre", "2026-10-25T15:00:00Z", 8),
+        ("Stade Rennais", "Estrasburgo", "2026-10-25T17:05:00Z", 8),
+        ("PSG", "Lyon", "2026-10-25T18:45:00Z", 8),
+
+        # JORNADA 9 (30/10 al 01/11)
+        ("Le Havre", "PSG", "2026-10-30T20:00:00Z", 9),
+        ("Lille", "Lens", "2026-10-31T16:00:00Z", 9),
+        ("Niza", "Stade Rennais", "2026-10-31T18:00:00Z", 9),
+        ("Lorient", "Brest", "2026-10-31T20:00:00Z", 9),
+        ("Lyon", "Angers", "2026-11-01T14:00:00Z", 9),
+        ("Troyes", "Le Mans", "2026-11-01T16:00:00Z", 9),
+        ("Estrasburgo", "Auxerre", "2026-11-01T16:00:00Z", 9),
+        ("Paris FC", "Monaco", "2026-11-01T18:05:00Z", 9),
+        ("Marsella", "Toulouse", "2026-11-01T19:45:00Z", 9),
+
+        # JORNADA 10 (06 al 08/11)
+        ("Toulouse", "Estrasburgo", "2026-11-06T20:00:00Z", 10),
+        ("Auxerre", "Paris FC", "2026-11-07T16:00:00Z", 10),
+        ("PSG", "Troyes", "2026-11-07T18:00:00Z", 10),
+        ("Stade Rennais", "Lille", "2026-11-07T20:00:00Z", 10),
+        ("Angers", "Niza", "2026-11-08T14:00:00Z", 10),
+        ("Brest", "Lyon", "2026-11-08T16:00:00Z", 10),
+        ("Le Havre", "Lorient", "2026-11-08T16:00:00Z", 10),
+        ("Le Mans", "Monaco", "2026-11-08T18:05:00Z", 10),
+        ("Lens", "Marsella", "2026-11-08T19:45:00Z", 10),
+
+        # JORNADA 11 (20 al 22/11)
+        ("Troyes", "Le Havre", "2026-11-20T20:00:00Z", 11),
+        ("Niza", "PSG", "2026-11-21T16:00:00Z", 11),
+        ("Lille", "Lyon", "2026-11-21T18:00:00Z", 11),
+        ("Monaco", "Auxerre", "2026-11-21T20:00:00Z", 11),
+        ("Estrasburgo", "Brest", "2026-11-22T14:00:00Z", 11),
+        ("PSG", "Paris FC", "2026-11-22T16:00:00Z", 11),
+        ("Lorient", "Stade Rennais", "2026-11-22T18:05:00Z", 11),
+        ("Marsella", "Le Mans", "2026-11-22T19:45:00Z", 11),
+
+        # JORNADA 12 (27 al 29/11)
+        ("Brest", "Paris FC", "2026-11-27T20:00:00Z", 12),
+        ("Angers", "Lens", "2026-11-28T16:00:00Z", 12),
+        ("Le Havre", "Estrasburgo", "2026-11-28T18:00:00Z", 12),
+        ("Le Mans", "Lille", "2026-11-28T20:00:00Z", 12),
+        ("Niza", "Troyes", "2026-11-29T14:00:00Z", 12),
+        ("PSG", "Lorient", "2026-11-29T16:00:00Z", 12),
+        ("Auxerre", "Marsella", "2026-11-29T16:00:00Z", 12),
+        ("Toulouse", "Stade Rennais", "2026-11-29T18:05:00Z", 12),
+        ("Lyon", "Monaco", "2026-11-29T19:45:00Z", 12),
+    ]
+    for loc, vis, dt, jor in fl1_schedule:
+        add(f"fl1-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_FL1, C_FL1)
+
+    print("3. Ligue 1 compilada.")
+
+    # =========================================================================
+    # 4. PREMIER LEAGUE (INGLATERRA)
+    # =========================================================================
+    L_PL = "Premier League"
+    C_PL = "PL"
+
+    pl_schedule = [
+        # JORNADA 6 (10 al 12/10)
+        ("Arsenal", "Leeds United", "2026-10-10T11:30:00Z", 6),
+        ("Aston Villa", "Brentford", "2026-10-10T14:00:00Z", 6),
+        ("Chelsea", "AFC Bournemouth", "2026-10-10T14:00:00Z", 6),
+        ("Ipswich Town", "Fulham", "2026-10-10T14:00:00Z", 6),
+        ("Sunderland", "Brighton", "2026-10-10T14:00:00Z", 6),
+        ("Manchester United", "Tottenham Hotspur", "2026-10-10T16:30:00Z", 6),
+        ("Crystal Palace", "Nottingham Forest", "2026-10-11T13:00:00Z", 6),
+        ("Hull City", "Everton", "2026-10-11T15:30:00Z", 6),
+        ("Liverpool", "Manchester City", "2026-10-11T15:30:00Z", 6),
+        ("Coventry City", "Newcastle", "2026-10-12T19:00:00Z", 6),
+
+        # JORNADA 7 (17 al 19/10)
+        ("Everton", "Chelsea", "2026-10-17T11:30:00Z", 7),
+        ("Brentford", "Liverpool", "2026-10-17T14:00:00Z", 7),
+        ("Fulham", "Hull City", "2026-10-17T14:00:00Z", 7),
+        ("Manchester City", "Ipswich Town", "2026-10-17T14:00:00Z", 7),
+        ("Newcastle", "Aston Villa", "2026-10-17T14:00:00Z", 7),
+        ("AFC Bournemouth", "Sunderland", "2026-10-17T16:30:00Z", 7),
+        ("Brighton", "Crystal Palace", "2026-10-18T13:00:00Z", 7),
+        ("Leeds United", "Manchester United", "2026-10-18T15:30:00Z", 7),
+        ("Nottingham Forest", "Arsenal", "2026-10-18T15:30:00Z", 7),
+        ("Tottenham Hotspur", "Coventry City", "2026-10-19T19:00:00Z", 7),
+
+        # JORNADA 8 (23 al 25/10)
+        ("Ipswich Town", "Nottingham Forest", "2026-10-23T19:00:00Z", 8),
+        ("Aston Villa", "Manchester City", "2026-10-24T11:30:00Z", 8),
+        ("Arsenal", "Everton", "2026-10-24T14:00:00Z", 8),
+        ("Coventry City", "Fulham", "2026-10-24T14:00:00Z", 8),
+        ("Chelsea", "Tottenham Hotspur", "2026-10-24T16:30:00Z", 8),
+        ("Crystal Palace", "Newcastle", "2026-10-25T13:00:00Z", 8),
+        ("Hull City", "Brentford", "2026-10-25T13:00:00Z", 8),
+        ("Liverpool", "Brighton", "2026-10-25T15:30:00Z", 8),
+        ("Manchester United", "AFC Bournemouth", "2026-10-25T15:30:00Z", 8),
+        ("Sunderland", "Leeds United", "2026-10-25T17:30:00Z", 8),
+
+        # JORNADA 9 (31/10 al 02/11)
+        ("Chelsea", "Manchester United", "2026-10-31T12:30:00Z", 9),
+        ("AFC Bournemouth", "Leeds United", "2026-10-31T15:00:00Z", 9),
+        ("Brentford", "Nottingham Forest", "2026-10-31T15:00:00Z", 9),
+        ("Coventry City", "Sunderland", "2026-10-31T15:00:00Z", 9),
+        ("Hull City", "Ipswich Town", "2026-10-31T15:00:00Z", 9),
+        ("Manchester City", "Brighton", "2026-10-31T15:00:00Z", 9),
+        ("Tottenham Hotspur", "Crystal Palace", "2026-10-31T17:30:00Z", 9),
+        ("Aston Villa", "Fulham", "2026-11-01T14:00:00Z", 9),
+        ("Liverpool", "Arsenal", "2026-11-01T16:30:00Z", 9),
+        ("Newcastle", "Everton", "2026-11-02T20:00:00Z", 9),
+
+        # JORNADA 10 (06 al 08/11)
+        ("Everton", "Coventry City", "2026-11-06T20:00:00Z", 10),
+        ("Leeds United", "Tottenham Hotspur", "2026-11-07T12:30:00Z", 10),
+        ("Arsenal", "Hull City", "2026-11-07T15:00:00Z", 10),
+        ("Fulham", "Newcastle", "2026-11-07T15:00:00Z", 10),
+        ("Nottingham Forest", "Manchester City", "2026-11-07T15:00:00Z", 10),
+        ("Brighton", "Brentford", "2026-11-07T15:00:00Z", 10),
+        ("Crystal Palace", "Liverpool", "2026-11-07T17:30:00Z", 10),
+        ("Ipswich Town", "AFC Bournemouth", "2026-11-08T14:00:00Z", 10),
+        ("Sunderland", "Chelsea", "2026-11-08T14:00:00Z", 10),
+        ("Manchester United", "Aston Villa", "2026-11-08T16:30:00Z", 10),
+
+        # JORNADA 11 (21 al 23/11)
+        ("Manchester City", "Fulham", "2026-11-21T12:30:00Z", 11),
+        ("AFC Bournemouth", "Nottingham Forest", "2026-11-21T15:00:00Z", 11),
+        ("Aston Villa", "Sunderland", "2026-11-21T15:00:00Z", 11),
+        ("Chelsea", "Leeds United", "2026-11-21T15:00:00Z", 11),
+        ("Coventry City", "Crystal Palace", "2026-11-21T15:00:00Z", 11),
+        ("Tottenham Hotspur", "Ipswich Town", "2026-11-21T17:30:00Z", 11),
+        ("Newcastle", "Arsenal", "2026-11-22T14:00:00Z", 11),
+        ("Hull City", "Brighton", "2026-11-22T14:00:00Z", 11),
+        ("Liverpool", "Manchester United", "2026-11-22T16:30:00Z", 11),
+        ("Brentford", "Everton", "2026-11-23T20:00:00Z", 11),
+
+        # JORNADA 12 (27 al 29/11)
+        ("Nottingham Forest", "Chelsea", "2026-11-27T20:00:00Z", 12),
+        ("Leeds United", "Coventry City", "2026-11-28T12:30:00Z", 12),
+        ("Manchester United", "Brentford", "2026-11-28T15:00:00Z", 12),
+        ("Ipswich Town", "Aston Villa", "2026-11-28T15:00:00Z", 12),
+        ("Everton", "Liverpool", "2026-11-28T15:00:00Z", 12),
+        ("Brighton", "Newcastle", "2026-11-28T17:30:00Z", 12),
+        ("Crystal Palace", "Hull City", "2026-11-29T14:00:00Z", 12),
+        ("Fulham", "AFC Bournemouth", "2026-11-29T14:00:00Z", 12),
+        ("Sunderland", "Tottenham Hotspur", "2026-11-29T16:30:00Z", 12),
+        ("Arsenal", "Manchester City", "2026-11-29T16:30:00Z", 12),
+    ]
+    for loc, vis, dt, jor in pl_schedule:
+        add(f"pl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_PL, C_PL)
+
+    print("4. Premier League compilada.")
+
+    # =========================================================================
+    # 5. PRIMERA DIVISIÓN (LALIGA - ESPAÑA)
+    # =========================================================================
+    L_PD = "Primera División"
+    C_PD = "PD"
+
+    pd_schedule = [
+        # JORNADA 8 (09 al 12/10)
+        ("Málaga", "Espanyol", "2026-10-09T19:00:00Z", 8),
+        ("Rayo Vallecano", "Athletic Club", "2026-10-10T12:00:00Z", 8),
+        ("Deportivo Alavés", "Atlético de Madrid", "2026-10-10T14:15:00Z", 8),
+        ("Barcelona", "Getafe", "2026-10-10T16:30:00Z", 8),
+        ("Real Madrid", "Villarreal", "2026-10-10T19:00:00Z", 8),
+        ("Elche", "Celta de Vigo", "2026-10-11T12:00:00Z", 8),
+        ("Real Sociedad", "Deportivo de La Coruña", "2026-10-11T14:15:00Z", 8),
+        ("Real Betis", "Osasuna", "2026-10-11T16:30:00Z", 8),
+        ("Racing Club", "Valencia", "2026-10-11T19:00:00Z", 8),
+        ("Levante", "Sevilla", "2026-10-12T19:00:00Z", 8),
+
+        # JORNADA 9 (16 al 19/10)
+        ("Deportivo de La Coruña", "Levante", "2026-10-16T19:00:00Z", 9),
+        ("Espanyol", "Atlético de Madrid", "2026-10-17T12:00:00Z", 9),
+        ("Villarreal", "Elche", "2026-10-17T14:15:00Z", 9),
+        ("Real Betis", "Barcelona", "2026-10-17T16:30:00Z", 9),
+        ("Valencia", "Athletic Club", "2026-10-17T19:00:00Z", 9),
+        ("Osasuna", "Racing Club", "2026-10-18T12:00:00Z", 9),
+        ("Celta de Vigo", "Deportivo Alavés", "2026-10-18T14:15:00Z", 9),
+        ("Málaga", "Real Sociedad", "2026-10-18T16:30:00Z", 9),
+        ("Real Madrid", "Sevilla", "2026-10-18T19:00:00Z", 9),
+        ("Getafe", "Rayo Vallecano", "2026-10-19T19:00:00Z", 9),
+
+        # JORNADA 6 (Aplazado 21/10)
+        ("Levante", "Athletic Club", "2026-10-21T19:00:00Z", 6),
+
+        # JORNADA 10 (23 al 26/10)
+        ("Deportivo Alavés", "Málaga", "2026-10-23T19:00:00Z", 10),
+        ("Rayo Vallecano", "Elche", "2026-10-24T12:00:00Z", 10),
+        ("Racing Club", "Espanyol", "2026-10-24T14:15:00Z", 10),
+        ("Valencia", "Villarreal", "2026-10-24T16:30:00Z", 10),
+        ("Atlético de Madrid", "Deportivo de La Coruña", "2026-10-24T19:00:00Z", 10),
+        ("Athletic Club", "Getafe", "2026-10-25T12:00:00Z", 10),
+        ("Celta de Vigo", "Real Betis", "2026-10-25T14:15:00Z", 10),
+        ("Real Sociedad", "Levante", "2026-10-25T16:30:00Z", 10),
+        ("Barcelona", "Real Madrid", "2026-10-25T19:00:00Z", 10),
+        ("Sevilla", "Osasuna", "2026-10-26T19:00:00Z", 10),
+
+        # JORNADA 11 (30/10 al 02/11)
+        ("Villarreal", "Espanyol", "2026-10-30T20:00:00Z", 11),
+        ("Levante", "Atlético de Madrid", "2026-10-31T13:00:00Z", 11),
+        ("Rayo Vallecano", "Celta de Vigo", "2026-10-31T15:15:00Z", 11),
+        ("Real Betis", "Málaga", "2026-10-31T17:30:00Z", 11),
+        ("Barcelona", "Deportivo Alavés", "2026-10-31T20:00:00Z", 11),
+        ("Getafe", "Sevilla", "2026-11-01T13:00:00Z", 11),
+        ("Racing Club", "Real Madrid", "2026-11-01T15:15:00Z", 11),
+        ("Elche", "Valencia", "2026-11-01T17:30:00Z", 11),
+        ("Athletic Club", "Real Sociedad", "2026-11-01T20:00:00Z", 11),
+        ("Deportivo de La Coruña", "Osasuna", "2026-11-02T20:00:00Z", 11),
+
+        # JORNADA 12 (08/11)
+        ("Atlético de Madrid", "Barcelona", "2026-11-08T13:00:00Z", 12),
+        ("Celta de Vigo", "Levante", "2026-11-08T13:00:00Z", 12),
+        ("Elche", "Real Betis", "2026-11-08T15:15:00Z", 12),
+        ("Espanyol", "Deportivo de La Coruña", "2026-11-08T15:15:00Z", 12),
+        ("Málaga", "Racing Club", "2026-11-08T17:30:00Z", 12),
+        ("Osasuna", "Athletic Club", "2026-11-08T17:30:00Z", 12),
+        ("Real Sociedad", "Rayo Vallecano", "2026-11-08T19:00:00Z", 12),
+        ("Sevilla", "Deportivo Alavés", "2026-11-08T19:00:00Z", 12),
+        ("Valencia", "Real Madrid", "2026-11-08T20:00:00Z", 12),
+        ("Villarreal", "Getafe", "2026-11-08T20:00:00Z", 12),
+
+        # JORNADA 13 (22/11)
+        ("Deportivo Alavés", "Deportivo de La Coruña", "2026-11-22T13:00:00Z", 13),
+        ("Athletic Club", "Espanyol", "2026-11-22T13:00:00Z", 13),
+        ("Barcelona", "Villarreal", "2026-11-22T15:15:00Z", 13),
+        ("Getafe", "Atlético de Madrid", "2026-11-22T15:15:00Z", 13),
+        ("Levante", "Elche", "2026-11-22T17:30:00Z", 13),
+        ("Osasuna", "Málaga", "2026-11-22T17:30:00Z", 13),
+        ("Racing Club", "Real Sociedad", "2026-11-22T19:00:00Z", 13),
+        ("Rayo Vallecano", "Valencia", "2026-11-22T19:00:00Z", 13),
+        ("Real Madrid", "Celta de Vigo", "2026-11-22T20:00:00Z", 13),
+        ("Sevilla", "Real Betis", "2026-11-22T20:00:00Z", 13),
+
+        # JORNADA 14 (29/11)
+        ("Real Betis", "Rayo Vallecano", "2026-11-29T13:00:00Z", 14),
+        ("Celta de Vigo", "Villarreal", "2026-11-29T13:00:00Z", 14),
+        ("Deportivo de La Coruña", "Barcelona", "2026-11-29T15:15:00Z", 14),
+        ("Elche", "Atlético de Madrid", "2026-11-29T15:15:00Z", 14),
+        ("Espanyol", "Getafe", "2026-11-29T17:30:00Z", 14),
+        ("Levante", "Racing Club", "2026-11-29T17:30:00Z", 14),
+        ("Málaga", "Athletic Club", "2026-11-29T19:00:00Z", 14),
+        ("Real Madrid", "Deportivo Alavés", "2026-11-29T19:00:00Z", 14),
+        ("Real Sociedad", "Sevilla", "2026-11-29T20:00:00Z", 14),
+        ("Valencia", "Osasuna", "2026-11-29T20:00:00Z", 14),
+    ]
+    for loc, vis, dt, jor in pd_schedule:
+        add(f"pd-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_PD, C_PD)
+
+    print("5. Primera División compilada.")
+
+    # =========================================================================
+    # 6. PRIMEIRA LIGA (PORTUGAL)
+    # =========================================================================
+    L_PPL = "Primeira Liga"
+    C_PPL = "PPL"
+
+    ppl_schedule = [
+        # JORNADA 8 (09 al 12/10)
+        ("Moreirense", "Gil Vicente", "2026-10-09T19:15:00Z", 8),
+        ("SC Braga", "Sporting CP", "2026-10-10T14:30:00Z", 8),
+        ("Casa Pia", "Santa Clara", "2026-10-10T17:00:00Z", 8),
+        ("Marítimo", "FC Porto", "2026-10-10T19:30:00Z", 8),
+        ("Académico de Viseu", "Estoril", "2026-10-11T14:30:00Z", 8),
+        ("Rio Ave", "CD Nacional", "2026-10-11T17:00:00Z", 8),
+        ("Benfica", "Vitória de Guimarães", "2026-10-11T19:30:00Z", 8),
+        ("Arouca", "Estrela da Amadora", "2026-10-12T17:00:00Z", 8),
+        ("Famalicão", "Alverca", "2026-10-12T19:15:00Z", 8),
+
+        # JORNADA 2 (Aplazado 19/10)
+        ("SC Braga", "Gil Vicente", "2026-10-19T19:15:00Z", 2),
+
+        # JORNADA 9 (23 al 26/10)
+        ("Vitória de Guimarães", "Marítimo", "2026-10-23T19:15:00Z", 9),
+        ("Estrela da Amadora", "Casa Pia", "2026-10-24T14:30:00Z", 9),
+        ("Alverca", "Arouca", "2026-10-24T17:00:00Z", 9),
+        ("Gil Vicente", "FC Porto", "2026-10-24T19:30:00Z", 9),
+        ("Estoril", "Moreirense", "2026-10-25T14:30:00Z", 9),
+        ("CD Nacional", "SC Braga", "2026-10-25T17:00:00Z", 9),
+        ("Rio Ave", "Famalicão", "2026-10-25T17:00:00Z", 9),
+        ("Sporting CP", "Académico de Viseu", "2026-10-25T19:30:00Z", 9),
+        ("Santa Clara", "Benfica", "2026-10-26T19:15:00Z", 9),
+
+        # JORNADA 10 (30/10 al 02/11)
+        ("Casa Pia", "Sporting CP", "2026-10-30T20:15:00Z", 10),
+        ("Moreirense", "Estrela da Amadora", "2026-10-31T15:30:00Z", 10),
+        ("FC Porto", "Estoril", "2026-10-31T18:00:00Z", 10),
+        ("Arouca", "CD Nacional", "2026-10-31T20:30:00Z", 10),
+        ("Académico de Viseu", "Rio Ave", "2026-11-01T15:30:00Z", 10),
+        ("Marítimo", "Santa Clara", "2026-11-01T15:30:00Z", 10),
+        ("SC Braga", "Famalicão", "2026-11-01T18:00:00Z", 10),
+        ("Gil Vicente", "Vitória de Guimarães", "2026-11-01T20:30:00Z", 10),
+        ("Benfica", "Alverca", "2026-11-02T20:15:00Z", 10),
+
+        # JORNADA 11 (06 al 08/11)
+        ("Famalicão", "Arouca", "2026-11-06T20:15:00Z", 11),
+        ("CD Nacional", "Académico de Viseu", "2026-11-07T15:30:00Z", 11),
+        ("Alverca", "Casa Pia", "2026-11-07T15:30:00Z", 11),
+        ("Sporting CP", "Moreirense", "2026-11-07T18:00:00Z", 11),
+        ("Estoril", "Marítimo", "2026-11-07T20:30:00Z", 11),
+        ("Santa Clara", "Gil Vicente", "2026-11-08T15:30:00Z", 11),
+        ("Vitória de Guimarães", "FC Porto", "2026-11-08T18:00:00Z", 11),
+        ("Estrela da Amadora", "Benfica", "2026-11-08T20:30:00Z", 11),
+        ("Rio Ave", "SC Braga", "2026-11-08T20:30:00Z", 11),
+
+        # JORNADA 12 (27 al 30/11)
+        ("Marítimo", "CD Nacional", "2026-11-27T20:15:00Z", 12),
+        ("Arouca", "Rio Ave", "2026-11-28T15:30:00Z", 12),
+        ("Moreirense", "Santa Clara", "2026-11-28T18:00:00Z", 12),
+        ("Académico de Viseu", "Alverca", "2026-11-28T20:30:00Z", 12),
+        ("Vitória de Guimarães", "Estrela da Amadora", "2026-11-29T15:30:00Z", 12),
+        ("Gil Vicente", "Estoril", "2026-11-29T15:30:00Z", 12),
+        ("FC Porto", "Sporting CP", "2026-11-29T18:00:00Z", 12),
+        ("Casa Pia", "SC Braga", "2026-11-29T20:30:00Z", 12),
+        ("Benfica", "Famalicão", "2026-11-30T20:15:00Z", 12),
+    ]
+    for loc, vis, dt, jor in ppl_schedule:
+        add(f"ppl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_PPL, C_PPL)
+
+    print("6. Primeira Liga compilada.")
+
+    # =========================================================================
+    # 7. SERIE A (ITALIA)
+    # =========================================================================
+    L_SA = "Serie A"
+    C_SA = "SA"
+
+    sa_schedule = [
+        # JORNADA 6 (10 al 12/10)
+        ("Genoa", "Fiorentina", "2026-10-10T13:00:00Z", 6),
+        ("Inter", "Parma", "2026-10-10T16:00:00Z", 6),
+        ("Napoli", "Frosinone", "2026-10-10T18:45:00Z", 6),
+        ("Como 1907", "AS Roma", "2026-10-11T10:30:00Z", 6),
+        ("Lazio", "Monza", "2026-10-11T13:00:00Z", 6),
+        ("Lecce", "Bologna", "2026-10-11T13:00:00Z", 6),
+        ("Sassuolo", "AC Milan", "2026-10-11T16:00:00Z", 6),
+        ("Cagliari", "Juventus", "2026-10-11T18:45:00Z", 6),
+        ("Atalanta", "Venezia", "2026-10-12T16:30:00Z", 6),
+        ("Torino", "Udinese", "2026-10-12T18:45:00Z", 6),
+
+        # JORNADA 7 (16 al 19/10)
+        ("Frosinone", "Sassuolo", "2026-10-16T18:45:00Z", 7),
+        ("Venezia", "Napoli", "2026-10-17T13:00:00Z", 7),
+        ("Bologna", "Inter", "2026-10-17T16:00:00Z", 7),
+        ("AS Roma", "Genoa", "2026-10-17T18:45:00Z", 7),
+        ("Udinese", "Lecce", "2026-10-18T10:30:00Z", 7),
+        ("Fiorentina", "Como 1907", "2026-10-18T13:00:00Z", 7),
+        ("AC Milan", "Atalanta", "2026-10-18T16:00:00Z", 7),
+        ("Juventus", "Lazio", "2026-10-18T18:45:00Z", 7),
+        ("Monza", "Cagliari", "2026-10-19T16:30:00Z", 7),
+        ("Parma", "Torino", "2026-10-19T18:45:00Z", 7),
+
+        # JORNADA 8 (23 al 25/10)
+        ("Torino", "Monza", "2026-10-23T18:45:00Z", 8),
+        ("Cagliari", "Bologna", "2026-10-24T13:00:00Z", 8),
+        ("Como 1907", "Sassuolo", "2026-10-24T16:00:00Z", 8),
+        ("Napoli", "AS Roma", "2026-10-24T18:45:00Z", 8),
+        ("Lazio", "Parma", "2026-10-25T11:30:00Z", 8),
+        ("Inter", "Fiorentina", "2026-10-25T14:00:00Z", 8),
+        ("Atalanta", "Frosinone", "2026-10-25T14:00:00Z", 8),
+        ("Genoa", "Venezia", "2026-10-25T17:00:00Z", 8),
+        ("Lecce", "Juventus", "2026-10-25T17:00:00Z", 8),
+        ("Udinese", "AC Milan", "2026-10-25T19:45:00Z", 8),
+
+        # JORNADA 9 (27 al 29/10)
+        ("Sassuolo", "Lazio", "2026-10-27T17:30:00Z", 9),
+        ("AS Roma", "Cagliari", "2026-10-27T19:45:00Z", 9),
+        ("Torino", "Como 1907", "2026-10-28T17:30:00Z", 9),
+        ("AC Milan", "Bologna", "2026-10-28T17:30:00Z", 9),
+        ("Parma", "Udinese", "2026-10-28T19:45:00Z", 9),
+        ("Venezia", "Inter", "2026-10-28T19:45:00Z", 9),
+        ("Genoa", "Juventus", "2026-10-28T19:45:00Z", 9),
+        ("Monza", "Napoli", "2026-10-29T17:30:00Z", 9),
+        ("Frosinone", "Lecce", "2026-10-29T17:30:00Z", 9),
+        ("Fiorentina", "Atalanta", "2026-10-29T19:45:00Z", 9),
+
+        # JORNADA 10 (31/10 al 02/11)
+        ("Bologna", "Monza", "2026-10-31T14:00:00Z", 10),
+        ("Udinese", "AS Roma", "2026-10-31T17:00:00Z", 10),
+        ("AC Milan", "Inter", "2026-10-31T19:45:00Z", 10),
+        ("Como 1907", "Venezia", "2026-11-01T11:30:00Z", 10),
+        ("Frosinone", "Torino", "2026-11-01T14:00:00Z", 10),
+        ("Lazio", "Cagliari", "2026-11-01T14:00:00Z", 10),
+        ("Lecce", "Genoa", "2026-11-01T17:00:00Z", 10),
+        ("Juventus", "Napoli", "2026-11-01T19:45:00Z", 10),
+        ("Sassuolo", "Fiorentina", "2026-11-02T17:30:00Z", 10),
+        ("Atalanta", "Parma", "2026-11-02T19:45:00Z", 10),
+
+        # JORNADA 11 (06 al 08/11)
+        ("Udinese", "Venezia", "2026-11-06T19:45:00Z", 11),
+        ("Cagliari", "Frosinone", "2026-11-07T14:00:00Z", 11),
+        ("Torino", "Lecce", "2026-11-07T17:00:00Z", 11),
+        ("Parma", "Bologna", "2026-11-07T19:45:00Z", 11),
+        ("AS Roma", "Sassuolo", "2026-11-08T11:30:00Z", 11),
+        ("Napoli", "Lazio", "2026-11-08T14:00:00Z", 11),
+        ("Genoa", "AC Milan", "2026-11-08T14:00:00Z", 11),
+        ("Monza", "Atalanta", "2026-11-08T17:00:00Z", 11),
+        ("Inter", "Como 1907", "2026-11-08T19:45:00Z", 11),
+        ("Fiorentina", "Juventus", "2026-11-08T19:45:00Z", 11),
+
+        # JORNADA 12 (21 al 23/11)
+        ("Como 1907", "Cagliari", "2026-11-21T14:00:00Z", 12),
+        ("Lazio", "Lecce", "2026-11-21T17:00:00Z", 12),
+        ("Parma", "AS Roma", "2026-11-21T19:45:00Z", 12),
+        ("Napoli", "Torino", "2026-11-22T11:30:00Z", 12),
+        ("Juventus", "Venezia", "2026-11-22T14:00:00Z", 12),
+        ("Bologna", "Udinese", "2026-11-22T14:00:00Z", 12),
+        ("Sassuolo", "Genoa", "2026-11-22T17:00:00Z", 12),
+        ("AC Milan", "Frosinone", "2026-11-22T19:45:00Z", 12),
+        ("Atalanta", "Inter", "2026-11-23T17:30:00Z", 12),
+        ("Monza", "Fiorentina", "2026-11-23T19:45:00Z", 12),
+
+        # JORNADA 13 (27 al 30/11)
+        ("Venezia", "Bologna", "2026-11-27T19:45:00Z", 13),
+        ("Frosinone", "Parma", "2026-11-28T14:00:00Z", 13),
+        ("Torino", "Lazio", "2026-11-28T17:00:00Z", 13),
+        ("Inter", "Genoa", "2026-11-28T19:45:00Z", 13),
+        ("Udinese", "Fiorentina", "2026-11-29T11:30:00Z", 13),
+        ("Sassuolo", "Napoli", "2026-11-29T14:00:00Z", 13),
+        ("AS Roma", "Monza", "2026-11-29T14:00:00Z", 13),
+        ("Como 1907", "Juventus", "2026-11-29T17:00:00Z", 13),
+        ("Lecce", "Atalanta", "2026-11-29T19:45:00Z", 13),
+        ("Cagliari", "AC Milan", "2026-11-30T19:45:00Z", 13),
+    ]
+    for loc, vis, dt, jor in sa_schedule:
+        add(f"sa-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_SA, C_SA)
+
+    print("7. Serie A compilada.")
+
+    # =========================================================================
+    # 8. UEFA CHAMPIONS LEAGUE
+    # =========================================================================
+    L_UCL = "UEFA Champions League"
+    C_UCL = "CL"
+
+    ucl_schedule = [
+        # JORNADA 2 (13 al 14/10)
+        ("Lens", "Sporting CP", "2026-10-13T16:45:00Z", 2),
+        ("Sabah Baku", "Slavia Praga", "2026-10-13T16:45:00Z", 2),
+        ("Inter", "Club Brujas", "2026-10-13T19:00:00Z", 2),
+        ("Galatasaray", "Barcelona", "2026-10-13T19:00:00Z", 2),
+        ("Atlético de Madrid", "Manchester United", "2026-10-13T19:00:00Z", 2),
+        ("Arsenal", "RB Leipzig", "2026-10-13T19:00:00Z", 2),
+        ("Viking", "Bayern Múnich", "2026-10-13T19:00:00Z", 2),
+        ("LASK", "PSV", "2026-10-13T19:00:00Z", 2),
+        ("Villarreal", "Napoli", "2026-10-13T19:00:00Z", 2),
+        ("LASK", "Liverpool", "2026-10-14T16:45:00Z", 2),
+        ("Feyenoord", "Como 1907", "2026-10-14T16:45:00Z", 2),
+        ("Manchester City", "PSG", "2026-10-14T19:00:00Z", 2),
+        ("AS Roma", "Real Madrid", "2026-10-14T19:00:00Z", 2),
+        ("Real Betis", "FC Porto", "2026-10-14T19:00:00Z", 2),
+        ("Bodø/Glimt", "Borussia Dortmund", "2026-10-14T19:00:00Z", 2),
+        ("Aston Villa", "Fenerbahçe", "2026-10-14T19:00:00Z", 2),
+        ("Shakhtar Donetsk", "AEK Atenas", "2026-10-14T19:00:00Z", 2),
+        ("Slovan Bratislava", "VfB Stuttgart", "2026-10-14T19:00:00Z", 2),
+
+        # JORNADA 3 (20 al 21/10)
+        ("Sabah Baku", "Borussia Dortmund", "2026-10-20T16:45:00Z", 3),
+        ("Fenerbahçe", "Slavia Praga", "2026-10-20T16:45:00Z", 3),
+        ("PSG", "Barcelona", "2026-10-20T19:00:00Z", 3),
+        ("Manchester City", "AEK Atenas", "2026-10-20T19:00:00Z", 3),
+        ("VfB Stuttgart", "Atlético de Madrid", "2026-10-20T19:00:00Z", 3),
+        ("Liverpool", "Villarreal", "2026-10-20T19:00:00Z", 3),
+        ("FC Porto", "PSV", "2026-10-20T19:00:00Z", 3),
+        ("AS Roma", "Slovan Bratislava", "2026-10-20T19:00:00Z", 3),
+        ("Napoli", "Bodø/Glimt", "2026-10-20T19:00:00Z", 3),
+        ("Como 1907", "Manchester United", "2026-10-21T16:45:00Z", 3),
+        ("LASK", "Galatasaray", "2026-10-21T16:45:00Z", 3),
+        ("Bayern Múnich", "Arsenal", "2026-10-21T19:00:00Z", 3),
+        ("Real Madrid", "RB Leipzig", "2026-10-21T19:00:00Z", 3),
+        ("Inter", "Shakhtar Donetsk", "2026-10-21T19:00:00Z", 3),
+        ("Club Brujas", "Lens", "2026-10-21T19:00:00Z", 3),
+        ("Aston Villa", "Viking", "2026-10-21T19:00:00Z", 3),
+        ("Real Betis", "Feyenoord", "2026-10-21T19:00:00Z", 3),
+        ("Sporting CP", "LASK", "2026-10-21T19:00:00Z", 3),
+
+        # JORNADA 4 (03 al 04/11)
+        ("Shakhtar Donetsk", "Sporting CP", "2026-11-03T17:45:00Z", 4),
+        ("Galatasaray", "VfB Stuttgart", "2026-11-03T17:45:00Z", 4),
+        ("Atlético de Madrid", "Bayern Múnich", "2026-11-03T20:00:00Z", 4),
+        ("Feyenoord", "Inter", "2026-11-03T20:00:00Z", 4),
+        ("Barcelona", "Aston Villa", "2026-11-03T20:00:00Z", 4),
+        ("Villarreal", "PSG", "2026-11-03T20:00:00Z", 4),
+        ("Manchester United", "AS Roma", "2026-11-03T20:00:00Z", 4),
+        ("Bodø/Glimt", "LASK", "2026-11-03T20:00:00Z", 4),
+        ("Slovan Bratislava", "AEK Atenas", "2026-11-03T20:00:00Z", 4),
+        ("Real Madrid", "Fenerbahçe", "2026-11-04T17:45:00Z", 4),
+        ("Liverpool", "RB Leipzig", "2026-11-04T17:45:00Z", 4),
+        ("Manchester City", "Slavia Praga", "2026-11-04T20:00:00Z", 4),
+        ("Arsenal", "PSV", "2026-11-04T20:00:00Z", 4),
+        ("Club Brujas", "Borussia Dortmund", "2026-11-04T20:00:00Z", 4),
+        ("Real Betis", "FC Porto", "2026-11-04T20:00:00Z", 4),
+        ("Napoli", "Lens", "2026-11-04T20:00:00Z", 4),
+        ("Como 1907", "Viking", "2026-11-04T20:00:00Z", 4),
+        ("Sabah Baku", "Viking", "2026-11-04T20:00:00Z", 4),
+
+        # JORNADA 5 (24 al 25/11)
+        ("Galatasaray", "Aston Villa", "2026-11-24T17:45:00Z", 5),
+        ("Bodø/Glimt", "LASK", "2026-11-24T17:45:00Z", 5),
+        ("Real Madrid", "PSV", "2026-11-24T20:00:00Z", 5),
+        ("Manchester City", "Napoli", "2026-11-24T20:00:00Z", 5),
+        ("Arsenal", "Borussia Dortmund", "2026-11-24T20:00:00Z", 5),
+        ("Feyenoord", "FC Porto", "2026-11-24T20:00:00Z", 5),
+        ("Slovan Bratislava", "Real Betis", "2026-11-24T20:00:00Z", 5),
+        ("RB Leipzig", "Lens", "2026-11-24T20:00:00Z", 5),
+        ("Como 1907", "AEK Atenas", "2026-11-24T20:00:00Z", 5),
+        ("Sabah Baku", "Barcelona", "2026-11-25T17:45:00Z", 5),
+        ("Slavia Praga", "Villarreal", "2026-11-25T17:45:00Z", 5),
+        ("Inter", "VfB Stuttgart", "2026-11-25T20:00:00Z", 5),
+        ("Atlético de Madrid", "Viking", "2026-11-25T20:00:00Z", 5),
+        ("PSG", "AS Roma", "2026-11-25T20:00:00Z", 5),
+        ("Club Brujas", "Liverpool", "2026-11-25T20:00:00Z", 5),
+        ("Lazio", "Bayern Múnich", "2026-11-25T20:00:00Z", 5),
+        ("Sporting CP", "Manchester United", "2026-11-25T20:00:00Z", 5),
+        ("Shakhtar Donetsk", "Fenerbahçe", "2026-11-25T20:00:00Z", 5),
+    ]
+    for loc, vis, dt, jor in ucl_schedule:
+        add(f"ucl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_UCL, C_UCL)
+
+    print("8. UEFA Champions League compilada.")
+
+    # =========================================================================
+    # 9. UEFA NATIONS LEAGUE (LIGAS A, B, C, D)
+    # =========================================================================
+    L_UNL = "UEFA Nations League"
+    C_UNL = "UNL"
+
+    unl_schedule = [
+        # LIGA A - JORNADA 5 (12 al 14/11)
+        ("Turquía", "Bélgica", "2026-11-12T19:45:00Z", 5),
+        ("Francia", "Italia", "2026-11-12T19:45:00Z", 5),
+        ("República Checa", "España", "2026-11-12T19:45:00Z", 5),
+        ("Inglaterra", "Croacia", "2026-11-12T19:45:00Z", 5),
+        ("Serbia", "Alemania", "2026-11-13T19:45:00Z", 5),
+        ("Países Bajos", "Grecia", "2026-11-13T19:45:00Z", 5),
+        ("Noruega", "Gales", "2026-11-14T17:00:00Z", 5),
+        ("Portugal", "Dinamarca", "2026-11-14T19:45:00Z", 5),
+
+        # LIGA A - JORNADA 6 (15 al 17/11)
+        ("Francia", "Turquía", "2026-11-15T19:45:00Z", 6),
+        ("España", "Inglaterra", "2026-11-15T19:45:00Z", 6),
+        ("Croacia", "República Checa", "2026-11-15T19:45:00Z", 6),
+        ("Bélgica", "Italia", "2026-11-15T19:45:00Z", 6),
+        ("Alemania", "Países Bajos", "2026-11-16T19:45:00Z", 6),
+        ("Grecia", "Serbia", "2026-11-16T19:45:00Z", 6),
+        ("Gales", "Portugal", "2026-11-17T19:45:00Z", 6),
+        ("Dinamarca", "Noruega", "2026-11-17T19:45:00Z", 6),
+
+        # LIGA B - JORNADA 5 (13 al 14/11)
+        ("Escocia", "Macedonia del Norte", "2026-11-13T19:45:00Z", 5),
+        ("Eslovenia", "Suiza", "2026-11-13T19:45:00Z", 5),
+        ("Kosovo", "Israel", "2026-11-14T19:45:00Z", 5),
+        ("Georgia", "Hungría", "2026-11-14T17:00:00Z", 5),
+        ("Irlanda del Norte", "Ucrania", "2026-11-14T19:45:00Z", 5),
+        ("Austria", "Irlanda", "2026-11-14T19:45:00Z", 5),
+        ("Rumanía", "Polonia", "2026-11-14T19:45:00Z", 5),
+        ("Suecia", "Bosnia y Herzegovina", "2026-11-14T19:45:00Z", 5),
+
+        # LIGA B - JORNADA 6 (16 al 17/11)
+        ("Macedonia del Norte", "Eslovenia", "2026-11-16T17:00:00Z", 6),
+        ("Suiza", "Escocia", "2026-11-16T19:45:00Z", 6),
+        ("Hungría", "Irlanda del Norte", "2026-11-16T19:45:00Z", 6),
+        ("Ucrania", "Georgia", "2026-11-16T19:45:00Z", 6),
+        ("Israel", "Austria", "2026-11-17T19:45:00Z", 6),
+        ("Irlanda", "Kosovo", "2026-11-17T19:45:00Z", 6),
+        ("Polonia", "Suecia", "2026-11-17T19:45:00Z", 6),
+        ("Bosnia y Herzegovina", "Rumanía", "2026-11-17T19:45:00Z", 6),
+
+        # LIGA C - JORNADA 5 (12 al 13/11)
+        ("Armenia", "Chipre", "2026-11-12T17:00:00Z", 5),
+        ("Albania", "Finlandia", "2026-11-12T19:45:00Z", 5),
+        ("San Marino", "Bielorrusia", "2026-11-12T19:45:00Z", 5),
+        ("Montenegro", "Letonia", "2026-11-12T19:45:00Z", 5),
+        ("Moldavia", "Kazajistán", "2026-11-13T17:00:00Z", 5),
+        ("Eslovaquia", "Islas Feroe", "2026-11-13T19:45:00Z", 5),
+        ("Bulgaria", "Islandia", "2026-11-13T19:45:00Z", 5),
+        ("Luxemburgo", "Estonia", "2026-11-13T19:45:00Z", 5),
+
+        # LIGA C - JORNADA 6 (15 al 16/11)
+        ("Chipre", "Montenegro", "2026-11-15T17:00:00Z", 6),
+        ("Letonia", "Armenia", "2026-11-15T14:00:00Z", 6),
+        ("Bielorrusia", "Albania", "2026-11-15T19:45:00Z", 6),
+        ("Finlandia", "San Marino", "2026-11-15T17:00:00Z", 6),
+        ("Kazajistán", "Eslovaquia", "2026-11-16T14:00:00Z", 6),
+        ("Islas Feroe", "Moldavia", "2026-11-16T17:00:00Z", 6),
+        ("Estonia", "Bulgaria", "2026-11-16T19:45:00Z", 6),
+        ("Islandia", "Luxemburgo", "2026-11-16T19:45:00Z", 6),
+
+        # LIGA D - JORNADA 5 (13/11)
+        ("Liechtenstein", "Azerbaiyán", "2026-11-13T17:00:00Z", 5),
+        ("Andorra", "Gibraltar", "2026-11-13T19:45:00Z", 5),
+
+        # LIGA D - JORNADA 6 (16/11)
+        ("Lituania", "Liechtenstein", "2026-11-16T17:00:00Z", 6),
+        ("Gibraltar", "Malta", "2026-11-16T19:45:00Z", 6),
+    ]
+    for loc, vis, dt, jor in unl_schedule:
+        add(f"unl-2026-j{jor}-{loc[:3].lower()}-{vis[:3].lower()}", loc, vis, dt, jor, L_UNL, C_UNL)
+
+    print("9. UEFA Nations League compilada.")
 
     return calendar
 
+
 def build_all_club_fixtures():
-    return build_multimonth_calendar()
+    fixtures = build_multimonth_calendar()
+    for fix in fixtures:
+        fix["liga"] = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
+    logger.info("Cargados %d partidos oficiales para el periodo activo (07 Octubre - 30 Noviembre 2026).", len(fixtures))
+    return fixtures
 
 CLUB_INTEGRATED_FIXTURES = build_all_club_fixtures()
 ALL_FIXTURES_POOL = CLUB_INTEGRATED_FIXTURES
 
-
 # ======================================================================================
 # ETL OFICIAL API-SPORTS / API-FOOTBALL (UEFA NATIONS LEAGUE, MUNDIAL, COPAS)
 # ======================================================================================
-
-# ======================================================================================
-# MOTOR DE AUDITORÍA AUTOMATIZADA Y SINCRONIZACIÓN DE RESULTADOS REALES (API-FOOTBALL)
-# ======================================================================================
-
-# ======================================================================================
-# SERVICIO AUTOMÁTICO SOFASCORE & ESPN (100% GRATUITO - CERO CLAVES - CERO SUSCRIPCIÓN)
-# ======================================================================================
-class SofascoreLiveService:
-    """Extrae automáticamente marcadores finales, córners y tarjetas reales desde los
-    endpoints públicos de Sofascore sin requerir claves de API ni registro de pago."""
-    BASE_URL = "https://api.sofascore.com/api/v1"
-    HEADERS = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.sofascore.com/",
-        "Accept": "application/json"
-    }
-
-    @classmethod
-    def fetch_match_stats(cls, home_name: str, away_name: str, date_str: str) -> dict:
-        try:
-            url = f"{cls.BASE_URL}/sport/football/scheduled-events/{date_str}"
-            resp = requests.get(url, headers=cls.HEADERS, timeout=8)
-            if resp.status_code != 200:
-                url_inv = f"{cls.BASE_URL}/sport/football/scheduled-events/{date_str}/inverse"
-                resp = requests.get(url_inv, headers=cls.HEADERS, timeout=8)
-                if resp.status_code != 200:
-                    return None
-
-            events = resp.json().get("events", [])
-            target_event = None
-            for ev in events:
-                h_name = (ev.get("homeTeam") or {}).get("name", "")
-                a_name = (ev.get("awayTeam") or {}).get("name", "")
-                if matches_team_alias(home_name, h_name) and matches_team_alias(away_name, a_name):
-                    target_event = ev
-                    break
-
-            if not target_event:
-                return None
-
-            event_id = target_event.get("id")
-            status_obj = target_event.get("status") or {}
-            is_finished = status_obj.get("type") in ["finished", "ended"] or status_obj.get("description") in ["Ended", "Finished", "AET", "AP"]
-            score_home = int((target_event.get("homeScore") or {}).get("current", 0))
-            score_away = int((target_event.get("awayScore") or {}).get("current", 0))
-
-            corners_total = 0
-            cards_total = 0
-
-            if event_id and is_finished:
-                try:
-                    stat_url = f"{cls.BASE_URL}/event/{event_id}/statistics"
-                    stat_resp = requests.get(stat_url, headers=cls.HEADERS, timeout=6)
-                    if stat_resp.status_code == 200:
-                        s_data = stat_resp.json()
-                        for period in s_data.get("statistics", []):
-                            if period.get("period") == "ALL":
-                                for g in period.get("groups", []):
-                                    for item in g.get("statisticsItems", []):
-                                        n = item.get("name", "").lower()
-                                        if "corner" in n:
-                                            corners_total = int(item.get("home", 0)) + int(item.get("away", 0))
-                                        elif "yellow card" in n:
-                                            cards_total += int(item.get("home", 0)) + int(item.get("away", 0))
-                                        elif "red card" in n:
-                                            cards_total += (int(item.get("home", 0)) + int(item.get("away", 0))) * 2
-                except Exception:
-                    pass
-
-            return {
-                "finished": is_finished,
-                "score_home": score_home,
-                "score_away": score_away,
-                "corners_total": corners_total,
-                "cards_total": cards_total,
-                "source": "SofaScore (Free Open API)"
-            }
-        except Exception as e:
-            logger.debug("SofascoreLiveService error: %s", e)
-            return None
-
-
-class ESPNLiveService:
-    """Fallback público de ESPN sin clave ni suscripción."""
-    LEAGUES_MAP = {
-        "Primera División": "esp.1",
-        "Premier League": "eng.1",
-        "Serie A": "ita.1",
-        "Bundesliga": "ger.1",
-        "Ligue 1": "fra.1",
-        "Campeonato Brasileiro Série A": "bra.1",
-        "UEFA Champions League": "uefa.champions",
-        "UEFA Nations League": "uefa.nations",
-        "Primeira Liga": "por.1"
-    }
-
-    @classmethod
-    def fetch_match_stats(cls, home_name: str, away_name: str, date_str: str, liga: str = "") -> dict:
-        slug = cls.LEAGUES_MAP.get(liga, "esp.1")
-        dt_clean = date_str.replace("-", "")
-        url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard?dates={dt_clean}"
-        try:
-            resp = requests.get(url, timeout=6)
-            if resp.status_code == 200:
-                events = resp.json().get("events", [])
-                for ev in events:
-                    comps = ev.get("competitions", [{}])[0]
-                    competitors = comps.get("competitors", [])
-                    if len(competitors) >= 2:
-                        h = competitors[0] if competitors[0].get("homeAway") == "home" else competitors[1]
-                        a = competitors[1] if competitors[1].get("homeAway") == "away" else competitors[0]
-                        h_t = (h.get("team") or {}).get("name", "")
-                        a_t = (a.get("team") or {}).get("name", "")
-                        if matches_team_alias(home_name, h_t) and matches_team_alias(away_name, a_t):
-                            is_fin = comps.get("status", {}).get("type", {}).get("completed", False)
-                            s_h = int(h.get("score", 0))
-                            s_a = int(a.get("score", 0))
-                            return {
-                                "finished": is_fin,
-                                "score_home": s_h,
-                                "score_away": s_a,
-                                "corners_total": 0,
-                                "cards_total": 0,
-                                "source": "ESPN Sports API (Free)"
-                            }
-        except Exception:
-            pass
-        return None
-
-class SportsResultsAuditor:
-    """Motor de liquidación y auditoría de pronósticos contrastados con datos reales.
-    Permite auditar automáticamente:
-    1. Marcador final y Ganador (1X2 / Doble Oportunidad)
-    2. Goles totales (Over / Under)
-    3. Córners totales (Over / Under)
-    4. Tarjetas totales (Amarillas + Rojas)
-    5. Player Props (Tiros totales, tiros a puerta, goles/asistencias)
-    """
-
-    @classmethod
-    def grade_prediction(cls, pick: dict, match_stats: dict) -> dict:
-        """
-        Evalúa matemáticamente si un pronóstico fue GANADA o PERDIDA en base a las estadísticas reales.
-        """
-        sel = (pick.get("seleccion") or pick.get("mercado") or "").lower()
-        score_home = int(match_stats.get("score_home", 0))
-        score_away = int(match_stats.get("score_away", 0))
-        total_goals = score_home + score_away
-        total_corners = int(match_stats.get("corners_total", 0))
-        total_cards = int(match_stats.get("cards_total", 0))
-        player_shots = int(match_stats.get("player_shots", 0))
-        player_shots_on_target = int(match_stats.get("player_shots_on_target", 0))
-
-        estado = "PENDIENTE"
-        resultado_str = f"{score_home} - {score_away}"
-
-        # 1. Mercados de Goles
-        m_goals_over = re.search(r'(?:más de|over|\+)\s*(\d+\.?\d*)\s*gol', sel)
-        m_goals_under = re.search(r'(?:menos de|under|\-)\s*(\d+\.?\d*)\s*gol', sel)
-        if m_goals_over:
-            linea = float(m_goals_over.group(1))
-            estado = "GANADA" if total_goals > linea else "PERDIDA"
-            resultado_str = f"{total_goals} Goles ({score_home}-{score_away})"
-        elif m_goals_under:
-            linea = float(m_goals_under.group(1))
-            estado = "GANADA" if total_goals < linea else "PERDIDA"
-            resultado_str = f"{total_goals} Goles ({score_home}-{score_away})"
-
-        # 2. Mercados de Córners
-        elif "córner" in sel or "corner" in sel:
-            m_corn = re.search(r'(?:más de|over|\+)\s*(\d+\.?\d*)', sel)
-            if m_corn:
-                linea = float(m_corn.group(1))
-                estado = "GANADA" if total_corners > linea else "PERDIDA"
-                resultado_str = f"{total_corners} Córners Totales"
-
-        # 3. Mercados de Tarjetas
-        elif "tarjeta" in sel or "card" in sel:
-            m_card = re.search(r'(?:más de|over|\+)\s*(\d+\.?\d*)', sel)
-            if m_card:
-                linea = float(m_card.group(1))
-                estado = "GANADA" if total_cards > linea else "PERDIDA"
-                resultado_str = f"{total_cards} Tarjetas Totales"
-
-        # 4. Mercados 1X2 / Doble Oportunidad
-        elif "victoria" in sel or "1x" in sel or "x2" in sel or "gana" in sel:
-            if "1x" in sel or ("empate" in sel and "local" in sel):
-                estado = "GANADA" if score_home >= score_away else "PERDIDA"
-            elif "x2" in sel or ("empate" in sel and "visita" in sel):
-                estado = "GANADA" if score_away >= score_home else "PERDIDA"
-            elif "local" in sel:
-                estado = "GANADA" if score_home > score_away else "PERDIDA"
-            elif "visita" in sel:
-                estado = "GANADA" if score_away > score_home else "PERDIDA"
-
-        # 5. Player Props
-        elif "tiro" in sel or "disparo" in sel:
-            m_shots = re.search(r'(?:más de|over|\+)\s*(\d+\.?\d*)', sel)
-            if m_shots:
-                linea = float(m_shots.group(1))
-                if "puerta" in sel:
-                    estado = "GANADA" if player_shots_on_target > linea else "PERDIDA"
-                    resultado_str = f"{player_shots_on_target} Tiros a Puerta"
-                else:
-                    estado = "GANADA" if player_shots > linea else "PERDIDA"
-                    resultado_str = f"{player_shots} Tiros Totales"
-
-        return {
-            "estado": estado,
-            "resultado": resultado_str,
-            "marcador_final": f"{score_home} - {score_away}",
-            "corners_totales": total_corners,
-            "tarjetas_totales": total_cards
-        }
-
 class ApiSportsETL:
     BASE_URL = "https://v3.football.api-sports.io"
     _sync_running = False
@@ -12695,20 +12816,19 @@ class ApiSportsETL:
             logger.info("API-Sports ETL ya está en ejecución.")
             return False
 
-        client = get_football_api_client()
-        if not client:
-            logger.info("Clave de API-Football (APISPORTS_KEY o RAPIDAPI_KEY) no configurada. Operando con fixture oficial integrado.")
+        api_key = (os.getenv("APISPORTS_KEY") or "").strip()
+        if not api_key:
+            logger.info("APISPORTS_KEY no configurada. Operando con fixture oficial integrado.")
             return False
 
         cls._sync_running = True
         try:
-            headers = client["headers"]
-            base_url = client["base_url"]
+            headers = {"x-apisports-key": api_key}
             fixtures = []
             
             # Intentar primero temporada 2024 (calendario bianual de Nations League)
             for season in [2024, 2026]:
-                url = f"{base_url}/fixtures?league=5&season={season}"
+                url = f"{cls.BASE_URL}/fixtures?league=5&season={season}"
                 logger.info("Consultando API-Sports Nations League (League 5, Season %s)...", season)
                 try:
                     resp = requests.get(url, headers=headers, timeout=15)
@@ -12948,8 +13068,6 @@ STAR_BIOMETRICS = {
     "germán cano": (38, "1.76 m", "74 kg", "Diestro")
 }
 
-EMBEDDED_PLAYERS_DATA_B64 = "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"
-
 def generate_all_players():
     # 1. Cargar dinámicamente desde plantillas_2026_2027.json si existe en el proyecto
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -12958,21 +13076,11 @@ def generate_all_players():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                if isinstance(data, list) and len(data) >= 50:
-                    logger.info("Cargados %d jugadores desde plantillas_2026_2027.json en disco.", len(data))
+                if isinstance(data, list) and len(data) > 0:
+                    logger.info("Cargados %d jugadores desde plantillas_2026_2027.json", len(data))
                     return data
         except Exception as err:
             logger.warning("Error al leer plantillas_2026_2027.json: %s", err)
-
-    # 2. Descomprimir dataset embebido autónomo (616 jugadores)
-    try:
-        raw_p = zlib.decompress(base64.b64decode(EMBEDDED_PLAYERS_DATA_B64)).decode("utf-8")
-        rec_p = json.loads(raw_p)
-        logger.info("Cargados %d jugadores oficiales desde dataset embebido en memoria.", len(rec_p))
-        return rec_p
-    except Exception as e_p:
-        logger.error("Error descomprimiendo plantillas embebidas: %s", e_p)
-
 
     players = []
 
@@ -13752,7 +13860,7 @@ def generate_all_players():
 
     return players
 
-MASTER_PLAYERS_PROPS = generate_all_players()
+MASTER_PLAYERS_PROPS = []  # Datos de jugadores retirados: no se muestran probabilidades sin fuente verificable
 for _p in MASTER_PLAYERS_PROPS:
     _p["liga"] = normalizar_nombre_liga(_p["liga"])
 
@@ -13777,9 +13885,73 @@ def get_players_for_team(team_name: str) -> list:
     return _TEAM_PLAYERS_INDEX.get(str(team_name).lower().strip(), [])
 
 
+
+analytics = SportsAnalyticsEngine()
+
+def _jr_doc(uid):
+    if not db:
+        return {}
+    data = db.collection("usuarios").document(uid).get().to_dict() or {}
+    return data.get("juego_responsable") or {}
+
+
+def _jr_pausado(uid):
+    try:
+        p = _jr_doc(uid).get("pausa_hasta")
+        return bool(p) and _as_utc(p) > datetime.now(timezone.utc)
+    except Exception:
+        return False
+
+
+def _jr_limite_vigente(jr):
+    """Límite mensual en soles vigente, o None si no hay límite."""
+    pend = jr.get("limite_pendiente") or {}
+    try:
+        if pend.get("activa_desde") and _as_utc(pend["activa_desde"]) <= datetime.now(timezone.utc):
+            return float(pend.get("valor", 0)) or None
+    except Exception:
+        pass
+    try:
+        lim = float(jr.get("limite_mensual") or 0)
+    except (TypeError, ValueError):
+        return None
+    return lim if lim > 0 else None
+
+
+def _gasto_mes(uid):
+    """Lo pagado o pendiente este mes por el usuario (los rechazados no cuentan)."""
+    if not db:
+        return 0.0
+    inicio = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    total = 0.0
+    for col in ("pagos_mp", "pagos_manuales"):
+        for d in db.collection(col).where("usuario_id", "==", uid).stream():
+            x = d.to_dict() or {}
+            if x.get("estado") == "RECHAZADO":
+                continue
+            try:
+                if _as_utc(x.get("fecha_utc")) >= inicio:
+                    total += float(x.get("monto", 0))
+            except Exception:
+                continue
+    return round(total, 2)
+
+
+def _bloqueo_compra(uid, monto):
+    """Motivo por el que no se puede comprar ahora (pausa o límite), o None si se puede."""
+    if _jr_pausado(uid):
+        return "Tu cuenta tiene una pausa de juego responsable activa. Mientras dure no puedes comprar planes."
+    lim = _jr_limite_vigente(_jr_doc(uid))
+    if lim is not None and _gasto_mes(uid) + float(monto) > lim:
+        return f"Esta compra superaría tu límite mensual de S/ {lim:.2f}. Puedes ajustarlo en Juego responsable."
+    return None
+
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    _origenes = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://predicxion-ia.onrender.com").split(",") if o.strip()]
+    CORS(app, resources={r"/api/*": {"origins": _origenes}})
 
     # Forzar redirección automática a HTTPS seguro (evita advertencia de sitio no seguro en navegadores)
     @app.before_request
@@ -13837,7 +14009,7 @@ def create_app() -> Flask:
     @require_auth
     def sync_user():
         user_email = (g.user_email or "").strip().lower()
-        es_owner = user_email in OWNER_EMAILS
+        es_owner = _is_owner()
 
         if not db:
             return jsonify({
@@ -13859,8 +14031,8 @@ def create_app() -> Flask:
                 if es_owner:
                     plan = "elite"
                     es_vip = True
-                elif data.get("suscripcion_activa", False):
-                    plan = data.get("plan", "pro").lower()
+                else:
+                    plan = _plan_from_doc(data)
                     es_vip = True
                 user_ref.set({"ultimo_ingreso": firestore.SERVER_TIMESTAMP if firestore else datetime.now(timezone.utc).isoformat()}, merge=True)
             else:
@@ -13884,169 +14056,296 @@ def create_app() -> Flask:
             }), 200
         except Exception as e:
             logger.error("Error sincronizando usuario: %s", e)
-            return jsonify({"success": False, "error": str(e)}), 500
+            return jsonify({"success": False, "error": _safe_err(e)}), 500
 
     # Creación de Preferencia en MercadoPago
+    def _activar_suscripcion(uid, plan_id, origen):
+        """Activa o extiende la suscripción desde el vencimiento vigente (si lo hay). Devuelve la fecha nueva."""
+        dias = int(PLANES.get(plan_id, {}).get("dias", SUSCRIPCION_DIAS))
+        ref = db.collection("usuarios").document(uid)
+        ahora = datetime.now(timezone.utc)
+        base = ahora
+        doc = ref.get()
+        if doc.exists:
+            data = doc.to_dict() or {}
+            if _plan_from_doc(data) != "free" and data.get("suscripcion_expira"):
+                try:
+                    vigente = _as_utc(data["suscripcion_expira"])
+                    if vigente > base:
+                        base = vigente
+                except Exception:
+                    pass
+        nuevo = base + timedelta(days=dias)
+        ref.set({
+            "suscripcion_activa": True,
+            "esVip": True,
+            "plan": plan_id,
+            "suscripcion_expira": nuevo.isoformat(),
+            "ultimo_pago": origen,
+            "actualizado_en": ahora.isoformat(),
+        }, merge=True)
+        return nuevo.isoformat()
+
     @app.route("/api/v1/payments/create-preference", methods=["POST"])
     @require_auth
+    @limit_user(10, 3600)
     def create_mercadopago_preference():
+        """El precio lo fija el SERVIDOR según el plan. El navegador solo elige 'pro', 'elite' o 'anual'."""
         try:
-            body = request.get_json() or {}
-            plan_code = (body.get("plan_codigo") or body.get("plan_name") or "pro").lower().strip()
-            
-            # Tabla Oficial de Precios en el Servidor (Previene manipulación de precios desde el cliente)
-            OFFICIAL_PLANS = {
-                "pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
-                "mensual pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
-                "pase pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
-                "elite": {"nombre": "Pase Élite Cuantitativo", "precio": 79.90, "vigencia_dias": 30},
-                "pase elite": {"nombre": "Pase Élite Cuantitativo", "precio": 79.90, "vigencia_dias": 30},
-                "anual": {"nombre": "Pase Anual VIP", "precio": 299.00, "vigencia_dias": 365}
-            }
+            body = request.get_json(silent=True) or {}
+            plan_id = str(body.get("plan") or body.get("plan_codigo") or "").lower().strip()
+            if plan_id not in PLANES:
+                return jsonify({"success": False, "error": "Plan no válido."}), 400
+            plan = PLANES[plan_id]
 
-            matched_plan = OFFICIAL_PLANS.get(plan_code, OFFICIAL_PLANS["pro"])
-            plan_name = matched_plan["nombre"]
-            amount = float(matched_plan["precio"])
+            bloqueo = _bloqueo_compra(g.user_id, plan["precio"])
+            if bloqueo:
+                return jsonify({"success": False, "error": bloqueo}), 403
 
             if not MP_ACCESS_TOKEN:
                 return jsonify({
-                    "success": True,
-                    "init_point": "https://www.mercadopago.com.pe",
-                    "preference_id": f"PREF-TEST-{int(time.time())}"
-                }), 200
+                    "success": False,
+                    "error": "Los pagos con tarjeta no están disponibles por ahora. Puedes pagar con Yape o Plin."
+                }), 503
 
-            preference_payload = {
-                "items": [
-                    {
-                        "title": f"PredicXion IA - {plan_name}",
-                        "quantity": 1,
-                        "unit_price": amount,
-                        "currency_id": "PEN"
-                    }
-                ],
-                "payer": {"email": g.user_email or "usuario@predicxion.com"},
+            base_url = (os.getenv("PUBLIC_BASE_URL") or "https://predicxion-ia.onrender.com").rstrip("/")
+            payload = {
+                "items": [{
+                    "title": f"PredicXion IA - {plan['nombre']}",
+                    "quantity": 1,
+                    "unit_price": plan["precio"],
+                    "currency_id": "PEN",
+                }],
+                "payer": {"email": g.user_email},
                 "external_reference": g.user_id,
+                "metadata": {"plan": plan_id, "user_id": g.user_id},
+                "notification_url": f"{base_url}/api/v1/payments/webhook",
                 "back_urls": {
-                    "success": request.host_url.rstrip('/') + "/?pago=aprobado",
-                    "failure": request.host_url.rstrip('/') + "/?pago=fallido",
-                    "pending": request.host_url.rstrip('/') + "/?pago=pendiente"
+                    "success": f"{base_url}/?pago=aprobado",
+                    "failure": f"{base_url}/?pago=fallido",
+                    "pending": f"{base_url}/?pago=pendiente",
                 },
-                "auto_return": "approved"
+                "auto_return": "approved",
             }
-
-            if mp_sdk:
-                try:
-                    pref_res = mp_sdk.preference().create(preference_payload)
-                    res_data = pref_res.get("response", {})
-                    init_point = res_data.get("init_point") or res_data.get("sandbox_init_point")
-                    return jsonify({
-                        "success": True,
-                        "init_point": init_point,
-                        "preference_id": res_data.get("id")
-                    }), 200
-                except Exception as sdk_err:
-                    logger.warning("Fallo SDK oficial MercadoPago, intentando vía REST directo: %s", sdk_err)
-
-            headers = {
-                "Authorization": f"Bearer {MP_ACCESS_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            resp = requests.post(
+            res = requests.post(
                 "https://api.mercadopago.com/checkout/preferences",
-                headers=headers,
-                json=preference_payload,
-                timeout=12
+                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
+                json=payload,
+                timeout=12,
             )
-
-            if resp.status_code in [200, 201]:
-                data = resp.json()
-                return jsonify({
-                    "success": True,
-                    "init_point": data.get("init_point") or data.get("sandbox_init_point"),
-                    "preference_id": data.get("id")
-                }), 200
-            else:
-                logger.warning("MercadoPago REST retornó status %d. Activando pasarela de respaldo.", resp.status_code)
-                return jsonify({
-                    "success": True,
-                    "init_point": "https://www.mercadopago.com.pe",
-                    "preference_id": f"PREF-FALLBACK-{int(time.time())}",
-                    "mensaje": "Pasarela oficial disponible."
-                }), 200
+            data = res.json() if res.content else {}
+            if res.status_code in (200, 201) and data.get("init_point"):
+                return jsonify({"success": True, "init_point": data["init_point"], "preference_id": data.get("id")}), 200
+            logger.error("MercadoPago no creó la preferencia: status=%s", res.status_code)
+            return jsonify({"success": False, "error": "No se pudo iniciar el pago. Inténtalo de nuevo."}), 502
         except Exception as exc:
-            return jsonify({"success": False, "error": str(exc)}), 500
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
-    # Webhook Oficial de Notificaciones de Mercado Pago (IPN / Webhooks)
-    # ----------------------------------------------------------------------------------
-    # GESTIÓN ADMINISTRATIVA SEGURA (PAGOS Y AUDITORÍA VERIFICABLE)
-    # ----------------------------------------------------------------------------------
+    @app.route("/api/v1/payments/webhook", methods=["POST", "GET"])
+    def mercadopago_webhook():
+        """MercadoPago avisa aquí. No confiamos en el aviso: consultamos el pago en su API oficial."""
+        try:
+            body = request.get_json(silent=True) or {}
+            topic = request.args.get("type") or request.args.get("topic") or body.get("type") or body.get("topic")
+            payment_id = (request.args.get("data.id") or request.args.get("id")
+                          or (body.get("data") or {}).get("id") or body.get("id"))
+            if topic != "payment" or not payment_id:
+                return jsonify({"success": True, "ignored": True}), 200
+            payment_id = str(payment_id)
+            if not re.fullmatch(r"\d{3,20}", payment_id) or not MP_ACCESS_TOKEN or not db:
+                return jsonify({"success": False}), 503
+
+            resp = requests.get(
+                f"https://api.mercadopago.com/v1/payments/{payment_id}",
+                headers={"Authorization": f"Bearer {MP_ACCESS_TOKEN}"},
+                timeout=12,
+            )
+            if resp.status_code != 200:
+                logger.warning("Webhook MP: no se pudo leer el pago %s (status %s)", payment_id, resp.status_code)
+                return jsonify({"success": False}), 502
+            pago = resp.json()
+            if pago.get("status") != "approved":
+                return jsonify({"success": True, "status": pago.get("status")}), 200
+
+            uid = str(pago.get("external_reference") or "")
+            plan_id = str((pago.get("metadata") or {}).get("plan") or "").lower()
+            monto = float(pago.get("transaction_amount") or 0)
+            if (not uid or plan_id not in PLANES or pago.get("currency_id") != "PEN"
+                    or monto + 0.01 < PLANES[plan_id]["precio"]):
+                logger.error("Webhook MP: pago %s no coincide con un plan (monto=%s)", payment_id, monto)
+                return jsonify({"success": True, "ignored": "no coincide"}), 200
+
+            ref = db.collection("pagos_mp").document(payment_id)
+            if ref.get().exists:
+                return jsonify({"success": True, "duplicado": True}), 200
+            ref.set({"usuario_id": uid, "plan": plan_id, "monto": monto,
+                     "estado": "APROBADO", "fecha_utc": datetime.now(timezone.utc).isoformat()})
+            try:
+                _activar_suscripcion(uid, plan_id, f"mercadopago:{payment_id}")
+            except Exception:
+                ref.delete()
+                raise
+            return jsonify({"success": True, "activado": True}), 200
+        except Exception as exc:
+            logger.error("Error en webhook MercadoPago: %s", exc, exc_info=True)
+            return jsonify({"success": False}), 500
+
+    @app.route("/api/v1/payments/manual-submit", methods=["POST"])
+    @require_auth
+    def process_manual_payment():
+        """Yape/Plin: el monto lo fija el servidor. Queda PENDIENTE hasta que el owner verifique el abono."""
+        try:
+            if rate_limited(f"manual:{g.user_id}", 5, 3600):
+                return jsonify({"success": False, "error": "Demasiados intentos. Espera un momento."}), 429
+            body = request.get_json(silent=True) or {}
+            metodo = str(body.get("metodo", "")).lower()
+            telefono = str(body.get("telefono", "")).strip()
+            codigo = str(body.get("codigo", "")).strip().upper()
+            plan_id = str(body.get("plan") or body.get("plan_codigo") or "").lower().strip()
+
+            if metodo not in ("yape", "plin"):
+                return jsonify({"success": False, "error": "Método no admitido."}), 400
+            if plan_id not in PLANES:
+                return jsonify({"success": False, "error": "Plan no válido."}), 400
+            if not re.fullmatch(r"9\d{8}", telefono):
+                return jsonify({"success": False, "error": "El celular debe tener 9 dígitos y empezar con 9."}), 400
+            if not re.fullmatch(r"[A-Z0-9\-]{4,32}", codigo):
+                return jsonify({"success": False, "error": "Código de operación inválido."}), 400
+            if not db:
+                return jsonify({"success": False, "error": "Servicio no disponible por ahora."}), 503
+
+            bloqueo = _bloqueo_compra(g.user_id, PLANES[plan_id]["precio"])
+            if bloqueo:
+                return jsonify({"success": False, "error": bloqueo}), 403
+
+            repetido = list(db.collection("pagos_manuales").where("codigo_operacion", "==", codigo).limit(1).stream())
+            if repetido:
+                return jsonify({"success": False, "error": "Ese código de operación ya fue registrado."}), 409
+
+            operacion_id = f"{metodo.upper()}-{int(time.time())}-{g.user_id[:6]}"
+            db.collection("pagos_manuales").document(operacion_id).set({
+                "usuario_id": g.user_id,
+                "email": g.user_email,
+                "metodo": metodo.upper(),
+                "telefono_remitente": telefono,
+                "codigo_operacion": codigo,
+                "plan_id": plan_id,
+                "monto": PLANES[plan_id]["precio"],
+                "estado": "PENDIENTE_REVISION",
+                "fecha_utc": datetime.now(timezone.utc).isoformat(),
+            })
+            return jsonify({
+                "success": True,
+                "message": "Comprobante recibido. Tu plan se activará cuando verifiquemos el abono.",
+                "operacion_id": operacion_id,
+                "estado": "PENDIENTE_REVISION",
+            }), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
+
     @app.route("/api/v1/admin/payments/pending", methods=["GET"])
     @require_auth
-    def get_pending_payments():
-        user_email = (g.user_email or "").strip().lower()
-        if user_email not in OWNER_EMAILS:
-            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
-        
-        pagos = []
-        if db:
-            try:
-                docs = db.collection("pagos_manuales").where("estado", "==", "PENDIENTE").stream()
-                for d in docs:
-                    p = d.to_dict()
-                    p["id"] = d.id
-                    pagos.append(p)
-            except Exception as e:
-                logger.error("Error consultando pagos pendientes: %s", e)
-        return jsonify({"success": True, "pagos": pagos}), 200
+    @require_owner
+    def admin_pending_payments():
+        try:
+            docs = db.collection("pagos_manuales").where("estado", "==", "PENDIENTE_REVISION").limit(50).stream()
+            pagos = []
+            for d in docs:
+                x = d.to_dict() or {}
+                pagos.append({"id": d.id, **{k: x.get(k) for k in (
+                    "email", "metodo", "telefono_remitente", "codigo_operacion", "plan_id", "monto", "fecha_utc")}})
+            pagos.sort(key=lambda p: p.get("fecha_utc") or "")
+            return jsonify({"success": True, "pagos": pagos}), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
     @app.route("/api/v1/admin/payments/review", methods=["POST"])
     @require_auth
-    def review_payment():
-        user_email = (g.user_email or "").strip().lower()
-        if user_email not in OWNER_EMAILS:
-            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
-        
-        body = request.get_json(silent=True) or {}
-        op_id = body.get("operacion_id")
-        aprobar = body.get("aprobar", False)
-        
-        if not op_id or not db:
-            return jsonify({"success": False, "error": "Datos inválidos."}), 400
-
+    @require_owner
+    def admin_review_payment():
         try:
-            doc_ref = db.collection("pagos_manuales").document(op_id)
-            doc = doc_ref.get()
+            body = request.get_json(silent=True) or {}
+            op_id = str(body.get("operacion_id", ""))
+            ref = db.collection("pagos_manuales").document(op_id)
+            doc = ref.get()
             if not doc.exists:
-                return jsonify({"success": False, "error": "Pago no encontrado."}), 404
-            
-            p_data = doc.to_dict()
-            u_id = p_data.get("usuario_id")
-            plan_id = p_data.get("plan_id", "pro")
+                return jsonify({"success": False, "error": "Operación no encontrada."}), 404
+            x = doc.to_dict() or {}
+            if x.get("estado") != "PENDIENTE_REVISION":
+                return jsonify({"success": False, "error": "Esa operación ya fue revisada."}), 409
+            ahora = datetime.now(timezone.utc).isoformat()
+            if bool(body.get("aprobar")):
+                vence = _activar_suscripcion(x["usuario_id"], x.get("plan_id", "pro"), f"manual:{op_id}")
+                ref.set({"estado": "APROBADO", "revisado_en": ahora}, merge=True)
+                return jsonify({"success": True, "estado": "APROBADO", "vence": vence}), 200
+            ref.set({"estado": "RECHAZADO", "revisado_en": ahora}, merge=True)
+            return jsonify({"success": True, "estado": "RECHAZADO"}), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
-            if aprobar:
-                doc_ref.update({
-                    "estado": "APROBADO",
-                    "aprobado_por": user_email,
-                    "fecha_aprobacion": datetime.now(timezone.utc).isoformat()
-                })
-                dias = 365 if plan_id == "anual" else 30
-                expira_dt = datetime.now(timezone.utc) + timedelta(days=dias)
-                db.collection("usuarios").document(u_id).set({
-                    "esVip": True,
-                    "plan": plan_id,
-                    "suscripcion_activa": True,
-                    "suscripcion_expira": expira_dt.isoformat()
-                }, merge=True)
-                return jsonify({"success": True, "mensaje": "Pago aprobado y plan activado exitosamente."}), 200
-            else:
-                doc_ref.update({
-                    "estado": "RECHAZADO",
-                    "rechazado_por": user_email,
-                    "fecha_rechazo": datetime.now(timezone.utc).isoformat()
-                })
-                return jsonify({"success": True, "mensaje": "Pago rechazado."}), 200
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
+    # ---------------- JUEGO RESPONSABLE: límite de gasto y pausa ----------------
+    @app.route("/api/v1/usuario/juego-responsable", methods=["GET", "POST"])
+    @require_auth
+    def juego_responsable():
+        try:
+            if not db:
+                return jsonify({"success": False, "error": "Servicio no disponible por ahora."}), 503
+            ahora = datetime.now(timezone.utc)
+            if request.method == "GET":
+                jr = _jr_doc(g.user_id)
+                return jsonify({
+                    "success": True,
+                    "limite_mensual": _jr_limite_vigente(jr),
+                    "limite_pendiente": jr.get("limite_pendiente"),
+                    "pausa_hasta": jr.get("pausa_hasta"),
+                    "pausado": _jr_pausado(g.user_id),
+                    "gasto_mes": _gasto_mes(g.user_id),
+                }), 200
+
+            body = request.get_json(silent=True) or {}
+            jr = dict(_jr_doc(g.user_id))
+            aviso = None
+
+            if "limite_mensual" in body:
+                raw = body.get("limite_mensual")
+                try:
+                    nuevo = 0.0 if raw in (None, "") else float(raw)
+                except (TypeError, ValueError):
+                    return jsonify({"success": False, "error": "Límite inválido."}), 400
+                if nuevo < 0 or nuevo > 5000:
+                    return jsonify({"success": False, "error": "El límite debe estar entre S/ 0 y S/ 5000."}), 400
+                actual = _jr_limite_vigente(jr) or 0.0
+                aumento = actual > 0 and (nuevo == 0 or nuevo > actual)
+                if aumento:
+                    # Subir o quitar el límite tarda 7 días (periodo de enfriamiento)
+                    jr["limite_mensual"] = actual
+                    jr["limite_pendiente"] = {"valor": nuevo, "activa_desde": (ahora + timedelta(days=7)).isoformat()}
+                    aviso = "El aumento o la eliminación del límite se aplicará dentro de 7 días."
+                else:
+                    jr["limite_mensual"] = nuevo
+                    jr.pop("limite_pendiente", None)
+
+            if "pausa_dias" in body:
+                try:
+                    dias = int(body.get("pausa_dias") or 0)
+                except (TypeError, ValueError):
+                    return jsonify({"success": False, "error": "Días de pausa inválidos."}), 400
+                if dias < 0 or dias > 365:
+                    return jsonify({"success": False, "error": "La pausa puede durar de 1 a 365 días."}), 400
+                if dias > 0:
+                    nueva = ahora + timedelta(days=dias)
+                    actual_p = jr.get("pausa_hasta")
+                    try:
+                        if actual_p and _as_utc(actual_p) > nueva:
+                            nueva = _as_utc(actual_p)  # una pausa no se acorta
+                    except Exception:
+                        pass
+                    jr["pausa_hasta"] = nueva.isoformat()
+
+            db.collection("usuarios").document(g.user_id).set({"juego_responsable": jr}, merge=True)
+            return jsonify({"success": True, "aviso": aviso}), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
     @app.route("/api/v1/admin/auditoria/record", methods=["POST"])
     @require_auth
@@ -14089,98 +14388,7 @@ def create_app() -> Flask:
             })
             return jsonify({"success": True, "mensaje": "Pick registrado con éxito en el historial oficial."}), 200
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
-
-    @app.route("/api/v1/payments/webhook", methods=["POST"])
-    def mercadopago_webhook():
-        """Recibe y valida notificaciones de pago directamente de Mercado Pago servidor a servidor."""
-        try:
-            topic = request.args.get("topic") or request.args.get("type")
-            payment_id = request.args.get("id") or request.args.get("data.id")
-
-            if not payment_id and request.is_json:
-                body = request.get_json(silent=True) or {}
-                payment_id = body.get("data", {}).get("id")
-                topic = topic or body.get("type")
-
-            if not payment_id:
-                return jsonify({"status": "ignored", "reason": "No payment id"}), 200
-
-            # Consultar estado real a la API oficial de Mercado Pago
-            headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
-            payment_url = f"https://api.mercadopago.com/v1/payments/{payment_id}"
-            resp = requests.get(payment_url, headers=headers, timeout=10)
-
-            if resp.status_code == 200:
-                payment_data = resp.json()
-                status = payment_data.get("status")
-                user_id = payment_data.get("external_reference")
-                payer_email = payment_data.get("payer", {}).get("email")
-
-                if status == "approved" and db and user_id:
-                    # Activar membresía en Firestore verificada por servidor
-                    user_ref = db.collection("usuarios").document(user_id)
-                    user_ref.set({
-                        "esVip": True,
-                        "plan": "pro",
-                        "ultimo_pago_id": payment_id,
-                        "pago_estado": "approved",
-                        "fecha_activacion": datetime.now(timezone.utc).isoformat()
-                    }, merge=True)
-                    logger.info("Membresía activada exitosamente para usuario %s vía webhook MP.", user_id)
-
-                return jsonify({"status": "processed", "payment_status": status}), 200
-            return jsonify({"status": "pending_validation"}), 200
-        except Exception as e:
-            logger.error("Error en mercadopago_webhook: %s", e)
-            return jsonify({"status": "error", "error": str(e)}), 500
-
-    # Pagos Manuales (Yape / Plin - Gabriel Cerdán 942 791 524)
-    @app.route("/api/v1/payments/manual-submit", methods=["POST"])
-    @require_auth
-    def process_manual_payment():
-        try:
-            body = request.get_json() or {}
-            metodo = body.get("metodo", "").lower()
-            telefono = str(body.get("telefono", "")).strip()
-            codigo = str(body.get("codigo", "")).strip()
-            plan_texto = body.get("plan_texto", "Mensual Pro")
-            monto = float(body.get("monto", 39.90))
-
-            if metodo not in ["yape", "plin"]:
-                return jsonify({"success": False, "error": "Método no admitido."}), 400
-
-            if not re.match(r"^9\d{8}$", telefono):
-                return jsonify({"success": False, "error": "El celular debe tener 9 dígitos y empezar con 9."}), 400
-
-            if not codigo or len(codigo) < 4:
-                return jsonify({"success": False, "error": "Código de operación obligatorio."}), 400
-
-            operacion_id = f"{metodo.upper()}-{int(time.time())}"
-            pago_record = {
-                "usuario_id": g.user_id,
-                "email": g.user_email,
-                "metodo": metodo.upper(),
-                "receptor_nombre": "Gabriel Cerdán",
-                "receptor_telefono": "942791524",
-                "telefono_remitente": telefono,
-                "codigo_operacion": codigo,
-                "monto": monto,
-                "plan": plan_texto,
-                "estado": "PENDIENTE_REVISION",
-                "fecha_utc": datetime.now(timezone.utc).isoformat()
-            }
-            if db:
-                db.collection("pagos_manuales").document(operacion_id).set(pago_record)
-
-            return jsonify({
-                "success": True,
-                "message": "Comprobante recibido. La suscripción se activará una vez verificado el abono por Gabriel Cerdán.",
-                "operacion_id": operacion_id,
-                "estado": "PENDIENTE_REVISION"
-            }), 200
-        except Exception as exc:
-            return jsonify({"success": False, "error": str(exc)}), 500
+            return jsonify({"success": False, "error": _safe_err(e)}), 500
 
     # Cartelera Completa y Pronósticos (Con Inyección Completa de UEFA Nations League 2026)
     _CARTELERA_MEMO_CACHE = {}
@@ -14209,7 +14417,7 @@ def create_app() -> Flask:
                 # Descartar permanentemente partidos anteriores a la fecha actual
                 if fecha_dia_solo < today_str:
                     continue
-                if fecha_dia_solo > _CURRENT_ACTIVE_WINDOW.get("end_date", "2026-11-30") if "_CURRENT_ACTIVE_WINDOW" in globals() else "2026-11-30":
+                if fecha_dia_solo > "2026-11-30":
                     continue
 
                 div_name = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
@@ -14243,6 +14451,7 @@ def create_app() -> Flask:
                     "pronostico_principal": analisis["pronostico_principal"],
                     "pilares_cuantitativos": analisis["pilares_cuantitativos"],
                     "organizacion_stakazos": analisis["organizacion_stakazos"],
+                    "mercados_completos": analisis.get("mercados_completos", []),
                     "modulo_arbitraje": analisis["modulo_arbitraje"],
                     "analisis_partidos_anteriores": analisis.get("analisis_partidos_anteriores", {}),
                     "h2h_directo": analisis.get("h2h_directo", {}),
@@ -14306,66 +14515,11 @@ def create_app() -> Flask:
             }), 200
 
     
-    @app.route("/api/v1/vip/value-bets", methods=["GET"])
-    def get_value_bets():
-        if not db:
-            return jsonify({"success": True, "value_bets": []}), 200
-        try:
-            now = datetime.now(timezone.utc)
-            inicio_dia = now.strftime("%Y-%m-%d")
-            docs = list(db.collection("partidos_verificados")
-                          .where("fecha_utc", ">=", inicio_dia)
-                          .order_by("fecha_utc")
-                          .limit(50)
-                          .stream())
-            results = []
-            for d in docs:
-                m = d.to_dict()
-                analysis = analytics.generate_institutional_analysis(m)
-                probs = analysis["probabilidades"]["1X2"]
-                fair = analysis["probabilidades"]["fair_odds"]
-
-                odds_1 = round(fair["1"] * 1.09, 2)
-                odds_2 = round(fair["2"] * 1.09, 2)
-
-                k1 = analytics.evaluate_kelly_stake(probs["1"], odds_1)
-                if k1["value_detected"]:
-                    results.append({
-                        "partido": f"{m.get('local')} vs {m.get('visitante')}",
-                        "liga": m.get("liga"),
-                        "mercado": f"Victoria {m.get('local')}",
-                        "cuota": odds_1,
-                        "cuota_mercado": odds_1,
-                        "cuota_justa": fair["1"],
-                        "prob_real": probs["1"],
-                        "probabilidad_modelo": probs["1"],
-                        "ev_pct": k1["ev_percent"],
-                        "ev_percent": k1["ev_percent"],
-                        "edge_percent": k1["edge_percent"],
-                        "stake_recomendado": f"{k1['stake_percent']}%"
-                    })
-                k2 = analytics.evaluate_kelly_stake(probs["2"], odds_2)
-                if k2["value_detected"]:
-                    results.append({
-                        "partido": f"{m.get('local')} vs {m.get('visitante')}",
-                        "liga": m.get("liga"),
-                        "mercado": f"Victoria {m.get('visitante')}",
-                        "cuota": odds_2,
-                        "cuota_mercado": odds_2,
-                        "cuota_justa": fair["2"],
-                        "prob_real": probs["2"],
-                        "probabilidad_modelo": probs["2"],
-                        "ev_pct": k2["ev_percent"],
-                        "ev_percent": k2["ev_percent"],
-                        "edge_percent": k2["edge_percent"],
-                        "stake_recomendado": f"{k2['stake_percent']}%"
-                    })
-            return jsonify({"success": True, "value_bets": results}), 200
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
 
     # VIP 2: Generador de Anclas Seguras (>80% Viabilidad)
     @app.route("/api/v1/vip/anclas", methods=["GET"])
+    @require_auth
+    @require_subscription("pro")
     def list_anclas():
         try:
             op_date = get_current_operational_date()
@@ -14434,12 +14588,12 @@ def create_app() -> Flask:
             top_anclas = anclas[:13]
             return jsonify({"success": True, "anclas": top_anclas, "total": len(top_anclas)}), 200
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
+            return jsonify({"success": False, "error": _safe_err(e)}), 500
 
     # VIP 3: Calculadora de Bankroll y Criterio de Kelly en Soles
     @app.route("/api/v1/vip/bankroll-calculator", methods=["POST"])
     @require_auth
-    @require_subscription
+    @require_subscription("pro")
     def calculate_bankroll():
         try:
             body = request.get_json() or {}
@@ -14450,51 +14604,9 @@ def create_app() -> Flask:
             res = analytics.evaluate_kelly_stake(prob_percent, cuota, bankroll=bankroll)
             return jsonify({"success": True, "data": res}), 200
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 400
+            return jsonify({"success": False, "error": _safe_err(e)}), 400
 
     # VIP 4: Escáner de Micromercados (Tarjetas & Córners)
-    @app.route("/api/v1/vip/micromercados", methods=["GET"])
-    def get_micromarkets():
-        if not db:
-            return jsonify({"success": True, "micromercados": []}), 200
-        try:
-            now = datetime.now(timezone.utc)
-            inicio_dia = now.strftime("%Y-%m-%d")
-            docs = list(db.collection("partidos_verificados")
-                          .where("fecha_utc", ">=", inicio_dia)
-                          .order_by("fecha_utc")
-                          .limit(50)
-                          .stream())
-            micros = []
-            for d in docs:
-                m = d.to_dict()
-                analisis = analytics.generate_institutional_analysis(m)
-                stks = analisis.get("organizacion_stakazos", {})
-                m_oro = stks.get("micromercado_oro", {})
-                p7 = analisis["pilares_cuantitativos"]["pilar_7_micromercados_friccion"]
-                p1 = analisis["pilares_cuantitativos"]["pilar_1_volumen_ofensivo"]
-                
-                tipo_val = m_oro.get("tipo", "CÓRNERS" if "córner" in (m_oro.get("mercado", "")).lower() else "TARJETAS")
-                pron_val = m_oro.get("mercado") or p7.get("verde_seguro") or "Más de 7.5 Córners"
-                prob_val = str(m_oro.get("probabilidad", "84.5%")).replace("%", "").strip()
-                motivo_val = m_oro.get("motivo") or "Volumen ofensivo y desborde táctico."
-
-                micros.append({
-                    "partido": f"{m.get('local')} vs {m.get('visitante')}",
-                    "liga": m.get("liga"),
-                    "tipo": tipo_val,
-                    "pronostico": pron_val,
-                    "pronostico_friccion": pron_val,
-                    "probabilidad": prob_val,
-                    "probabilidad_oro": f"{prob_val}%",
-                    "motivo": motivo_val,
-                    "motivo_tactico": motivo_val,
-                    "corners_proyectados": p1.get("corners_proyectados"),
-                    "tarjetas_proyectadas": p7.get("tarjetas_proyectadas")
-                })
-            return jsonify({"success": True, "micromercados": micros}), 200
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
 
     # VIP 5: Envío de Alertas a Canal de Telegram (Rotativo Dinámico & Match Directo)
 
@@ -14507,6 +14619,9 @@ def create_app() -> Flask:
     # ==================================================================================
     @app.route("/api/v1/ai/triple-analysis", methods=["POST", "GET"])
     @app.route("/api/v1/ai/dual-analysis", methods=["POST", "GET"])
+    @require_auth
+    @require_subscription("pro")
+    @limit_user(10, 3600)
     def get_triple_ai_analysis():
         """Inferencia en vivo con las tres IAs (Gemini + DeepSeek + Grok/Groq) consumiendo API keys reales."""
         try:
@@ -14535,7 +14650,7 @@ def create_app() -> Flask:
             })
         except Exception as exc:
             logger.error("Error en /api/v1/ai/triple-analysis: %s", exc)
-            return jsonify({"success": False, "error": str(exc)}), 500
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
     @app.route("/api/v1/top3/daily", methods=["GET"])
     def get_daily_top3():
@@ -14555,7 +14670,7 @@ def create_app() -> Flask:
                     target_date = fechas_futuras[0]
                     matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
                 elif ALL_FIXTURES_POOL:
-                    matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= today_str][:15]
+                    matches_day = ALL_FIXTURES_POOL[:15]
 
             ranked = []
             for m in matches_day:
@@ -14574,7 +14689,6 @@ def create_app() -> Flask:
                 odd_val = round(100.0 / max(5.0, prob_num), 2)
                 ranked.append({
                     "match_id": m.get("id_partido"),
-                    "partido": f"{m.get('local')} vs {m.get('visitante')}",
                     "local": m.get("local"),
                     "visitante": m.get("visitante"),
                     "liga": m.get("liga"),
@@ -14619,17 +14733,14 @@ def create_app() -> Flask:
             })
         except Exception as exc:
             logger.error("Error en /api/v1/top3/daily: %s", exc)
-            return jsonify({"success": False, "error": str(exc)}), 500
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
     
     @app.route("/api/v1/vip/telegram-alert/broadcast", methods=["POST"])
+    @require_auth
+    @require_owner
     def broadcast_telegram_alert():
         global _telegram_match_cursor
-        if not _verificar_es_admin():
-            return jsonify({
-                "success": False,
-                "error": "Acceso restringido: Esta acción es exclusiva para el administrador."
-            }), 403
 
         bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
         channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
@@ -14789,193 +14900,106 @@ def create_app() -> Flask:
                 }), 400
         except Exception as e:
             logger.error("Error en broadcast_telegram_alert: %s", e)
-            return jsonify({"success": False, "error": str(e)}), 500
-    # VIP 6: Historial de Auditoría Transparente (Partidos reales de hoy 07/10 y métricas matemáticas)
-    @app.route("/api/v1/vip/auditoria", methods=["GET"])
-    def get_auditoria():
-        """Historial de auditoría 24/7 transparente: Muestra los pronósticos oficiales
-        que YA FINALIZARON en la fecha más reciente (ej. ayer respecto a la fecha operativa),
-        consultando primero Firestore (auditoria_picks) y, si aún no hay registros,
-        generando dinámicamente la auditoría de los partidos oficiales terminados de ayer."""
-        op_date = get_current_operational_date()
-        target_fecha = request.args.get("fecha", "").strip()
-
-        # Calcular la fecha auditada: por defecto el día inmediatamente anterior (ayer)
-        try:
-            op_dt = datetime.strptime(op_date, "%Y-%m-%d")
-            ayer_str = (op_dt - timedelta(days=1)).strftime("%Y-%m-%d")
-        except Exception:
-            ayer_str = "2026-10-10"
-
-        fecha_auditada = target_fecha if target_fecha else ayer_str
-
+            return jsonify({"success": False, "error": _safe_err(e)}), 500
+    # VIP 6: Historial de auditoría (solo picks registrados en Firestore; sin resultados escritos a mano)
+    def _load_auditoria():
         historial = []
-
-        # 1. Intentar cargar picks reales registrados en Firestore
-        if db:
-            try:
-                picks_stream = (db.collection("auditoria_picks")
-                                  .where("fecha", "==", fecha_auditada)
-                                  .stream())
-                for doc in picks_stream:
-                    d = doc.to_dict()
+        try:
+            if db:
+                docs = (db.collection("auditoria_picks")
+                          .order_by("fecha", direction="DESCENDING")
+                          .limit(200)
+                          .stream())
+                for doc in docs:
+                    x = doc.to_dict() or {}
+                    try:
+                        cuota = float(x.get("cuota", 0))
+                    except (TypeError, ValueError):
+                        cuota = 0.0
                     historial.append({
                         "id": doc.id,
-                        "fecha": d.get("fecha", fecha_auditada),
-                        "partido": d.get("partido", "Partido Oficial"),
-                        "liga": d.get("liga", "Liga Oficial"),
-                        "seleccion": d.get("seleccion") or d.get("mercado", ""),
-                        "cuota": str(d.get("cuota", "1.50")),
-                        "resultado": d.get("resultado", d.get("marcador_final", "Finalizado")),
-                        "estado": d.get("estado", "GANADA"),
-                        "verificado": True
+                        "fecha": str(x.get("fecha", ""))[:10],
+                        "partido": str(x.get("partido", ""))[:120],
+                        "seleccion": str(x.get("seleccion", ""))[:120],
+                        "cuota": f"{cuota:.2f}",
+                        "_cuota": cuota,
+                        "resultado": str(x.get("resultado", "")) or "Pendiente",
+                        "estado": str(x.get("estado", "PENDIENTE")).upper(),
                     })
-            except Exception as e_db:
-                logger.warning("Error consultando auditoria_picks en Firestore: %s", e_db)
+        except Exception as exc:
+            logger.error("Error leyendo auditoría: %s", exc, exc_info=True)
 
-        # 2. Si no hay picks en Firestore para esa fecha, generar auditoría verificada de ayer
-        if not historial:
-            # Diccionario dinámico con resultados oficiales según la fecha auditada
-            # 10 de Octubre (Ayer respecto al 11/10)
-            resultados_10 = [
-                {"fecha": "2026-10-10", "partido": "Vasco da Gama vs Clube do Remo", "seleccion": "Victoria de Vasco da Gama (1)", "cuota": "1.55", "resultado": "2 - 0 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Vasco da Gama vs Clube do Remo", "seleccion": "Más de 8.5 Córners Totales", "cuota": "1.42", "resultado": "10 Córners", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "São Paulo vs Vitória", "seleccion": "Más de 1.5 Goles Totales", "cuota": "1.38", "resultado": "3 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "São Paulo vs Vitória", "seleccion": "Más de 7.5 Córners Totales", "cuota": "1.40", "resultado": "11 Córners", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "São Paulo vs Vitória", "seleccion": "Más de 3.5 Tarjetas Totales", "cuota": "1.48", "resultado": "4 Tarjetas", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Atlético Mineiro vs Santos", "seleccion": "Victoria Atlético Mineiro o Empate (1X)", "cuota": "1.36", "resultado": "1 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Atlético Mineiro vs Santos", "seleccion": "Más de 4.5 Tarjetas Totales", "cuota": "1.60", "resultado": "6 Tarjetas", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Arsenal vs Leeds United", "seleccion": "Victoria de Arsenal (1)", "cuota": "1.30", "resultado": "2 - 0 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Arsenal vs Leeds United", "seleccion": "Más de 1.5 Goles Totales", "cuota": "1.25", "resultado": "2 - 0 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Real Madrid vs Villarreal", "seleccion": "Victoria de Real Madrid (1)", "cuota": "1.45", "resultado": "2 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Real Madrid vs Villarreal", "seleccion": "Más de 2.5 Goles Totales", "cuota": "1.58", "resultado": "2 - 1 (3 Goles)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Bayern Múnich vs Augsburgo", "seleccion": "Más de 2.5 Goles Totales", "cuota": "1.40", "resultado": "3 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-10", "partido": "Bayern Múnich vs Augsburgo", "seleccion": "Más de 8.5 Córners Totales", "cuota": "1.45", "resultado": "7 Córners", "estado": "PERDIDA"}
-            ]
-
-            # 11 de Octubre (Para cuando la fecha operativa sea 12/10)
-            resultados_11 = [
-                {"fecha": "2026-10-12", "partido": "Bahia vs Mirassol", "seleccion": "Victoria de Bahia o Empate (1X)", "cuota": "1.32", "resultado": "2 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-12", "partido": "Bahia vs Mirassol", "seleccion": "Más de 1.5 Goles Totales", "cuota": "1.35", "resultado": "2 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-12", "partido": "Bahia vs Mirassol", "seleccion": "Más de 8.5 Córners Totales", "cuota": "1.44", "resultado": "11 Córners", "estado": "GANADA"},
-                {"fecha": "2026-10-12", "partido": "Bahia vs Mirassol", "seleccion": "Más de 3.5 Tarjetas Totales", "cuota": "1.50", "resultado": "5 Tarjetas", "estado": "GANADA"},
-                {"fecha": "2026-10-12", "partido": "Coritiba vs Botafogo", "seleccion": "Gana Botafogo o Empate (X2)", "cuota": "1.38", "resultado": "1 - 1 (Final)", "estado": "GANADA"},
-                {"fecha": "2026-10-12", "partido": "Coritiba vs Botafogo", "seleccion": "Más de 7.5 Córners Totales", "cuota": "1.40", "resultado": "9 Córners", "estado": "GANADA"}
-            ]
-
-            if fecha_auditada == "2026-10-12" or (op_date >= "2026-10-12" and not target_fecha):
-                historial = resultados_11
-                fecha_auditada = "2026-10-12"
-            elif fecha_auditada == "2026-10-10" or op_date == "2026-10-12":
-                historial = resultados_10
-                fecha_auditada = "2026-10-10"
-            else:
-                historial = resultados_10
-
-        total = len(historial)
-        ganadas = sum(1 for h in historial if h["estado"] == "GANADA")
-        perdidas = sum(1 for h in historial if h["estado"] == "PERDIDA")
-        efectividad_pct = round((ganadas / total) * 100, 1) if total > 0 else 0.0
-
-        return jsonify({
+        liquidados = [h for h in historial if h["estado"] in ("GANADA", "PERDIDA")]
+        n = len(liquidados)
+        ganadas = sum(1 for h in liquidados if h["estado"] == "GANADA")
+        pendientes = sum(1 for h in historial if h["estado"] == "PENDIENTE")
+        profit = sum((h["_cuota"] - 1.0) if h["estado"] == "GANADA" else -1.0 for h in liquidados)
+        for h in historial:
+            h.pop("_cuota", None)
+        return {
             "success": True,
-            "fecha_operativa": op_date,
-            "fecha_auditada": fecha_auditada,
             "metricas": {
-                "tasa_acierto_global": f"{efectividad_pct}%",
-                "yield_acumulado": "+28.4%",
-                "total_picks_auditados": total,
+                "tasa_acierto_global": f"{round(ganadas / n * 100, 1)}%" if n else "Sin datos",
+                "yield_acumulado": f"{round(profit / n * 100, 1):+}%" if n else "Sin datos",
+                "total_picks_auditados": n,
                 "ganadas": ganadas,
-                "perdidas": perdidas,
-                "anclas_nivel_1_acierto": "91.7%",
-                "roi_arbitraje_promedio": "4.5%"
+                "perdidas": n - ganadas,
+                "pendientes": pendientes,
+                "muestra_pequena": n < 30,
+                "aviso": "Resultados pasados no garantizan resultados futuros. Con menos de 30 picks la muestra es pequeña."
             },
-            "fechas_disponibles_auditoria": ["2026-10-10", "2026-10-12", "2026-10-12"],
-            "historial": historial
-        })
+            "historial": historial,
+        }
+
+    @app.route("/api/v1/vip/auditoria", methods=["GET"])
+    def get_auditoria():
+        """Historial público calculado desde picks registrados."""
+        return jsonify(_load_auditoria()), 200
+
+    @app.route("/api/v1/admin/auditoria/record", methods=["POST"])
+    @require_auth
+    @require_owner
+    def admin_record_pick():
+        """Registra un pick PENDIENTE o liquida uno existente (GANADA / PERDIDA / ANULADA)."""
+        try:
+            body = request.get_json(silent=True) or {}
+            pick_id = str(body.get("id", "")).strip()
+            estado = str(body.get("estado", "PENDIENTE")).upper()
+            if estado not in ("PENDIENTE", "GANADA", "PERDIDA", "ANULADA"):
+                return jsonify({"success": False, "error": "Estado inválido."}), 400
+            if pick_id:
+                ref = db.collection("auditoria_picks").document(pick_id)
+                if not ref.get().exists:
+                    return jsonify({"success": False, "error": "Pick no encontrado."}), 404
+                datos = {"estado": estado, "liquidado_en": datetime.now(timezone.utc).isoformat()}
+                if body.get("resultado"):
+                    datos["resultado"] = str(body["resultado"])[:80]
+                ref.set(datos, merge=True)
+                return jsonify({"success": True, "id": pick_id}), 200
+
+            partido = str(body.get("partido", "")).strip()[:120]
+            seleccion = str(body.get("seleccion", "")).strip()[:120]
+            fecha = str(body.get("fecha", "")).strip()[:10]
+            try:
+                cuota = float(body.get("cuota"))
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "error": "Cuota inválida."}), 400
+            if not partido or not seleccion or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha) or not (1.01 <= cuota <= 50):
+                return jsonify({"success": False, "error": "Revisa partido, selección, fecha (AAAA-MM-DD) y cuota."}), 400
+            ref = db.collection("auditoria_picks").document()
+            ref.set({"partido": partido, "seleccion": seleccion, "fecha": fecha, "cuota": cuota,
+                     "estado": estado, "resultado": str(body.get("resultado", ""))[:80],
+                     "registrado_en": datetime.now(timezone.utc).isoformat()})
+            return jsonify({"success": True, "id": ref.id}), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
+
 
     # EMISIÓN DE PARLAY COMBINADA / TOP 5 DIRECTO A TELEGRAM VIP (SOLO ADMINISTRADOR)
-    @app.route("/api/v1/vip/telegram-parlay/broadcast", methods=["POST"])
-    def broadcast_telegram_parlay():
-        if not _verificar_es_admin():
-            return jsonify({
-                "success": False,
-                "error": "Acceso restringido: Esta acción es exclusiva para el administrador."
-            }), 403
-        bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
-        channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
-        if "t.me/" in channel_id:
-            channel_id = "@" + channel_id.split("t.me/")[-1].replace("+", "").strip().rstrip("/")
-        elif channel_id and not channel_id.startswith("@") and not channel_id.startswith("-") and not channel_id.isdigit():
-            channel_id = "@" + channel_id
-
-        if not bot_token or not channel_id:
-            return jsonify({"success": False, "error": "Falta configurar TELEGRAM_BOT_TOKEN o TELEGRAM_CHANNEL_ID en Render."}), 400
-
-        try:
-            today_str = get_current_operational_date()
-            body = request.get_json(silent=True) or {}
-            custom_selecciones = body.get("selecciones")
-            perfil = (body.get("perfil") or "Top 5 Destacados").capitalize()
-
-            if custom_selecciones and isinstance(custom_selecciones, list) and len(custom_selecciones) > 0:
-                items = custom_selecciones
-                cuota_total = float(body.get("cuota_total") or body.get("cuota_combinada") or 1.0)
-                prob_str = str(body.get("probabilidad_matematica") or "Alta (>75%)")
-                ev_str = str(body.get("ev_estimado") or "+8.5% EV")
-                titulo = f"🔥 <b>PARLAY COMBINADA IA ({perfil.upper()})</b> 🔥"
-            else:
-                t_res = get_daily_top3().get_json()
-                items = t_res.get("top3", [])[:5]
-                if not items:
-                    return jsonify({"success": False, "error": "No hay selecciones disponibles hoy."}), 400
-                cuota_total = 1.0
-                for p in items:
-                    cuota_total *= float(p.get("cuota_justa") or p.get("cuota") or 1.45)
-                prob_str = "Alta (>80%)"
-                ev_str = "+9.2% EV"
-                titulo = "🔥 <b>TOP 5 DESTACADOS DEL DÍA • PARLAY VIP</b> 🔥"
-
-            lineas = [
-                f"{titulo}\n",
-                f"📅 <b>Fecha:</b> {today_str}\n"
-            ]
-
-            for i, p in enumerate(items, 1):
-                cuota_p = float(p.get("cuota") or p.get("cuota_justa") or 1.35)
-                partido = p.get("partido") or f"{p.get('local')} vs {p.get('visitante')}"
-                mercado = p.get("mercado") or "Pronóstico Principal"
-                prob = p.get("probabilidad") or (f"{round(float(p.get('prob', 0.82))*100, 1)}%" if p.get("prob") else "82%")
-                lineas.append(f"<b>{i}. {partido}</b>")
-                lineas.append(f"   🎯 {mercado} • <code>@{cuota_p:.2f}</code> ({prob})")
-
-            lineas.append(f"\n💰 <b>Cuota Combinada:</b> <code>@{cuota_total:.2f}</code>")
-            lineas.append("📲 <i>Ver en la terminal: <a href='https://predicxion-ia.onrender.com'>predicxion-ia.onrender.com</a></i>")
-
-            mensaje = chr(10).join(lineas)
-            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-            resp = requests.post(url, json={
-                "chat_id": channel_id,
-                "text": mensaje,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True
-            }, timeout=10)
-
-            if resp.status_code == 200:
-                return jsonify({"success": True, "mensaje": "Top 5 transmitido exitosamente al canal VIP de Telegram."}), 200
-            else:
-                logger.error("Error devuelto por Telegram API: %s", resp.text)
-                err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
-                desc = err_json.get("description", resp.text)
-                return jsonify({
-                    "success": False,
-                    "error": f"Error de Telegram: {desc}. Verifica que el bot sea administrador de tu canal o grupo."
-                }), 500
-        except Exception as err:
-            logger.error("Error transmitiendo parlay: %s", err)
-            return jsonify({"success": False, "error": str(err)}), 500
 
     @app.route("/api/v1/vip/telegram-auditoria/broadcast", methods=["POST"])
+    @require_auth
+    @require_owner
     def broadcast_telegram_auditoria():
         """Transmite el balance oficial de auditoría (ganadas y pérdidas) directamente al canal VIP de Telegram."""
 
@@ -14994,7 +15018,7 @@ def create_app() -> Flask:
             }), 400
 
         try:
-            audit_res = get_auditoria().get_json()
+            audit_res = _load_auditoria()
             metricas = audit_res.get("metricas", {})
             historial = audit_res.get("historial", [])
 
@@ -15007,8 +15031,8 @@ def create_app() -> Flask:
                 "📋 <b>Detalle de Jugadas Auditadas:</b>"
             ]
 
-            for h in historial:
-                icon = "✅ GANADA" if h.get("estado") == "GANADA" else "❌ PERDIDA"
+            for h in historial[:15]:
+                icon = {"GANADA": "✅ GANADA", "PERDIDA": "❌ PERDIDA", "ANULADA": "⚪ ANULADA"}.get(h.get("estado"), "⏳ PENDIENTE")
                 lineas.append(f"• <b>{h.get('partido')}:</b> {h.get('seleccion')} (@{h.get('cuota')}) ➔ <i>{h.get('resultado')}</i> [{icon}]")
 
             lineas.append("\n📲 <i>Auditoría verificada en <a href='https://predicxion-ia.onrender.com'>predicxion-ia.onrender.com</a></i>")
@@ -15035,120 +15059,14 @@ def create_app() -> Flask:
                 }), 500
         except Exception as err:
             logger.error("Error en broadcast_telegram_auditoria: %s", err)
-            return jsonify({"success": False, "error": str(err)}), 500
+            return jsonify({"success": False, "error": _safe_err(err)}), 500
 
-    @app.route("/api/v1/vip/surebets", methods=["GET"])
-    def list_surebets():
-        surebets = [
-            {
-                "partido": "Botafogo vs Vasco da Gama",
-                "liga": "Campeonato Brasileiro Série A",
-                "mercado": "Victoria Local (1) vs Doble Oportunidad (X2)",
-                "casas": "Betano (1 @ 1.95) vs Te Apuesto (X2 @ 2.25)",
-                "margen_beneficio_pct": 4.5,
-                "distribucion_stake": "S/ 53.60 en Betano | S/ 46.40 en Te Apuesto (Retorno garantizado: S/ 104.50)",
-                "estado": "ACTIVA"
-            },
-            {
-                "partido": "Cruzeiro vs São Paulo",
-                "liga": "Campeonato Brasileiro Série A",
-                "mercado": "Más de 2.5 Goles vs Menos de 2.5 Goles",
-                "casas": "Bet365 (Over 2.5 @ 2.20) vs Doradobet (Under 2.5 @ 1.95)",
-                "margen_beneficio_pct": 3.4,
-                "distribucion_stake": "S/ 47.00 en Bet365 | S/ 53.00 en Doradobet (Retorno garantizado: S/ 103.40)",
-                "estado": "ACTIVA"
-            },
-            {
-                "partido": "Internacional vs Corinthians",
-                "liga": "Campeonato Brasileiro Série A",
-                "mercado": "Empate Apuesta No Válida (DNB 1 vs DNB 2)",
-                "casas": "Betano (DNB Inter @ 1.75) vs Betfair (DNB Corinthians @ 2.65)",
-                "margen_beneficio_pct": 5.4,
-                "distribucion_stake": "S/ 60.20 en Betano | S/ 39.80 en Betfair (Retorno garantizado: S/ 105.40)",
-                "estado": "ACTIVA"
-            },
-            {
-                "partido": "Red Bull Bragantino vs Mirassol",
-                "liga": "Campeonato Brasileiro Série A",
-                "mercado": "Ambos Equipos Anotan (Sí vs No)",
-                "casas": "1xBet (Sí @ 2.12) vs Te Apuesto (No @ 2.05)",
-                "margen_beneficio_pct": 4.2,
-                "distribucion_stake": "S/ 49.20 en 1xBet | S/ 50.80 en Te Apuesto (Retorno garantizado: S/ 104.20)",
-                "estado": "ACTIVA"
-            },
-            {
-                "partido": "Vitória vs Chapecoense",
-                "liga": "Campeonato Brasileiro Série A",
-                "mercado": "Victoria Local (1) vs Doble Oportunidad (X2)",
-                "casas": "Bet365 (1 @ 1.88) vs Doradobet (X2 @ 2.38)",
-                "margen_beneficio_pct": 4.9,
-                "distribucion_stake": "S/ 55.90 en Bet365 | S/ 44.10 en Doradobet (Retorno garantizado: S/ 104.90)",
-                "estado": "ACTIVA"
-            }
-        ]
-        return jsonify({"success": True, "surebets": surebets}), 200
 
-    @app.route("/api/v1/vip/fatiga", methods=["GET"])
-    def get_fatigue_index():
-        if not db:
-            return jsonify({"success": True, "fatiga": []}), 200
-        try:
-            now = datetime.now(timezone.utc)
-            inicio_dia = now.strftime("%Y-%m-%d")
-            docs = list(db.collection("partidos_verificados")
-                          .where("fecha_utc", ">=", inicio_dia)
-                          .order_by("fecha_utc")
-                          .limit(30)
-                          .stream())
-            fatiga_list = []
-            for d in docs:
-                m = d.to_dict()
-                code = m.get("codigo_liga", "")
-                h_name = m.get("local", "")
-                a_name = m.get("visitante", "")
-                fatiga_h = 35 + (sum(ord(c) for c in h_name) % 45)
-                fatiga_a = 40 + (sum(ord(c) for c in a_name) % 40)
-                
-                dias_h = max(2, min(7, int(3 + (sum(ord(c) for c in h_name) % 5))))
-                partidos_15_h = max(3, min(6, int(3 + (sum(ord(c) for c in h_name) % 4))))
-                diag_h = "Sobrecarga Muscular" if fatiga_h > 65 else ("Desgaste Moderado" if fatiga_h > 45 else "Óptimo y Fresco")
-
-                dias_a = max(2, min(7, int(3 + (sum(ord(c) for c in a_name) % 5))))
-                partidos_15_a = max(3, min(6, int(3 + (sum(ord(c) for c in a_name) % 4))))
-                diag_a = "Sobrecarga Muscular" if fatiga_a > 65 else ("Desgaste Moderado" if fatiga_a > 45 else "Óptimo y Fresco")
-
-                fatiga_list.append({
-                    "equipo": h_name,
-                    "partido": f"{h_name} vs {a_name}",
-                    "liga": m.get("liga"),
-                    "dias_descanso": dias_h,
-                    "partidos_ultimos_15_dias": partidos_15_h,
-                    "estado_fisico": diag_h,
-                    "fatiga_local_pct": fatiga_h,
-                    "fatiga_visitante_pct": fatiga_a,
-                    "impacto_rendimiento": diag_h,
-                    "rotaciones_previstas": fatiga_h > 65
-                })
-                fatiga_list.append({
-                    "equipo": a_name,
-                    "partido": f"{h_name} vs {a_name}",
-                    "liga": m.get("liga"),
-                    "dias_descanso": dias_a,
-                    "partidos_ultimos_15_dias": partidos_15_a,
-                    "estado_fisico": diag_a,
-                    "fatiga_local_pct": fatiga_h,
-                    "fatiga_visitante_pct": fatiga_a,
-                    "impacto_rendimiento": diag_a,
-                    "rotaciones_previstas": fatiga_a > 65
-                })
-            return jsonify({"success": True, "fatiga": fatiga_list}), 200
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
 
     # VIP 9: Simulación Monte Carlo por ID
     @app.route("/api/v1/vip/monte-carlo/<match_id>", methods=["GET"])
     @require_auth
-    @require_subscription
+    @require_subscription("pro")
     def get_monte_carlo(match_id: str):
         if not db:
             return jsonify({"success": False, "error": "Base de datos no disponible."}), 503
@@ -15169,12 +15087,13 @@ def create_app() -> Flask:
                 "monte_carlo": mc_result
             }), 200
         except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
+            return jsonify({"success": False, "error": _safe_err(e)}), 500
 
     # VIP 9.1: Simulación Monte Carlo Custom On-Demand
     @app.route("/api/v1/vip/monte-carlo/custom", methods=["POST"])
     @require_auth
-    @require_subscription
+    @require_subscription("pro")
+    @limit_user(30, 3600)
     def custom_monte_carlo():
         data = request.get_json() or {}
         local = data.get("local", "").strip()
@@ -15195,46 +15114,11 @@ def create_app() -> Flask:
         }), 200
 
     # VIP 10: Rastreador de Dinero Inteligente (Smart Money & Dropping Odds)
-    @app.route("/api/v1/vip/smart-money", methods=["GET"])
-    def get_smart_money():
-        if not db:
-            return jsonify({"success": True, "smart_money": []}), 200
-        try:
-            now = datetime.now(timezone.utc)
-            inicio_dia = now.strftime("%Y-%m-%d")
-            docs = list(db.collection("partidos_verificados")
-                          .where("fecha_utc", ">=", inicio_dia)
-                          .order_by("fecha_utc")
-                          .limit(30)
-                          .stream())
-            alerts = []
-            for d in docs:
-                m = d.to_dict()
-                analisis = analytics.generate_institutional_analysis(m)
-                fair = analisis["probabilidades"]["fair_odds"]
-                h_name = m.get("local", "")
-                vol_soles = 15000 + (sum(ord(c) for c in h_name) * 85)
-                drop_pct = 7.5 + ((sum(ord(c) for c in h_name) % 10) * 1.2)
-                c_apertura = round(fair["1"] * 1.22, 2)
-                c_actual = round(fair["1"] * 1.05, 2)
-                alerts.append({
-                    "partido": f"{h_name} vs {m.get('visitante')}",
-                    "mercado": f"Apostar a {h_name}",
-                    "cuota_apertura": c_apertura,
-                    "cuota_actual": c_actual,
-                    "caida_pct": f"-{round(drop_pct, 1)}%",
-                    "caida_cuota_pct": round(drop_pct, 1),
-                    "flujo_capital": f"S/ {vol_soles:,.2f}",
-                    "volumen_institucional_estimado": f"S/ {vol_soles:,.2f}",
-                    "senal": "Flujo de Dinero Fuerte (Whale Action)"
-                })
-            return jsonify({"success": True, "smart_money": alerts}), 200
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 500
 
     # Disparadores ETL y Mantenimiento Protegidos por Autenticación de Administrador
     @app.route("/api/v1/admin/sync/apisports", methods=["POST"])
     @require_auth
+    @require_owner
     def sync_apisports():
         user_email = (g.user_email or "").strip().lower()
         if user_email not in OWNER_EMAILS:
@@ -15247,6 +15131,7 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/admin/etl/trigger", methods=["POST"])
     @require_auth
+    @require_owner
     def trigger_etl():
         user_email = (g.user_email or "").strip().lower()
         if user_email not in OWNER_EMAILS:
@@ -15265,353 +15150,10 @@ def create_app() -> Flask:
     # ----------------------------------------------------------------------------------
 
     # MÓDULO A: Estadísticas y Proyecciones de Jugadores (Player Props)
-    @app.route("/api/v1/players/props", methods=["GET"])
-    def get_player_props():
-        """Retorna las estadísticas reales de Player Props (goles, xG, tiros al arco) sincronizadas
-        con los 4 sitios de datos oficiales (Flashscore, WhoScored, FBref, API-Football) y vincula
-        dinámicamente a cada jugador con su próximo rival REAL del calendario 2026."""
-        try:
-            import unicodedata
-            def _clean_str(s):
-                return unicodedata.normalize('NFKD', s or '').encode('ASCII', 'ignore').decode('utf-8').lower().strip()
 
-            op_date = get_current_operational_date()
-            equipo_filter = _clean_str(request.args.get("equipo", ""))
-            liga_filter = request.args.get("liga", "").strip().lower()
-            q_filter = _clean_str(request.args.get("q", ""))
-
-            # Mapa dinámico de próximos rivales reales extraídos de ALL_FIXTURES_POOL
-            future_fixtures = sorted([f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= op_date], key=lambda x: x.get("fecha_utc", ""))
-            
-            rival_map = {}
-            for f in future_fixtures:
-                loc = f.get("local", "").strip()
-                vis = f.get("visitante", "").strip()
-                dt = (f.get("fecha_utc") or "")[:10]
-                mid = f.get("id_partido", "")
-                c_loc = _clean_str(loc)
-                c_vis = _clean_str(vis)
-
-                if c_loc not in rival_map:
-                    rival_map[c_loc] = {"rival": vis, "fecha": dt, "condicion": "Local", "partido_id": mid}
-                if c_vis not in rival_map:
-                    rival_map[c_vis] = {"rival": loc, "fecha": dt, "condicion": "Visitante", "partido_id": mid}
-
-            players_db = []
-            for orig_p in MASTER_PLAYERS_PROPS:
-                p_copy = dict(orig_p)
-                c_eq = _clean_str(p_copy.get("equipo", ""))
-                
-                # Buscar emparejamiento exacto o parcial con el club
-                matched_rival = None
-                if c_eq in rival_map:
-                    matched_rival = rival_map[c_eq]
-                else:
-                    for k_eq, riv_info in rival_map.items():
-                        if c_eq in k_eq or k_eq in c_eq:
-                            matched_rival = riv_info
-                            break
-
-                if matched_rival:
-                    p_copy["proximo_rival"] = matched_rival["rival"]
-                    p_copy["proxima_fecha"] = matched_rival["fecha"]
-                    p_copy["condicion_proximo_partido"] = matched_rival["condicion"]
-                    p_copy["partido_id"] = matched_rival["partido_id"]
-                else:
-                    p_copy["proxima_fecha"] = op_date
-
-                # Metadatos de fuentes estadísticas cruzadas
-                p_copy["fuentes_auditadas"] = ["Flashscore", "WhoScored", "FBref", "API-Football"]
-                players_db.append(p_copy)
-
-            # Filtros dinámicos
-            filtrados = players_db
-            norm_liga = normalizar_nombre_liga(liga_filter) if (liga_filter and liga_filter != "todas") else None
-
-            if norm_liga and norm_liga != "Otras Ligas":
-                filtrados = [p for p in filtrados if p["liga"] == norm_liga or liga_filter in p["liga"].lower()]
-            elif liga_filter and liga_filter != "todas":
-                filtrados = [p for p in filtrados if liga_filter in p["liga"].lower()]
-
-            if equipo_filter and equipo_filter != "todos":
-                if equipo_filter in ["psg", "paris saint-germain", "paris saint germain"]:
-                    filtrados = [p for p in filtrados if "paris" in _clean_str(p["equipo"])]
-                else:
-                    filtrados = [p for p in filtrados if equipo_filter in _clean_str(p["equipo"])]
-
-            if q_filter:
-                filtrados = [p for p in filtrados if q_filter in _clean_str(p["nombre"]) or q_filter in _clean_str(p["equipo"])]
-
-            equipos_disponibles = sorted(list(set(p["equipo"] for p in players_db if (not norm_liga or p["liga"] == norm_liga or (liga_filter and liga_filter in p["liga"].lower())))))
-            ligas_disponibles = sorted(list(set(p["liga"] for p in players_db)))
-
-            return jsonify({
-                "success": True,
-                "total": len(filtrados),
-                "fecha_operativa": op_date,
-                "fuentes_validadas": ["Flashscore", "WhoScored", "FBref", "API-Football"],
-                "ligas_disponibles": ligas_disponibles,
-                "equipos_disponibles": equipos_disponibles,
-                "jugadores": filtrados
-            })
-        except Exception as exc:
-            logger.error("Error en /api/v1/players/props: %s", exc)
-            return jsonify({"success": False, "error": str(exc)}), 500
-
-    @app.route("/api/v1/streaks/finder", methods=["GET"])
-    def get_streak_finder():
-        try:
-            categoria = request.args.get("categoria", "todas").lower()
-            streaks = [
-                # Over Goles
-                {"categoria": "over_goles", "equipo": "Eintracht Frankfurt", "liga": "Bundesliga", "racha": "5 partidos seguidos Over 2.5", "hit_rate": "100%", "promedio": "4.2 goles/partido", "proximo_partido": "Bayer Leverkusen vs Eintracht Frankfurt", "mercado_recomendado": "Más de 2.5 Goles", "cuota": 1.55, "icono": "🔥"},
-                {"categoria": "over_goles", "equipo": "Villarreal", "liga": "LaLiga EA Sports", "racha": "7 de 8 partidos Over 2.5", "hit_rate": "87.5%", "promedio": "3.6 goles/partido", "proximo_partido": "Villarreal vs Getafe", "mercado_recomendado": "Más de 2.0 Goles", "cuota": 1.48, "icono": "🔥"},
-                {"categoria": "over_goles", "equipo": "Brentford", "liga": "Premier League", "racha": "4 partidos consecutivos con gol en primeros 10 min", "hit_rate": "100%", "promedio": "3.8 goles/partido", "proximo_partido": "Manchester United vs Brentford", "mercado_recomendado": "Más de 1.5 Goles", "cuota": 1.25, "icono": "⚽"},
-
-                # Vallas Invictas (Under / Clean Sheet)
-                {"categoria": "valla_invicta", "equipo": "Juventus", "liga": "Serie A", "racha": "6 vallas invictas en 7 partidos", "hit_rate": "85.7%", "promedio": "0.14 goles concedidos/p", "proximo_partido": "Juventus vs Lazio", "mercado_recomendado": "Menos de 2.5 Goles", "cuota": 1.68, "icono": "🛡️"},
-                {"categoria": "valla_invicta", "equipo": "Lens", "liga": "Ligue 1", "racha": "Menos de 2.5 goles en 6 de 7 partidos", "hit_rate": "85.7%", "promedio": "0.57 goles recibidos/p", "proximo_partido": "Saint-Étienne vs Lens", "mercado_recomendado": "Menos de 3.0 Goles", "cuota": 1.42, "icono": "🛡️"},
-
-                # Córners
-                {"categoria": "corners", "equipo": "Manchester City", "liga": "Premier League", "racha": "Más de 9.5 córners en 6 de 7 fechas", "hit_rate": "85.7%", "promedio": "8.2 córners propios/p", "proximo_partido": "Wolves vs Manchester City", "mercado_recomendado": "Más de 8.5 Córners Totales", "cuota": 1.52, "icono": "🚩"},
-                {"categoria": "corners", "equipo": "Tottenham Hotspur", "liga": "Premier League", "racha": "Más de 10.5 córners totales en 5 partidos al hilo", "hit_rate": "100%", "promedio": "11.4 córners/partido", "proximo_partido": "Tottenham vs West Ham", "mercado_recomendado": "Más de 9.5 Córners Totales", "cuota": 1.65, "icono": "🚩"},
-
-                # Tarjetas
-                {"categoria": "tarjetas", "equipo": "Getafe", "liga": "LaLiga EA Sports", "racha": "Más de 4.5 tarjetas totales en 7 de 8 fechas", "hit_rate": "87.5%", "promedio": "5.6 tarjetas/partido", "proximo_partido": "Villarreal vs Getafe", "mercado_recomendado": "Más de 3.5 Tarjetas Totales", "cuota": 1.45, "icono": "🟨"},
-                {"categoria": "tarjetas", "equipo": "Sevilla", "liga": "LaLiga EA Sports", "racha": "Más de 4.5 tarjetas en 6 partidos seguidos", "hit_rate": "83.3%", "promedio": "5.2 tarjetas/partido", "proximo_partido": "Barcelona vs Sevilla", "mercado_recomendado": "Más de 4.5 Tarjetas Totales", "cuota": 1.78, "icono": "🟨"},
-
-                # Victorias Invictas
-                {"categoria": "victorias", "equipo": "Sporting CP", "liga": "Primeira Liga", "racha": "8 victorias consecutivas (paso perfecto)", "hit_rate": "100%", "promedio": "3.4 goles anotados/p", "proximo_partido": "Famalicão vs Sporting CP", "mercado_recomendado": "Victoria Directa de Sporting CP", "cuota": 1.35, "icono": "👑"},
-                {"categoria": "victorias", "equipo": "PSV Eindhoven", "liga": "Eredivisie", "racha": "8 victorias en 8 fechas de liga", "hit_rate": "100%", "promedio": "3.4 goles anotados/p", "proximo_partido": "AZ Alkmaar vs PSV", "mercado_recomendado": "Gana PSV o Empata (1X/X2)", "cuota": 1.38, "icono": "👑"}
-            ]
-
-            if categoria != "todas":
-                streaks = [s for s in streaks if s["categoria"] == categoria]
-
-            return jsonify({
-                "success": True,
-                "total_rachas": len(streaks),
-                "rachas": streaks
-            }), 200
-        except Exception as e:
-            logger.error("Error en get_streak_finder: %s", e)
-            return jsonify({"success": False, "error": str(e)}), 500
 
     # MÓDULO C: Creador de Combinadas Inteligentes (Bet Builder Quant)
-    @app.route("/api/v1/bet-builder/quant", methods=["POST", "GET"])
-    def generate_bet_builder():
-        import random
-        try:
-            body = request.get_json(silent=True) or {}
-            perfil = (body.get("perfil") or request.args.get("perfil", "balanceada")).lower()
 
-            op_date = get_current_operational_date()
-            matches_today = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == op_date]
-            if not matches_today:
-                fechas_futuras = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= op_date)))
-                target_date = fechas_futuras[0] if fechas_futuras else op_date
-                matches_today = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
-
-            destacados_pool = []
-            for m in matches_today:
-                an = analytics.generate_institutional_analysis(m)
-                p_princ = an.get("pronostico_principal", {})
-                prob_raw = p_princ.get("probabilidad", "50%")
-                prob_num = float(re.sub(r'[^0-9.]', '', prob_raw) or 50.0)
-                destacados_pool.append((prob_num, m, an))
-
-            destacados_pool.sort(key=lambda x: x[0], reverse=True)
-            destacados_matches = [x[1] for x in destacados_pool[:12]]
-
-            pool_candidato = []
-            for m in destacados_matches:
-                loc = m["local"]
-                vis = m["visitante"]
-                an = analytics.generate_institutional_analysis(m)
-                stk = an.get("organizacion_stakazos", {}).get("nivel_1_base", {})
-                p_raw = float(re.sub(r'[^0-9.]', '', stk.get("probabilidad", "85%")) or 85.0)
-                prob_dec = round(p_raw / 100.0, 3)
-                cuota = round(100.0 / max(5.0, p_raw), 2)
-                pool_candidato.append({
-                    "partido": f"{loc} vs {vis}",
-                    "liga": m.get("liga"),
-                    "mercado": stk.get("mercado", "Doble Oportunidad Protegida"),
-                    "cuota": max(1.15, cuota),
-                    "prob": prob_dec,
-                    "icono": "🛡️",
-                    "razon": f"Base cuantitativa con {p_raw}% de viabilidad modelada."
-                })
-
-                # Buscar jugador estrella real para este partido
-                for pl in MASTER_PLAYERS_PROPS:
-                    team = pl.get("equipo", "")
-                    if team and (matches_team_alias(loc, team) or matches_team_alias(vis, team)):
-                        mkts = pl.get("mercados_destacados", [])
-                        if mkts:
-                            mkt = mkts[0]
-                            pl_prob = float(re.sub(r'[^0-9.]', '', str(mkt.get("prob", "75%"))) or 75.0) / 100.0
-                            pool_candidato.append({
-                                "partido": f"{loc} vs {vis}",
-                                "liga": m.get("liga"),
-                                "mercado": f"{pl['nombre']}: {mkt.get('mercado')}",
-                                "cuota": float(mkt.get("cuota", 1.65)),
-                                "prob": pl_prob,
-                                "icono": mkt.get("icono", "🎯"),
-                                "razon": f"{pl['nombre']} ({pl['equipo']}) promedia métricas destacadas en {pl['posicion']}."
-                            })
-                        break
-
-            count = 2 if perfil == "conservadora" else (4 if perfil == "agresiva" else 3)
-            
-            # Ampliar pool de partidos oficiales activos si es necesario para garantizar selecciones únicas
-            if len(pool_candidato) < count * 2:
-                fechas_proximas = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= op_date)))[:4]
-                partidos_extra = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] in fechas_proximas]
-                for m in partidos_extra:
-                    loc_extra = m["local"]
-                    vis_extra = m["visitante"]
-                    if not any(item["partido"] == f"{loc_extra} vs {vis_extra}" for item in pool_candidato):
-                        an_extra = analytics.generate_institutional_analysis(m)
-                        stk_extra = an_extra.get("organizacion_stakazos", {}).get("nivel_1_base", {})
-                        p_raw_e = float(re.sub(r'[^0-9.]', '', stk_extra.get("probabilidad", "84%")) or 84.0)
-                        prob_dec_e = round(p_raw_e / 100.0, 3)
-                        cuota_e = round(100.0 / max(5.0, p_raw_e), 2)
-                        pool_candidato.append({
-                            "partido": f"{loc_extra} vs {vis_extra}",
-                            "liga": m.get("liga"),
-                            "mercado": stk_extra.get("mercado", "Doble Oportunidad Protegida"),
-                            "cuota": max(1.18, cuota_e),
-                            "prob": prob_dec_e,
-                            "icono": "🛡️",
-                            "razon": f"Selección oficial del calendario con {p_raw_e}% de certeza cuantitativa."
-                        })
-
-            if perfil == "conservadora":
-                pool_filtrado = [s for s in pool_candidato if s["prob"] >= 0.83]
-            elif perfil == "agresiva":
-                pool_filtrado = [s for s in pool_candidato if s["cuota"] >= 1.25]
-            else:
-                pool_filtrado = list(pool_candidato)
-
-            if len(pool_filtrado) < count:
-                pool_filtrado = list(pool_candidato)
-
-            random.shuffle(pool_filtrado)
-
-            # GARANTIZAR ESTRICTAMENTE QUE CADA SELECCIÓN PERTENEZCA A UN PARTIDO OFICIAL DISTINTO
-            seen_partidos = set()
-            chosen = []
-            for item in pool_filtrado:
-                p_name = item["partido"]
-                if p_name not in seen_partidos:
-                    seen_partidos.add(p_name)
-                    chosen.append(item)
-                    if len(chosen) >= count:
-                        break
-
-            # Si faltan para completar count, rellenar de pool_candidato asegurando partidos únicos
-            if len(chosen) < count:
-                for item in pool_candidato:
-                    p_name = item["partido"]
-                    if p_name not in seen_partidos:
-                        seen_partidos.add(p_name)
-                        chosen.append(item)
-                        if len(chosen) >= count:
-                            break
-
-            cuota_total = 1.0
-            prob_total = 1.0
-            for item in chosen:
-                cuota_total *= item["cuota"]
-                prob_total *= item["prob"]
-
-            cuota_redondeada = round(cuota_total, 2)
-            prob_pct = f"{round(prob_total * 100, 1)}%"
-            ev_pct = round((cuota_total * prob_total - 1.0) * 100, 1)
-            ev_label = f"+{ev_pct}% EV" if ev_pct > 0 else f"{ev_pct}% EV"
-
-            return jsonify({
-                "success": True,
-                "perfil": perfil,
-                "cuota_total": cuota_redondeada,
-                "cuota_combinada": cuota_redondeada,
-                "probabilidad_matematica": prob_pct,
-                "viabilidad_cuantitativa": "ALTA (>80%)" if prob_total >= 0.70 else "MEDIA",
-                "total_selecciones": len(chosen),
-                "total_partidos": len(chosen),
-                "gestion_bankroll_kelly": "Stake 2.5% (Kelly Fraccional 1/4)",
-                "ev_estimado": ev_label,
-                "selecciones": chosen
-            })
-        except Exception as exc:
-            logger.error("Error en /api/v1/bet-builder/quant: %s", exc)
-            return jsonify({"success": False, "error": str(exc)}), 500
-
-    @app.route("/api/v1/value-edge/comparison", methods=["GET"])
-    def get_value_edge_comparison():
-        try:
-            comparisons = [
-                {
-                    "partido": "Borussia Dortmund vs Werder Bremen",
-                    "liga": "Bundesliga",
-                    "fecha": "2026-10-09 18:30",
-                    "mercado": "Victoria Local (Borussia Dortmund)",
-                    "prob_modelo": "79.2%",
-                    "cuota_justa": 1.26,
-                    "cuota_mercado": 1.38,
-                    "casa": "Betano / Bet365",
-                    "edge_ev": "+9.5%",
-                    "veredicto": "VALOR ALTO (+EV)",
-                    "explicacion": "La casa paga 1.38 frente a un riesgo real medido de 1.26. Ventaja matemática de +9.5% sobre la casa."
-                },
-                {
-                    "partido": "Real Madrid vs Getafe",
-                    "liga": "LaLiga EA Sports",
-                    "fecha": "2026-10-10 19:00",
-                    "mercado": "Victoria Local (Real Madrid)",
-                    "prob_modelo": "86.6%",
-                    "cuota_justa": 1.15,
-                    "cuota_mercado": 1.28,
-                    "casa": "Bet365 / 1xBet",
-                    "edge_ev": "+11.3%",
-                    "veredicto": "VALOR ALTO (+EV)",
-                    "explicacion": "La cuota de mercado ofrece un margen positivo de +11.3% debido a la superioridad aplastante en xG."
-                },
-                {
-                    "partido": "Manchester City vs Bournemouth",
-                    "liga": "Premier League",
-                    "fecha": "2026-10-10 14:00",
-                    "mercado": "Más de 2.5 Goles Totales",
-                    "prob_modelo": "73.5%",
-                    "cuota_justa": 1.36,
-                    "cuota_mercado": 1.50,
-                    "casa": "Doradobet / Te Apuesto",
-                    "edge_ev": "+10.2%",
-                    "veredicto": "VALOR ALTO (+EV)",
-                    "explicacion": "Proyección combinada de 3.61 xG hace que la línea de 2.5 goles esté infravalorada por las cuotas comerciales."
-                },
-                {
-                    "partido": "Bélgica vs Francia",
-                    "liga": "UEFA Nations League",
-                    "fecha": "2026-10-05 18:45",
-                    "mercado": "Gana Francia o Empate (X2)",
-                    "prob_modelo": "72.5%",
-                    "cuota_justa": 1.38,
-                    "cuota_mercado": 1.48,
-                    "casa": "Betano",
-                    "edge_ev": "+7.2%",
-                    "veredicto": "VALOR MODERADO (+EV)",
-                    "explicacion": "Cobertura de doble oportunidad respaldada por la jerarquía visitante frente a la cuota comercial."
-                }
-            ]
-            return jsonify({
-                "success": True,
-                "total_comparaciones": len(comparisons),
-                "comparaciones": comparisons
-            }), 200
-        except Exception as e:
-            logger.error("Error en get_value_edge_comparison: %s", e)
-            return jsonify({"success": False, "error": str(e)}), 500
 
     # MÓDULO E: Calculadora de Cobertura y Cierre (Cashout & Hedge Tool)
     @app.route("/api/v1/tools/hedge-calculator", methods=["POST"])
@@ -15656,7 +15198,7 @@ def create_app() -> Flask:
             }), 200
         except Exception as e:
             logger.error("Error en calculate_hedge_endpoint: %s", e)
-            return jsonify({"success": False, "error": str(e)}), 500
+            return jsonify({"success": False, "error": _safe_err(e)}), 500
 
     # Health Check
     
@@ -15746,7 +15288,7 @@ def create_app() -> Flask:
             return Response(audio_data.read(), mimetype="audio/mpeg")
         except Exception as err:
             logger.warning("Generador de voz edge-tts no disponible: %s. Usando fallback cliente.", err)
-            return jsonify({"success": False, "error": str(err), "fallback_browser": True}), 503
+            return jsonify({"success": False, "error": _safe_err(err), "fallback_browser": True}), 503
 
     @app.route("/api/v1/plantillas", methods=["GET"])
     def get_plantillas_json():
@@ -15765,123 +15307,6 @@ def create_app() -> Flask:
             "mercadopago": "CONFIGURED" if MP_ACCESS_TOKEN else "PENDING_KEY",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }), 200
-
-    # ENDPOINTS DE CONTROL Y ROTACIÓN DEL CALENDARIO MAESTRO (TEMPORADA 2026/2027)
-    @app.route("/api/v1/calendario/info", methods=["GET"])
-    def get_calendario_info():
-        global ALL_FIXTURES_POOL, _CURRENT_ACTIVE_WINDOW
-        total_maestro = 0
-        if os.path.exists(CALENDAR_MASTER_PATH):
-            try:
-                with open(CALENDAR_MASTER_PATH, "r", encoding="utf-8") as f:
-                    total_maestro = len(json.load(f))
-            except Exception:
-                pass
-        return jsonify({
-            "success": True,
-            "fase_activa": _CURRENT_ACTIVE_WINDOW.get("fase_nombre"),
-            "ventana_inicio": _CURRENT_ACTIVE_WINDOW.get("start_date"),
-            "ventana_fin": _CURRENT_ACTIVE_WINDOW.get("end_date"),
-            "partidos_en_memoria_activos": len(ALL_FIXTURES_POOL),
-            "total_partidos_temporada_completa": total_maestro or 1956,
-            "fases_disponibles": [
-                {"fase": 1, "nombre": "Fase 1 (Actual)", "inicio": "2026-10-12", "fin": "2026-11-30", "partidos": 539},
-                {"fase": 2, "nombre": "Fase 2", "inicio": "2026-12-01", "fin": "2027-01-31", "partidos": 542},
-                {"fase": 3, "nombre": "Fase 3", "inicio": "2027-02-01", "fin": "2027-03-31", "partidos": 408},
-                {"fase": 4, "nombre": "Fase 4", "inicio": "2027-04-01", "fin": "2027-05-31", "partidos": 467}
-            ]
-        })
-
-    @app.route("/api/v1/admin/calendario/rotar-fase", methods=["POST"])
-    def rotar_fase_calendario():
-        global ALL_FIXTURES_POOL, _CURRENT_ACTIVE_WINDOW, _CARTELERA_MEMO_CACHE
-        body = request.get_json(silent=True) or {}
-        fase_num = body.get("fase")
-        inicio = body.get("inicio")
-        fin = body.get("fin")
-
-        fases_map = {
-            1: ("2026-10-12", "2026-11-30", "Fase 1: 11 Octubre a 30 Noviembre 2026"),
-            2: ("2026-12-01", "2027-01-31", "Fase 2: 01 Diciembre 2026 a 31 Enero 2027"),
-            3: ("2027-02-01", "2027-03-31", "Fase 3: 01 Febrero a 31 Marzo 2027"),
-            4: ("2027-04-01", "2027-05-31", "Fase 4: 01 Abril a 31 Mayo 2027")
-        }
-
-        if fase_num and int(fase_num) in fases_map:
-            s_date, e_date, f_name = fases_map[int(fase_num)]
-        elif inicio and fin:
-            s_date, e_date = inicio, fin
-            f_name = f"Personalizada: {inicio} a {fin}"
-        else:
-            return jsonify({"success": False, "error": "Indique 'fase' (1, 2, 3 o 4) o 'inicio' y 'fin' en formato YYYY-MM-DD"}), 400
-
-        os.environ["CALENDAR_WINDOW_START"] = s_date
-        os.environ["CALENDAR_WINDOW_END"] = e_date
-        _CURRENT_ACTIVE_WINDOW = {
-            "start_date": s_date,
-            "end_date": e_date,
-            "fase_nombre": f_name
-        }
-
-        ALL_FIXTURES_POOL = build_multimonth_calendar()
-        _CARTELERA_MEMO_CACHE["timestamp"] = 0 # Invalidar cache en memoria
-
-        return jsonify({
-            "success": True,
-            "mensaje": f"Ventana actualizada con éxito a {f_name}.",
-            "partidos_cargados": len(ALL_FIXTURES_POOL),
-            "ventana_inicio": s_date,
-            "ventana_fin": e_date
-        })
-
-
-    @app.route("/api/v1/admin/auditoria/sync-results", methods=["POST"])
-    def sync_auditoria_results():
-        """Sincroniza y liquida automáticamente los pronósticos pendientes de una fecha
-        contrastándolos con los resultados oficiales de partidos terminados."""
-        try:
-            body = request.get_json(silent=True) or {}
-            target_date = body.get("fecha") or get_current_operational_date()
-            api_key = (os.getenv("APISPORTS_KEY") or os.getenv("API_SPORTS_KEY") or "").strip()
-
-            actualizados = 0
-            # Si hay Firebase disponible, calificar picks de Firestore
-            if db:
-                picks_ref = db.collection("auditoria_picks").where("fecha", "==", target_date).stream()
-                for doc in picks_ref:
-                    p_data = doc.to_dict()
-                    if p_data.get("estado") == "PENDIENTE":
-                        # Simulación o consulta de match_stats oficial
-                        # En producción, se extrae de API-Sports con api_key
-                        # Si no hay key, se calcula con el modelo determinista
-                        res = SportsResultsAuditor.grade_prediction(p_data, {
-                            "score_home": p_data.get("real_score_home", 2),
-                            "score_away": p_data.get("real_score_away", 1),
-                            "corners_total": p_data.get("real_corners", 10),
-                            "cards_total": p_data.get("real_cards", 4),
-                            "player_shots": p_data.get("real_player_shots", 3),
-                            "player_shots_on_target": p_data.get("real_player_shots_on_target", 1)
-                        })
-                        doc.reference.update({
-                            "estado": res["estado"],
-                            "resultado": res["resultado"],
-                            "marcador_final": res["marcador_final"],
-                            "corners_totales": res["corners_totales"],
-                            "tarjetas_totales": res["tarjetas_totales"],
-                            "liquidado_at": datetime.now(timezone.utc).isoformat()
-                        })
-                        actualizados += 1
-
-            return jsonify({
-                "success": True,
-                "fecha": target_date,
-                "mensaje": f"Auditoría sincronizada para fecha {target_date}.",
-                "picks_liquidados": actualizados,
-                "proveedor_datos": "API-Sports / Flashscore Verified Pipeline" if api_key else "PredicXion Engine (Sin API-Sports Key)"
-            })
-        except Exception as exc:
-            logger.error("Error en sync_auditoria_results: %s", exc)
-            return jsonify({"success": False, "error": str(exc)}), 500
 
     return app
 
