@@ -13992,12 +13992,20 @@ ALIAS_EQUIPOS = {
     "dortmund": "borussia dortmund", "leverkusen": "bayer leverkusen", "monchengladbach": "borussia monchengladbach",
     "paris sg": "paris saint germain", "paris saint germain": "paris saint germain",
     "lyon": "olympique lyonnais", "marseille": "olympique marseille",
+    "atletico de madrid": "atletico madrid", "atletico madrid": "atletico madrid",
+    "manchester united": "manchester united", "barcelona": "barcelona", "fc barcelona": "barcelona",
+    "galatasaray": "galatasaray", "napoli": "napoli", "ssc napoli": "napoli",
+    "villarreal": "villarreal", "inter": "inter milan", "internazionale": "inter milan",
+    "brugge kv": "brugge", "club brugge": "brugge", "brugge": "brugge",
+    "slavia praha": "slavia prague", "slavia praga": "slavia prague", "slavia prague": "slavia prague",
 }
 
 
 def _norm_equipo(nombre):
     s = _unicodedata.normalize("NFKD", str(nombre or "")).encode("ascii", "ignore").decode("ascii").lower()
     s = re.sub(r"[^a-z0-9']+", " ", s).strip()
+    s = re.sub(r"\b(fc|cf|afc|sk|club)\b", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
     return ALIAS_EQUIPOS.get(s, s)
 
 
@@ -14021,6 +14029,31 @@ def _descargar_csv(temporada, codigo):
     r = requests.get(url, timeout=25, headers={"User-Agent": "PredicXionIA/1.0"})
     r.raise_for_status()
     return r.content.decode("latin-1")
+
+
+def _partidos_football_data_competicion(codigo, temporada):
+    """Partidos terminados de una competición de football-data.org (goles). Un consumo por competición y temporada."""
+    clave = (os.getenv("FOOTBALL_API_KEY") or "").strip()
+    if not clave:
+        raise RuntimeError("FOOTBALL_API_KEY no configurada")
+    r = requests.get(f"https://api.football-data.org/v4/competitions/{codigo}/matches",
+                     headers={"X-Auth-Token": clave},
+                     params={"season": temporada, "status": "FINISHED"}, timeout=25)
+    r.raise_for_status()
+    salida = []
+    for m in (r.json() or {}).get("matches", []):
+        ft = ((m.get("score") or {}).get("fullTime") or {})
+        if ft.get("home") is None or ft.get("away") is None:
+            continue
+        try:
+            fecha = datetime.fromisoformat(str(m.get("utcDate"))[:19])
+        except ValueError:
+            continue
+        salida.append({"f": fecha, "h": (m.get("homeTeam") or {}).get("name", ""),
+                       "a": (m.get("awayTeam") or {}).get("name", ""),
+                       "gh": int(ft["home"]), "ga": int(ft["away"]),
+                       "hc": None, "ac": None, "hy": None, "ay": None})
+    return salida
 
 
 def actualizar_ratings_reales(descargar=None):
@@ -14060,6 +14093,17 @@ def actualizar_ratings_reales(descargar=None):
                 fallos.append(f"{liga} {temp}: {type(exc).__name__}")
 
     _agregar_api_a_partidos(partidos, ok, fallos)
+    for codigo, nombre in FD_COMPETICIONES_RATINGS.items():
+        for temp in FD_TEMPORADAS_RATINGS:
+            try:
+                nuevos_fd = _partidos_football_data_competicion(codigo, temp)
+                if nuevos_fd:
+                    partidos.extend(nuevos_fd)
+                    ok.append(f"{nombre} {temp} (football-data.org)")
+                else:
+                    fallos.append(f"{nombre} {temp}: sin partidos terminados")
+            except Exception as exc:
+                fallos.append(f"{nombre} {temp}: {str(exc)[:100]}")
 
     if not partidos:
         with _RATINGS_LOCK:
@@ -14138,10 +14182,10 @@ threading.Thread(target=_arranque_ratings, daemon=True).start()
 # ======================================================================================
 API_SPORTS_BASE = "https://v3.football.api-sports.io"
 API_LIGAS_RATINGS = [
-    {"nombre": "UEFA Champions League", "pais": "World", "clave": "champions"},
     {"nombre": "UEFA Nations League", "pais": "World", "clave": "nations"},
-    {"nombre": "Serie A", "pais": "Brazil", "clave": "brasil"},
 ]
+FD_COMPETICIONES_RATINGS = {"BSA": "Campeonato Brasileiro Série A", "CL": "UEFA Champions League"}
+FD_TEMPORADAS_RATINGS = [2025, 2026]
 TEMPORADAS_API = [2025, 2026]
 API_POOLS = {"ratings": 50, "jugadores": 25, "resultados": 15}
 _API_CUOTA_POOL = {p: {"fecha": None, "usados": 0} for p in API_POOLS}
@@ -14381,6 +14425,13 @@ def _matriz_marcadores(lh, la, max_g=8):
     return [[v / total for v in r] for r in M]
 
 
+def _poisson_mas(lam, linea):
+    """P(total > linea) con Poisson de media lam (linea .5)."""
+    k_max = int(math.floor(linea))
+    acumulado = sum((lam ** k) * math.exp(-lam) / math.factorial(k) for k in range(0, k_max + 1))
+    return max(0.0, min(1.0, 1.0 - acumulado))
+
+
 def _candidato_top5(match, an):
     """Elige el mercado de un partido con su regla de evaluación. Devuelve dict o None (sin ventaja clara)."""
     xg = an.get("parametros_xg") or {}
@@ -14420,13 +14471,27 @@ def _candidato_top5(match, an):
             ("goles", "Menos de 2.5 goles", 1 - p_over25, {"k": "goles", "op": "menos", "umbral": 2.5}),
             ("ambos", "Ambos equipos anotan: Sí", p_btts, {"k": "ambos", "valor": True}),
             ("ambos", "Ambos equipos anotan: No", 1 - p_btts, {"k": "ambos", "valor": False}),
+            ("ambos", "Ambos equipos anotan: No", 1 - p_btts, {"k": "ambos", "valor": False}),
         ]
+        rl = _ratings_para(local)
+        rv = _ratings_para(visita)
+        if rl and rv and rl.get("corners") is not None and rv.get("corners") is not None:
+            lam_c = float(rl["corners"]) + float(rv["corners"])
+            for linea in (8.5, 9.5, 10.5):
+                opciones.append(("corners", f"Más de {linea} corners", _poisson_mas(lam_c, linea),
+                                 {"k": "corners", "op": "mas", "umbral": linea}))
+        if rl and rv and rl.get("tarjetas") is not None and rv.get("tarjetas") is not None:
+            lam_t = float(rl["tarjetas"]) + float(rv["tarjetas"])
+            for linea in (3.5, 4.5):
+                opciones.append(("tarjetas", f"Más de {linea} tarjetas", _poisson_mas(lam_t, linea),
+                                 {"k": "tarjetas", "op": "mas", "umbral": linea}))
         tipo, texto, prob, regla = max(opciones, key=lambda o: o[2])
         if prob < TOP5_PROB_MINIMA:
             return None
 
     categorias = {"resultado": ("RESULTADO", "🎯"), "doble": ("DOBLE OP.", "🛡️"),
-                  "goles": ("GOLES", "⚽"), "ambos": ("AMBOS ANOTAN", "⚽"), "combo": ("COMBO", "🔗")}
+                  "goles": ("GOLES", "⚽"), "ambos": ("AMBOS ANOTAN", "⚽"), "combo": ("COMBO", "🔗"),
+                  "corners": ("CORNERS", "🚩"), "tarjetas": ("TARJETAS", "🟨")}
     cat, icono = categorias[tipo]
     fecha_utc = match.get("fecha_utc") or ""
     return {
@@ -14517,6 +14582,13 @@ def _top5_para_fecha(fecha):
             c["fecha"] = fecha
             candidatos.append(c)
     elegidos = _elegir_top5(candidatos, 5)
+    for idx, e in enumerate(elegidos):
+        if idx == 0:
+            e["nivel"] = 1
+        elif idx <= 2 and e["tipo"] in ("resultado", "doble", "goles", "ambos"):
+            e["nivel"] = 2
+        else:
+            e["nivel"] = 3
     for e in elegidos:
         e["estado"] = "PENDIENTE"
         e["marcador"] = None
@@ -14562,6 +14634,44 @@ def _resultados_api_dia(fecha):
     return salida
 
 
+def _resultados_football_data_dia(fecha):
+    """Respaldo: football-data.org (misma clave FOOTBALL_API_KEY). Un consumo por fecha."""
+    clave = (os.getenv("FOOTBALL_API_KEY") or "").strip()
+    if not clave:
+        raise RuntimeError("FOOTBALL_API_KEY no configurada")
+    r = requests.get("https://api.football-data.org/v4/matches",
+                     headers={"X-Auth-Token": clave},
+                     params={"dateFrom": fecha, "dateTo": fecha}, timeout=25)
+    r.raise_for_status()
+    salida = {}
+    for m in (r.json() or {}).get("matches", []):
+        home = m.get("homeTeam") or {}
+        away = m.get("awayTeam") or {}
+        ft = ((m.get("score") or {}).get("fullTime") or {})
+        estado_fd = str(m.get("status") or "")
+        if estado_fd == "FINISHED":
+            estado = "FT"
+        elif estado_fd in ("POSTPONED", "CANCELLED", "SUSPENDED"):
+            estado = "CANC"
+        else:
+            estado = estado_fd
+        registro = {"gh": ft.get("home"), "ga": ft.get("away"), "estado": estado, "id": m.get("id")}
+        for nh in {home.get("name"), home.get("shortName")}:
+            for na in {away.get("name"), away.get("shortName")}:
+                if nh and na:
+                    salida[(_norm_equipo(nh), _norm_equipo(na))] = registro
+    return salida
+
+
+def _resultados_con_respaldo(fecha):
+    """API-Sports primero; si no responde (suspensión, cupo o error), football-data.org."""
+    try:
+        return _resultados_api_dia(fecha)
+    except Exception as exc_principal:
+        logger.warning("Resultados API-Sports no disponibles para %s: %s. Usando respaldo.", fecha, str(exc_principal)[:120])
+        return _resultados_football_data_dia(fecha)
+
+
 def liquidar_top5_pendientes():
     """Marca como ACIERTO, FALLO o ANULADO los picks pendientes cuyo partido ya terminó."""
     if not db:
@@ -14574,7 +14684,7 @@ def liquidar_top5_pendientes():
         if not fecha or fecha > hoy:
             continue
         try:
-            resultados = _resultados_api_dia(fecha)
+            resultados = _resultados_con_respaldo(fecha)
         except Exception as exc:
             resumen["errores"].append(f"{fecha}: {str(exc)[:100]}")
             continue
@@ -14594,6 +14704,9 @@ def liquidar_top5_pendientes():
                 resumen["sin_resultado"] += 1
                 continue
             gh, ga = int(r["gh"]), int(r["ga"])
+            if (p.get("regla") or {}).get("k") in ("corners", "tarjetas"):
+                resumen["sin_fuente_estadistica"] = resumen.get("sin_fuente_estadistica", 0) + 1
+                continue
             acierto = _evaluar_regla(p.get("regla") or {}, gh, ga)
             ref.update({"estado": "ACIERTO" if acierto else "FALLO", "marcador": f"{gh}-{ga}",
                         "liquidado_en": ahora, "fixture_id": r["id"]})
