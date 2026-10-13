@@ -11017,6 +11017,27 @@ class SportsAnalyticsEngine:
 
     @classmethod
     def get_team_stats(cls, team_name: str, competition_code: str = "") -> dict:
+        """Usa ratings reales (football-data.co.uk) si existen; si no, la tabla histórica como respaldo."""
+        base = dict(cls._get_team_stats_legacy(team_name, competition_code))
+        r = _ratings_para(team_name)
+        if not r:
+            base["fuente_datos"] = "tabla histórica (sin datos reales para este equipo)"
+            return base
+        base.update({
+            "elo": r["elo"],
+            "base_att": r["base_att"],
+            "base_def": r["base_def"],
+            "fuente_datos": "football-data.co.uk",
+            "observacion": f"Datos reales de {r['partidos']} partidos recientes (football-data.co.uk).",
+        })
+        if r["corners"] is not None:
+            base["corners"] = r["corners"]
+        if r["tarjetas"] is not None:
+            base["tarjetas"] = r["tarjetas"]
+        return base
+
+    @classmethod
+    def _get_team_stats_legacy(cls, team_name: str, competition_code: str = "") -> dict:
         name_clean = team_name.lower().strip()
         # Normalización sin tildes ni puntuación innecesaria
         normalized = (name_clean.replace("á", "a").replace("é", "e")
@@ -13948,6 +13969,412 @@ def _bloqueo_compra(uid, monto):
 
 
 
+
+# ======================================================================================
+# RATINGS REALES: ataque, defensa, Elo, córners y tarjetas calculados de resultados
+# reales (football-data.co.uk, CSV público, sin clave). Si una liga falla, se conserva
+# el dato anterior y el partido sigue usando la tabla histórica como respaldo.
+# ======================================================================================
+import csv as _csv
+import io as _io
+import unicodedata as _unicodedata
+
+_RATINGS_LOCK = threading.Lock()
+RATINGS_REALES = {}
+RATINGS_ESTADO = {
+    "actualizado": None,
+    "fuente": "football-data.co.uk (CSV público, sin clave)",
+    "equipos_con_datos": 0,
+    "partidos_usados": 0,
+    "ligas_ok": [],
+    "ligas_fallidas": [],
+    "temporadas": [],
+}
+LIGAS_RATINGS = {
+    "E0": "Premier League", "SP1": "La Liga", "I1": "Serie A", "D1": "Bundesliga",
+    "F1": "Ligue 1", "N1": "Eredivisie", "P1": "Primeira Liga", "B1": "Pro League Bélgica",
+    "T1": "Süper Lig", "G1": "Super League Grecia", "SC0": "Scottish Premiership",
+}
+TEMPORADAS_RATINGS = ["2526", "2627"]
+ALIAS_EQUIPOS = {
+    "man city": "manchester city", "man united": "manchester united", "man utd": "manchester united",
+    "nott'm forest": "nottingham forest", "nottm forest": "nottingham forest",
+    "wolves": "wolverhampton wanderers", "spurs": "tottenham hotspur", "tottenham": "tottenham hotspur",
+    "ath madrid": "atletico madrid", "ath bilbao": "athletic club", "sociedad": "real sociedad",
+    "betis": "real betis", "vallecano": "rayo vallecano", "celta": "celta vigo",
+    "inter": "inter milan", "milan": "ac milan", "roma": "as roma", "bayern munich": "bayern",
+    "dortmund": "borussia dortmund", "leverkusen": "bayer leverkusen", "monchengladbach": "borussia monchengladbach",
+    "paris sg": "paris saint germain", "paris saint germain": "paris saint germain",
+    "lyon": "olympique lyonnais", "marseille": "olympique marseille",
+}
+
+
+def _norm_equipo(nombre):
+    s = _unicodedata.normalize("NFKD", str(nombre or "")).encode("ascii", "ignore").decode("ascii").lower()
+    s = re.sub(r"[^a-z0-9']+", " ", s).strip()
+    return ALIAS_EQUIPOS.get(s, s)
+
+
+def _fecha_csv(texto):
+    for fmt in ("%d/%m/%y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime((texto or "").strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _elo_partido(rh, ra, gh, ga, k=20.0, ventaja=60.0):
+    esperado = 1.0 / (1.0 + 10 ** ((ra - (rh + ventaja)) / 400.0))
+    real = 1.0 if gh > ga else (0.5 if gh == ga else 0.0)
+    return rh + k * (real - esperado), ra + k * ((1.0 - real) - (1.0 - esperado))
+
+
+def _descargar_csv(temporada, codigo):
+    url = f"https://www.football-data.co.uk/mmz4281/{temporada}/{codigo}.csv"
+    r = requests.get(url, timeout=25, headers={"User-Agent": "PredicXionIA/1.0"})
+    r.raise_for_status()
+    return r.content.decode("latin-1")
+
+
+def actualizar_ratings_reales(descargar=None):
+    """Descarga los CSV, calcula ataque/defensa/Elo/córners/tarjetas y reemplaza los valores si hay datos."""
+    descargar = descargar or _descargar_csv
+    partidos, ok, fallos = [], [], []
+    for temp in TEMPORADAS_RATINGS:
+        for cod, liga in LIGAS_RATINGS.items():
+            antes = len(partidos)
+            try:
+                texto = descargar(temp, cod)
+                for row in _csv.DictReader(_io.StringIO(texto)):
+                    f = _fecha_csv(row.get("Date", ""))
+                    try:
+                        gh, ga = int(row["FTHG"]), int(row["FTAG"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if not f or not row.get("HomeTeam") or not row.get("AwayTeam"):
+                        continue
+
+                    def _num(clave):
+                        try:
+                            return float(row.get(clave))
+                        except (TypeError, ValueError):
+                            return None
+
+                    partidos.append({
+                        "f": f, "h": row["HomeTeam"].strip(), "a": row["AwayTeam"].strip(),
+                        "gh": gh, "ga": ga,
+                        "hc": _num("HC"), "ac": _num("AC"), "hy": _num("HY"), "ay": _num("AY"),
+                    })
+                if len(partidos) > antes:
+                    ok.append(f"{liga} {temp}")
+                else:
+                    fallos.append(f"{liga} {temp}: sin partidos válidos")
+            except Exception as exc:
+                fallos.append(f"{liga} {temp}: {type(exc).__name__}")
+
+    _agregar_api_a_partidos(partidos, ok, fallos)
+
+    if not partidos:
+        with _RATINGS_LOCK:
+            RATINGS_ESTADO.update({
+                "actualizado": datetime.now(timezone.utc).isoformat(),
+                "ligas_ok": ok, "ligas_fallidas": fallos, "temporadas": TEMPORADAS_RATINGS,
+            })
+            return dict(RATINGS_ESTADO)
+
+    partidos.sort(key=lambda p: p["f"])
+    elo, agg = {}, {}
+    for p in partidos:
+        rh, ra = elo.get(p["h"], 1500.0), elo.get(p["a"], 1500.0)
+        elo[p["h"]], elo[p["a"]] = _elo_partido(rh, ra, p["gh"], p["ga"])
+        for equipo, gf, gc, corn, card in (
+            (p["h"], p["gh"], p["ga"], p["hc"], p["hy"]),
+            (p["a"], p["ga"], p["gh"], p["ac"], p["ay"]),
+        ):
+            d = agg.setdefault(equipo, {"gf": [], "gc": [], "corn": [], "card": []})
+            d["gf"].append(gf)
+            d["gc"].append(gc)
+            if corn is not None:
+                d["corn"].append(corn)
+            if card is not None:
+                d["card"].append(card)
+
+    nuevos = {}
+    for equipo, d in agg.items():
+        n = len(d["gf"])
+        if n < 6:
+            continue
+        clave = _norm_equipo(equipo)
+        nuevos[clave] = {
+            "equipo": equipo,
+            "elo": round(elo[equipo], 1),
+            "base_att": round(sum(d["gf"]) / n, 3),
+            "base_def": round(sum(d["gc"]) / n, 3),
+            "corners": round(sum(d["corn"]) / len(d["corn"]), 2) if d["corn"] else None,
+            "tarjetas": round(sum(d["card"]) / len(d["card"]), 2) if d["card"] else None,
+            "partidos": n,
+        }
+
+    with _RATINGS_LOCK:
+        RATINGS_REALES.clear()
+        RATINGS_REALES.update(nuevos)
+        RATINGS_ESTADO.update({
+            "actualizado": datetime.now(timezone.utc).isoformat(),
+            "equipos_con_datos": len(nuevos),
+            "partidos_usados": len(partidos),
+            "ligas_ok": ok, "ligas_fallidas": fallos, "temporadas": TEMPORADAS_RATINGS,
+        })
+        return dict(RATINGS_ESTADO)
+
+
+def _ratings_para(nombre):
+    with _RATINGS_LOCK:
+        return RATINGS_REALES.get(_norm_equipo(nombre))
+
+
+def _arranque_ratings():
+    time.sleep(8)
+    try:
+        actualizar_ratings_reales()
+    except Exception as exc:
+        logger.error("Error actualizando ratings reales: %s", exc, exc_info=True)
+
+
+threading.Thread(target=_arranque_ratings, daemon=True).start()
+
+
+
+# ======================================================================================
+# API-SPORTS (API-Football): partidos terminados para ligas que el CSV no cubre
+# (Champions League, UEFA Nations League, Brasileirão). Clave en APISPORTS_KEY.
+# Controla su propio límite diario para no agotar la cuota del plan gratis.
+# ======================================================================================
+API_SPORTS_BASE = "https://v3.football.api-sports.io"
+API_LIGAS_RATINGS = [
+    {"nombre": "UEFA Champions League", "pais": "World", "clave": "champions"},
+    {"nombre": "UEFA Nations League", "pais": "World", "clave": "nations"},
+    {"nombre": "Serie A", "pais": "Brazil", "clave": "brasil"},
+]
+TEMPORADAS_API = [2025, 2026]
+API_POOLS = {"ratings": 60, "jugadores": 30}
+_API_CUOTA_POOL = {p: {"fecha": None, "usados": 0} for p in API_POOLS}
+_API_IDS_LIGA = {}
+_API_LOCK = threading.Lock()
+
+
+def _api_key():
+    return (os.getenv("APISPORTS_KEY") or os.getenv("API_SPORTS_KEY") or "").strip()
+
+
+def _api_get(ruta, params, pool="ratings"):
+    """Una petición a API-Sports. Lanza error si no hay clave, se agotó el cupo o la API devuelve error."""
+    clave = _api_key()
+    if not clave:
+        raise RuntimeError("APISPORTS_KEY no configurada")
+    hoy = datetime.now(timezone.utc).date().isoformat()
+    cuenta = _API_CUOTA_POOL[pool]
+    with _API_LOCK:
+        if cuenta["fecha"] != hoy:
+            cuenta.update({"fecha": hoy, "usados": 0})
+        if cuenta["usados"] >= API_POOLS[pool]:
+            raise RuntimeError(f"cupo diario de {pool} agotado ({API_POOLS[pool]} solicitudes)")
+        cuenta["usados"] += 1
+    r = requests.get(API_SPORTS_BASE + ruta, headers={"x-apisports-key": clave}, params=params, timeout=25)
+    r.raise_for_status()
+    data = r.json() or {}
+    errores = data.get("errors")
+    if errores:
+        raise RuntimeError(f"API-Sports: {str(errores)[:120]}")
+    return data.get("response") or []
+
+
+def _id_liga_api(item):
+    """Busca el ID de la liga por nombre y país, una sola vez por proceso."""
+    clave = item["clave"]
+    if clave in _API_IDS_LIGA:
+        return _API_IDS_LIGA[clave]
+    for x in _api_get("/leagues", {"search": item["nombre"]}):
+        liga = x.get("league") or {}
+        pais = ((x.get("country") or {}).get("name") or "")
+        if liga.get("name") == item["nombre"] and pais.lower() == item["pais"].lower():
+            _API_IDS_LIGA[clave] = liga.get("id")
+            return _API_IDS_LIGA[clave]
+    return None
+
+
+def _partidos_api(liga_id, temporada):
+    """Partidos terminados de una liga y temporada, en el mismo formato que los CSV."""
+    salida = []
+    for f in _api_get("/fixtures", {"league": liga_id, "season": temporada, "status": "FT"}):
+        try:
+            fecha = datetime.fromisoformat(str(f["fixture"]["date"])[:19])
+            gh = f["goals"]["home"]
+            ga = f["goals"]["away"]
+            if gh is None or ga is None:
+                continue
+            salida.append({
+                "f": fecha,
+                "h": f["teams"]["home"]["name"],
+                "a": f["teams"]["away"]["name"],
+                "gh": int(gh), "ga": int(ga),
+                "hc": None, "ac": None, "hy": None, "ay": None,
+            })
+        except (KeyError, TypeError, ValueError):
+            continue
+    return salida
+
+
+def _agregar_api_a_partidos(partidos, ok, fallos):
+    """Añade a la lista de partidos las ligas de API-Sports, respetando el cupo diario."""
+    if not _api_key():
+        fallos.append("API-Sports: APISPORTS_KEY no configurada")
+        return
+    for item in API_LIGAS_RATINGS:
+        try:
+            lid = _id_liga_api(item)
+            if not lid:
+                fallos.append(f"{item['clave']}: liga no encontrada en API-Sports")
+                continue
+            for temp in TEMPORADAS_API:
+                try:
+                    nuevos = _partidos_api(lid, temp)
+                except Exception as exc:
+                    fallos.append(f"{item['clave']} {temp}: {str(exc)[:100]}")
+                    continue
+                if nuevos:
+                    partidos.extend(nuevos)
+                    ok.append(f"{item['clave']} {temp} (API-Sports)")
+                else:
+                    fallos.append(f"{item['clave']} {temp}: sin partidos terminados")
+        except Exception as exc:
+            fallos.append(f"{item['clave']}: {str(exc)[:100]}")
+
+
+def solicitudes_api_hoy():
+    with _API_LOCK:
+        return {p: {"usadas": _API_CUOTA_POOL[p]["usados"], "maximo_diario": API_POOLS[p]} for p in API_POOLS}
+
+
+
+# ======================================================================================
+# JUGADORES (API-Sports): estadísticas reales de los últimos partidos de cada equipo.
+# Cuota propia (pool "jugadores"), caché por partido (los partidos terminados no cambian)
+# y estimación Poisson solo cuando hay una muestra mínima de partidos.
+# ======================================================================================
+MUESTRA_MINIMA_JUGADOR = 5
+_JUGADORES_CACHE = {}
+_ULTIMOS_CACHE = {}
+_EQUIPOS_API_IDS = {}
+
+
+def _id_equipo_api(nombre):
+    clave = _norm_equipo(nombre)
+    if clave in _EQUIPOS_API_IDS:
+        return _EQUIPOS_API_IDS[clave]
+    for x in _api_get("/teams", {"search": nombre}, pool="jugadores"):
+        t = x.get("team") or {}
+        if _norm_equipo(t.get("name")) == clave:
+            _EQUIPOS_API_IDS[clave] = t.get("id")
+            return t.get("id")
+    return None
+
+
+def _ultimos_partidos_equipo(team_id, n=5):
+    hoy = datetime.now(timezone.utc).date().isoformat()
+    previo = _ULTIMOS_CACHE.get(team_id)
+    if previo and previo[0] == hoy:
+        return previo[1]
+    fixtures = _api_get("/fixtures", {"team": team_id, "last": n}, pool="jugadores")
+    ids = [f["fixture"]["id"] for f in fixtures
+           if ((f.get("fixture") or {}).get("status") or {}).get("short") == "FT"]
+    _ULTIMOS_CACHE[team_id] = (hoy, ids)
+    return ids
+
+
+def _jugadores_partido(fixture_id):
+    if fixture_id in _JUGADORES_CACHE:
+        return _JUGADORES_CACHE[fixture_id]
+    filas = []
+    for bloque in _api_get("/fixtures/players", {"fixture": fixture_id}, pool="jugadores"):
+        equipo_id = (bloque.get("team") or {}).get("id")
+        for j in bloque.get("players") or []:
+            pl = j.get("player") or {}
+            st = (j.get("statistics") or [{}])[0] or {}
+            g = st.get("games") or {}
+            sh = st.get("shots") or {}
+            go = st.get("goals") or {}
+            filas.append({
+                "jugador_id": pl.get("id"),
+                "nombre": pl.get("name"),
+                "equipo_id": equipo_id,
+                "minutos": int(g.get("minutes") or 0),
+                "titular": not bool(g.get("substitute")),
+                "tiros": int(sh.get("total") or 0),
+                "tiros_puerta": int(sh.get("on") or 0),
+                "goles": int(go.get("total") or 0),
+            })
+    _JUGADORES_CACHE[fixture_id] = filas
+    return filas
+
+
+def _estimacion_jugador(a):
+    """Probabilidades a partir de la muestra. Solo con muestra suficiente."""
+    if a["partidos"] < MUESTRA_MINIMA_JUGADOR or a["minutos"] <= 0:
+        return {"muestra_suficiente": False, "partidos": a["partidos"],
+                "mensaje": f"Sin datos suficientes (mínimo {MUESTRA_MINIMA_JUGADOR} partidos con minutos)."}
+    min_medio = a["minutos"] / a["partidos"]
+    on_90 = a["tiros_puerta"] * 90.0 / a["minutos"]
+    goles_90 = a["goles"] * 90.0 / a["minutos"]
+    lam_on = on_90 * min_medio / 90.0
+    lam_gol = goles_90 * min_medio / 90.0
+    return {
+        "muestra_suficiente": True,
+        "partidos": a["partidos"],
+        "minutos_promedio": round(min_medio, 1),
+        "tiros_puerta_por_90": round(on_90, 2),
+        "goles_por_90": round(goles_90, 2),
+        "prob_al_menos_1_tiro_puerta": round((1 - math.exp(-lam_on)) * 100, 1),
+        "prob_al_menos_1_gol": round((1 - math.exp(-lam_gol)) * 100, 1),
+        "metodo": "Poisson sobre tasa por 90 minutos de sus últimos partidos",
+    }
+
+
+def resumen_jugadores_equipo(nombre_equipo):
+    tid = _id_equipo_api(nombre_equipo)
+    if not tid:
+        return {"success": False, "error": "Equipo no encontrado en API-Sports."}
+    acumulado = {}
+    analizados = 0
+    aviso = None
+    for fid in _ultimos_partidos_equipo(tid):
+        try:
+            filas = _jugadores_partido(fid)
+        except RuntimeError as exc:
+            if "cupo" in str(exc):
+                aviso = "Cupo diario de jugadores agotado; se muestran solo los partidos ya consultados."
+                break
+            continue
+        analizados += 1
+        for f in filas:
+            if f["equipo_id"] != tid or not f["jugador_id"] or f["minutos"] <= 0:
+                continue
+            a = acumulado.setdefault(f["jugador_id"], {
+                "nombre": f["nombre"], "partidos": 0, "minutos": 0,
+                "tiros_puerta": 0, "goles": 0, "titular": 0})
+            a["partidos"] += 1
+            a["minutos"] += f["minutos"]
+            a["tiros_puerta"] += f["tiros_puerta"]
+            a["goles"] += f["goles"]
+            a["titular"] += 1 if f["titular"] else 0
+    jugadores = []
+    for a in acumulado.values():
+        jugadores.append({"nombre": a["nombre"], "titular_en": a["titular"], **_estimacion_jugador(a)})
+    jugadores.sort(key=lambda j: j.get("prob_al_menos_1_tiro_puerta") or 0, reverse=True)
+    return {"success": True, "equipo": nombre_equipo, "partidos_analizados": analizados,
+            "jugadores": jugadores, "aviso": aviso}
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     _origenes = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "https://predicxion-ia.onrender.com").split(",") if o.strip()]
@@ -14284,6 +14711,34 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
     # ---------------- JUEGO RESPONSABLE: límite de gasto y pausa ----------------
+    @app.route("/api/v1/datos/estado", methods=["GET"])
+    def datos_estado():
+        """Estado público de los datos de equipos (sin claves ni datos privados)."""
+        with _RATINGS_LOCK:
+            return jsonify({"success": True, **RATINGS_ESTADO, "api_sports_hoy": solicitudes_api_hoy()}), 200
+
+    @app.route("/api/v1/admin/ratings/update", methods=["POST"])
+    @require_auth
+    @require_owner
+    def admin_actualizar_ratings():
+        threading.Thread(target=actualizar_ratings_reales, daemon=True).start()
+        return jsonify({"success": True, "message": "Actualización de datos iniciada en segundo plano."}), 200
+
+
+    @app.route("/api/v1/vip/jugadores", methods=["GET"])
+    @require_auth
+    @require_subscription("pro")
+    @limit_user(20, 3600)
+    def vip_jugadores():
+        equipo = (request.args.get("equipo") or "").strip()
+        if len(equipo) < 3:
+            return jsonify({"success": False, "error": "Indica el nombre del equipo."}), 400
+        try:
+            return jsonify(resumen_jugadores_equipo(equipo)), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
+
+
     @app.route("/api/v1/usuario/juego-responsable", methods=["GET", "POST"])
     @require_auth
     def juego_responsable():
