@@ -220,23 +220,9 @@ def ejecutar_envio_automatico_top5(motivo="DESPACHO_PROGRAMADO_24_7"):
             if not matches_day:
                 matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= today_str][:15]
 
-            ranked = []
-            for m in matches_day:
-                an = analytics.generate_institutional_analysis(m)
-                p_princ = an.get("pronostico_principal", {})
-                prob_raw = p_princ.get("probabilidad", "50%")
-                prob_num = float(re.sub(r'[^0-9.]', '', prob_raw) or 50.0)
-                ranked.append({
-                    "partido": f"{m.get('local')} vs {m.get('visitante')}",
-                    "liga": m.get("liga"),
-                    "mercado": p_princ.get("seleccion", "Pronóstico"),
-                    "probabilidad": prob_raw,
-                    "prob_num": prob_num,
-                    "cuota_justa": round(100.0 / max(5.0, prob_num), 2)
-                })
-
-            ranked.sort(key=lambda x: x["prob_num"], reverse=True)
-            items = ranked[:5]
+            items = [{"partido": f"{c['local']} vs {c['visitante']}", "mercado": c["mercado"],
+                      "probabilidad": c["probabilidad"], "prob_num": c["prob_num"],
+                      "cuota_justa": c["cuota_justa"]} for c in _top5_para_fecha(today_str)[:5]]
 
             if not items:
                 logger.warning("Auto-Telegram: No hay partidos disponibles hoy.")
@@ -14157,7 +14143,7 @@ API_LIGAS_RATINGS = [
     {"nombre": "Serie A", "pais": "Brazil", "clave": "brasil"},
 ]
 TEMPORADAS_API = [2025, 2026]
-API_POOLS = {"ratings": 60, "jugadores": 30}
+API_POOLS = {"ratings": 50, "jugadores": 25, "resultados": 15}
 _API_CUOTA_POOL = {p: {"fecha": None, "usados": 0} for p in API_POOLS}
 _API_IDS_LIGA = {}
 _API_LOCK = threading.Lock()
@@ -14373,6 +14359,260 @@ def resumen_jugadores_equipo(nombre_equipo):
     jugadores.sort(key=lambda j: j.get("prob_al_menos_1_tiro_puerta") or 0, reverse=True)
     return {"success": True, "equipo": nombre_equipo, "partidos_analizados": analizados,
             "jugadores": jugadores, "aviso": aviso}
+
+
+
+# ======================================================================================
+# TOP 5: selección de mercado por partido con Poisson (1X2, doble oportunidad, goles,
+# ambos anotan y combinados con el favorito). Sin córners ni tarjetas: no tienen datos reales.
+# Umbrales elegidos por criterio propio; NO están validados todavía (lo mide la auditoría).
+# ======================================================================================
+TOP5_PROB_MINIMA = 0.55
+TOP5_UMBRAL_COMBO_FAV = 0.70
+TOP5_UMBRAL_COMBO_GOLES = 0.45
+TOP5_MAX_POR_TIPO = 2
+
+
+def _matriz_marcadores(lh, la, max_g=8):
+    ph = [(lh ** i) * math.exp(-lh) / math.factorial(i) for i in range(max_g + 1)]
+    pa = [(la ** j) * math.exp(-la) / math.factorial(j) for j in range(max_g + 1)]
+    M = [[ph[i] * pa[j] for j in range(max_g + 1)] for i in range(max_g + 1)]
+    total = sum(sum(r) for r in M) or 1.0
+    return [[v / total for v in r] for r in M]
+
+
+def _candidato_top5(match, an):
+    """Elige el mercado de un partido con su regla de evaluación. Devuelve dict o None (sin ventaja clara)."""
+    xg = an.get("parametros_xg") or {}
+    lh = float(xg.get("lambda_home", 1.5))
+    la = float(xg.get("lambda_away", 1.2))
+    M = _matriz_marcadores(lh, la)
+    n = len(M)
+    p_local = sum(M[i][j] for i in range(n) for j in range(n) if i > j)
+    p_empate = sum(M[i][i] for i in range(n))
+    p_visita = sum(M[i][j] for i in range(n) for j in range(n) if i < j)
+    p_over15 = sum(M[i][j] for i in range(n) for j in range(n) if i + j >= 2)
+    p_over25 = sum(M[i][j] for i in range(n) for j in range(n) if i + j >= 3)
+    p_btts = sum(M[i][j] for i in range(1, n) for j in range(1, n))
+    local, visita = match.get("local"), match.get("visitante")
+    fav_local = p_local >= p_visita
+    p_fav = p_local if fav_local else p_visita
+    nombre_fav = local if fav_local else visita
+    lado_fav = "local" if fav_local else "visitante"
+    if fav_local:
+        p_fav_over25 = sum(M[i][j] for i in range(n) for j in range(n) if i > j and i + j >= 3)
+    else:
+        p_fav_over25 = sum(M[i][j] for i in range(n) for j in range(n) if i < j and i + j >= 3)
+
+    if p_fav >= TOP5_UMBRAL_COMBO_FAV and p_fav_over25 >= TOP5_UMBRAL_COMBO_GOLES:
+        tipo = "combo"
+        texto = f"Gana {nombre_fav} y más de 2.5 goles"
+        prob = p_fav_over25
+        regla = {"k": "combo", "lado": lado_fav, "umbral": 2.5}
+    else:
+        opciones = [
+            ("resultado", f"Gana {local}", p_local, {"k": "gana", "lado": "local"}),
+            ("resultado", f"Gana {visita}", p_visita, {"k": "gana", "lado": "visitante"}),
+            ("doble", f"{local} o empate (1X)", p_local + p_empate, {"k": "doble", "lado": "local"}),
+            ("doble", f"{visita} o empate (X2)", p_visita + p_empate, {"k": "doble", "lado": "visitante"}),
+            ("goles", "Más de 1.5 goles", p_over15, {"k": "goles", "op": "mas", "umbral": 1.5}),
+            ("goles", "Más de 2.5 goles", p_over25, {"k": "goles", "op": "mas", "umbral": 2.5}),
+            ("goles", "Menos de 2.5 goles", 1 - p_over25, {"k": "goles", "op": "menos", "umbral": 2.5}),
+            ("ambos", "Ambos equipos anotan: Sí", p_btts, {"k": "ambos", "valor": True}),
+            ("ambos", "Ambos equipos anotan: No", 1 - p_btts, {"k": "ambos", "valor": False}),
+        ]
+        tipo, texto, prob, regla = max(opciones, key=lambda o: o[2])
+        if prob < TOP5_PROB_MINIMA:
+            return None
+
+    categorias = {"resultado": ("RESULTADO", "🎯"), "doble": ("DOBLE OP.", "🛡️"),
+                  "goles": ("GOLES", "⚽"), "ambos": ("AMBOS ANOTAN", "⚽"), "combo": ("COMBO", "🔗")}
+    cat, icono = categorias[tipo]
+    fecha_utc = match.get("fecha_utc") or ""
+    return {
+        "tipo": tipo,
+        "regla": regla,
+        "match_id": match.get("id_partido"),
+        "local": local, "visitante": visita, "liga": match.get("liga"),
+        "codigo_liga": match.get("codigo_liga"),
+        "fecha": fecha_utc[:10],
+        "hora_est": fecha_utc[11:16] or "19:00",
+        "categoria": cat, "icono_categoria": icono,
+        "mercado": texto,
+        "probabilidad": f"{prob * 100:.1f}%",
+        "prob_num": round(prob * 100, 1),
+        "cuota_justa": round(1.0 / max(prob, 0.05), 2),
+        "justificacion": f"Modelo Poisson: goles esperados {lh:.2f} local vs {la:.2f} visitante.",
+        "xg_local": lh, "xg_visita": la,
+    }
+
+def _elegir_top5(candidatos, limite=5):
+    """Ordena por probabilidad y limita cuántos picks pueden ser del mismo tipo (para que varíe)."""
+    elegidos, conteo = [], {}
+    for c in sorted(candidatos, key=lambda x: x["prob_num"], reverse=True):
+        if conteo.get(c["tipo"], 0) >= TOP5_MAX_POR_TIPO:
+            continue
+        elegidos.append(c)
+        conteo[c["tipo"]] = conteo.get(c["tipo"], 0) + 1
+        if len(elegidos) >= limite:
+            break
+    return elegidos
+
+
+
+# ======================================================================================
+# TOP 5 REGISTRADO: cada pick se congela al generarse, se liquida al terminar el partido
+# (ACIERTO / FALLO / ANULADO) con el marcador real de API-Sports y aparece en la auditoría.
+# ======================================================================================
+TOP5_COLECCION = "top5_picks"
+_TOP5_MEMORIA = {}
+_TOP5_LOCK = threading.Lock()
+ESTADOS_FT = ("FT", "AET", "PEN")
+ESTADOS_ANULADOS = ("PST", "CANC", "ABD", "SUSP", "AWD", "WO")
+
+
+def _id_pick(c):
+    base = f"{c['fecha']}|{c['local']}|{c['visitante']}|{c['mercado']}"
+    return re.sub(r"[^A-Za-z0-9|_\- ]", "_", base)[:300]
+
+
+def _leer_top5_dia(fecha):
+    if db:
+        docs = list(db.collection(TOP5_COLECCION).where("fecha", "==", fecha).stream())
+        if docs:
+            picks = []
+            for d in docs:
+                x = d.to_dict() or {}
+                x["id_doc"] = d.id
+                picks.append(x)
+            return sorted(picks, key=lambda x: x.get("prob_num") or 0, reverse=True)
+    with _TOP5_LOCK:
+        return list(_TOP5_MEMORIA.get(fecha, []))
+
+
+def _guardar_top5_dia(picks):
+    if not picks:
+        return
+    fecha = picks[0]["fecha"]
+    if db:
+        for p in picks:
+            ref = db.collection(TOP5_COLECCION).document(p["id_doc"])
+            if not ref.get().exists:
+                ref.set(p)
+    with _TOP5_LOCK:
+        _TOP5_MEMORIA[fecha] = list(picks)
+
+
+def _top5_para_fecha(fecha):
+    """Devuelve el Top 5 de la fecha. Si ya se generó, devuelve el registrado (no se recalcula)."""
+    guardados = _leer_top5_dia(fecha)
+    if guardados:
+        return guardados
+    partidos = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == fecha]
+    candidatos = []
+    for m in partidos:
+        an = analytics.generate_institutional_analysis(m)
+        c = _candidato_top5(m, an)
+        if c:
+            c["fecha"] = fecha
+            candidatos.append(c)
+    elegidos = _elegir_top5(candidatos, 5)
+    for e in elegidos:
+        e["estado"] = "PENDIENTE"
+        e["marcador"] = None
+        e["fixture_id"] = None
+        e["registrado_en"] = datetime.now(timezone.utc).isoformat()
+        e["id_doc"] = _id_pick(e)
+    _guardar_top5_dia(elegidos)
+    return elegidos
+
+
+def _evaluar_regla(regla, gh, ga):
+    total = gh + ga
+    lado = regla.get("lado")
+    k = regla["k"]
+    if k == "gana":
+        return gh > ga if lado == "local" else ga > gh
+    if k == "doble":
+        return gh >= ga if lado == "local" else ga >= gh
+    if k == "goles":
+        return total > regla["umbral"] if regla["op"] == "mas" else total < regla["umbral"]
+    if k == "ambos":
+        return ((gh > 0 and ga > 0) == bool(regla["valor"]))
+    if k == "combo":
+        gana = gh > ga if lado == "local" else ga > gh
+        return gana and total > regla["umbral"]
+    raise ValueError(f"regla desconocida: {k}")
+
+
+def _resultados_api_dia(fecha):
+    """Un solo consumo de API-Sports por fecha: todos los partidos del día con su marcador."""
+    salida = {}
+    for f in _api_get("/fixtures", {"date": fecha}, pool="resultados"):
+        fx = f.get("fixture") or {}
+        teams = f.get("teams") or {}
+        goals = f.get("goals") or {}
+        clave = (_norm_equipo((teams.get("home") or {}).get("name")),
+                 _norm_equipo((teams.get("away") or {}).get("name")))
+        salida[clave] = {
+            "gh": goals.get("home"), "ga": goals.get("away"),
+            "estado": ((fx.get("status") or {}).get("short") or ""),
+            "id": fx.get("id"),
+        }
+    return salida
+
+
+def liquidar_top5_pendientes():
+    """Marca como ACIERTO, FALLO o ANULADO los picks pendientes cuyo partido ya terminó."""
+    if not db:
+        return {"ok": False, "motivo": "sin base de datos"}
+    hoy = get_current_operational_date()
+    pendientes = [d for d in db.collection(TOP5_COLECCION).where("estado", "==", "PENDIENTE").stream()]
+    resumen = {"liquidados": 0, "anulados": 0, "sin_resultado": 0, "errores": []}
+    fechas = sorted({(d.to_dict() or {}).get("fecha") for d in pendientes})
+    for fecha in fechas:
+        if not fecha or fecha > hoy:
+            continue
+        try:
+            resultados = _resultados_api_dia(fecha)
+        except Exception as exc:
+            resumen["errores"].append(f"{fecha}: {str(exc)[:100]}")
+            continue
+        for d in [x for x in pendientes if (x.to_dict() or {}).get("fecha") == fecha]:
+            p = d.to_dict() or {}
+            r = resultados.get((_norm_equipo(p.get("local")), _norm_equipo(p.get("visitante"))))
+            ref = db.collection(TOP5_COLECCION).document(d.id)
+            ahora = datetime.now(timezone.utc).isoformat()
+            if not r:
+                resumen["sin_resultado"] += 1
+                continue
+            if r["estado"] in ESTADOS_ANULADOS:
+                ref.update({"estado": "ANULADO", "liquidado_en": ahora, "fixture_id": r["id"]})
+                resumen["anulados"] += 1
+                continue
+            if r["estado"] not in ESTADOS_FT or r["gh"] is None or r["ga"] is None:
+                resumen["sin_resultado"] += 1
+                continue
+            gh, ga = int(r["gh"]), int(r["ga"])
+            acierto = _evaluar_regla(p.get("regla") or {}, gh, ga)
+            ref.update({"estado": "ACIERTO" if acierto else "FALLO", "marcador": f"{gh}-{ga}",
+                        "liquidado_en": ahora, "fixture_id": r["id"]})
+            resumen["liquidados"] += 1
+    resumen["ok"] = True
+    return resumen
+
+
+def _ciclo_liquidacion():
+    time.sleep(120)
+    while True:
+        try:
+            liquidar_top5_pendientes()
+        except Exception as exc:
+            logger.error("Error liquidando Top 5: %s", exc, exc_info=True)
+        time.sleep(1800)
+
+
+threading.Thread(target=_ciclo_liquidacion, daemon=True).start()
 
 
 def create_app() -> Flask:
@@ -14735,6 +14975,44 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": "Indica el nombre del equipo."}), 400
         try:
             return jsonify(resumen_jugadores_equipo(equipo)), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
+
+
+    @app.route("/api/v1/admin/top5/regenerar", methods=["POST"])
+    @require_auth
+    @require_owner
+    def admin_regenerar_top5():
+        """Rehace el Top 5 de una fecha. Solo borra picks PENDIENTES; si ya hay picks liquidados, no toca nada."""
+        try:
+            fecha = (request.args.get("fecha") or get_current_operational_date()).strip()
+            if db:
+                existentes = list(db.collection(TOP5_COLECCION).where("fecha", "==", fecha).stream())
+                if any((d.to_dict() or {}).get("estado") != "PENDIENTE" for d in existentes):
+                    return jsonify({"success": False,
+                                    "error": "Ya hay picks liquidados en esa fecha. No se regenera para no alterar la auditoría."}), 409
+                for d in existentes:
+                    db.collection(TOP5_COLECCION).document(d.id).delete()
+            with _TOP5_LOCK:
+                _TOP5_MEMORIA.pop(fecha, None)
+            picks = _top5_para_fecha(fecha)
+            logger.info("Top 5 regenerado para %s: %d picks", fecha, len(picks))
+            return jsonify({
+                "success": True,
+                "fecha": fecha,
+                "picks": [{"partido": f"{p['local']} vs {p['visitante']}", "mercado": p["mercado"],
+                           "probabilidad": p["probabilidad"], "tipo": p["tipo"]} for p in picks],
+            }), 200
+        except Exception as exc:
+            return jsonify({"success": False, "error": _safe_err(exc)}), 500
+
+
+    @app.route("/api/v1/admin/top5/liquidar", methods=["POST"])
+    @require_auth
+    @require_owner
+    def admin_liquidar_top5():
+        try:
+            return jsonify(liquidar_top5_pendientes()), 200
         except Exception as exc:
             return jsonify({"success": False, "error": _safe_err(exc)}), 500
 
@@ -15127,41 +15405,7 @@ def create_app() -> Flask:
                 elif ALL_FIXTURES_POOL:
                     matches_day = ALL_FIXTURES_POOL[:15]
 
-            ranked = []
-            for m in matches_day:
-                an = analytics.generate_institutional_analysis(m)
-                p_princ = an.get("pronostico_principal", {})
-                prob_raw = p_princ.get("probabilidad", "50%")
-                prob_num = float(re.sub(r'[^0-9.]', '', prob_raw) or 50.0)
-
-                sel_text = p_princ.get("seleccion", "")
-                if "Tarjeta" in sel_text or "🟨" in sel_text: cat = "CARDS"; cat_ico = "🟨"
-                elif "Córner" in sel_text or "🚩" in sel_text: cat = "CORNERS"; cat_ico = "🚩"
-                elif "Under" in sel_text or "Menos" in sel_text or "🛡️" in sel_text: cat = "UNDER"; cat_ico = "🛡️"
-                elif "DNB" in sel_text or "Empate" in sel_text: cat = "DNB"; cat_ico = "⚙️"
-                else: cat = "GOALS"; cat_ico = "⚽"
-
-                odd_val = round(100.0 / max(5.0, prob_num), 2)
-                ranked.append({
-                    "match_id": m.get("id_partido"),
-                    "local": m.get("local"),
-                    "visitante": m.get("visitante"),
-                    "liga": m.get("liga"),
-                    "codigo_liga": m.get("codigo_liga"),
-                    "fecha": target_date,
-                    "hora_est": (m.get("fecha_utc") or "")[11:16] or "19:00",
-                    "categoria": cat,
-                    "icono_categoria": cat_ico,
-                    "mercado": sel_text,
-                    "probabilidad": prob_raw,
-                    "prob_num": prob_num,
-                    "cuota_justa": odd_val,
-                    "justificacion": p_princ.get("justificacion", "Ventaja cuantitativa fundamentada en balance xG."),
-                    "xg_local": an.get("parametros_xg", {}).get("lambda_home", 1.5),
-                    "xg_visita": an.get("parametros_xg", {}).get("lambda_away", 1.5)
-                })
-
-            ranked.sort(key=lambda x: x["prob_num"], reverse=True)
+            ranked = _top5_para_fecha(target_date)
             # Solicitud de usuario: Top 5 del día en lugar de solo 3
             limite_top = int(request.args.get("limit", 5))
             top3_list = []
@@ -15384,6 +15628,30 @@ def create_app() -> Flask:
         except Exception as exc:
             logger.error("Error leyendo auditoría: %s", exc, exc_info=True)
 
+        try:
+            if db:
+                for d in db.collection(TOP5_COLECCION).order_by("fecha", direction="DESCENDING").limit(300).stream():
+                    x = d.to_dict() or {}
+                    est = str(x.get("estado", "PENDIENTE")).upper()
+                    mapa = {"ACIERTO": "GANADA", "FALLO": "PERDIDA", "ANULADO": "ANULADA"}
+                    partido = str(x.get("local", "")) + " vs " + str(x.get("visitante", ""))
+                    resultado = est.title()
+                    if x.get("marcador"):
+                        resultado = resultado + " · marcador " + str(x.get("marcador"))
+                    historial.append({
+                        "id": d.id,
+                        "fecha": str(x.get("fecha", ""))[:10],
+                        "partido": partido[:120],
+                        "seleccion": str(x.get("mercado", ""))[:120],
+                        "cuota": "",
+                        "_cuota": 0.0,
+                        "resultado": resultado,
+                        "estado": mapa.get(est, "PENDIENTE"),
+                        "registrado_en": str(x.get("registrado_en", "")),
+                    })
+        except Exception as exc:
+            logger.error("Error leyendo Top 5 registrado: %s", exc, exc_info=True)
+
         liquidados = [h for h in historial if h["estado"] in ("GANADA", "PERDIDA")]
         n = len(liquidados)
         ganadas = sum(1 for h in liquidados if h["estado"] == "GANADA")
@@ -15395,7 +15663,7 @@ def create_app() -> Flask:
             "success": True,
             "metricas": {
                 "tasa_acierto_global": f"{round(ganadas / n * 100, 1)}%" if n else "Sin datos",
-                "yield_acumulado": f"{round(profit / n * 100, 1):+}%" if n else "Sin datos",
+                "yield_acumulado": "No se muestra: solo aciertos y fallos",
                 "total_picks_auditados": n,
                 "ganadas": ganadas,
                 "perdidas": n - ganadas,
