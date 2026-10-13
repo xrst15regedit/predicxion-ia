@@ -1780,10 +1780,17 @@
                             <div class="font-bold text-slate-400 text-xs truncate mt-0.5">${d.visitante}</div>
                             <div class="mt-2 text-[10px] text-cyan-300 bg-baseDark/80 p-1.5 rounded border border-cardBorder truncate font-mono">${n1.etiqueta ? n1.etiqueta.split(" ")[0] : "🛡️"} ${n1.mercado || 'Verde Seguro'}</div>
                         </div>
+                <div class="mt-2 space-y-1 text-[10px]">
+                    ${stks.nivel_1_base ? `<div class="bg-baseDark/60 border border-cardBorder rounded p-1.5 flex justify-between gap-2"><span class="text-accentGreen font-black truncate">1 · ${stks.nivel_1_base.mercado}</span><span class="font-mono text-slate-300 shrink-0">${stks.nivel_1_base.probabilidad}</span></div>` : ''}
+                    ${stks.nivel_2_tactico ? `<div class="bg-baseDark/60 border border-cardBorder rounded p-1.5 flex justify-between gap-2"><span class="text-cyan-300 font-black truncate">2 · ${stks.nivel_2_tactico.mercado}</span><span class="font-mono text-slate-300 shrink-0">${stks.nivel_2_tactico.probabilidad}</span></div>` : ''}
+                    ${stks.nivel_3_quirurgico ? `<div class="bg-baseDark/60 border border-cardBorder rounded p-1.5 flex justify-between gap-2"><span class="text-amber-300 font-black truncate">3 · ${stks.nivel_3_quirurgico.mercado}</span><span class="font-mono text-slate-300 shrink-0">cuota ${stks.nivel_3_quirurgico.cuota_justa}</span></div>` : ''}
+                    ${!stks.nivel_1_base ? `<div class="text-slate-500 text-center py-1">Niveles disponibles con Pase Pro</div>` : ''}
+                </div>
                         <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-cardBorder text-[10px]">
                             <span class="text-slate-400 font-mono">${d.fecha.split(' ')[1] || ''} UTC</span>
                             <button onclick="mostrarDetalle('${d.id_partido}')" class="text-accentGreen hover:underline font-bold flex items-center gap-1">AUDITAR <i class="fa-solid fa-arrow-right text-[9px]"></i></button>
                         </div>
+                <button onclick="abrirSimulacionMC('${d.id_partido}', '${d.local}', '${d.visitante}')" class="w-full mt-2 text-[10px] font-black bg-cyan-900/40 hover:bg-cyan-800/60 text-cyan-300 border border-cyan-700/50 rounded-lg py-1.5"><i class="fa-solid fa-dice"></i> Simulación Monte Carlo</button>
                     </div>
                 `;
             });
@@ -2196,6 +2203,14 @@
             window.scrollTo(0, 0);
         }
         window.cerrarDetallePartido = cerrarDetallePartido;
+
+        function abrirSimulacionMC(matchId, local, visita) {
+            mostrarDetalle(matchId);
+            setTimeout(() => {
+                const b = document.getElementById(`btn-mc-${matchId}`);
+                if (b) b.click();
+            }, 900);
+        }
 
         async function ejecutarMonteCarloPartido(matchId, local, visita) {
             const u = window.currentUserState;
