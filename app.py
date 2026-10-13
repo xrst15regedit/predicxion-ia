@@ -503,6 +503,19 @@ def require_subscription(f):
         return f(*args, **kwargs)
     return decorated
 
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user_email = (getattr(g, "user_email", None) or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({
+                "success": False,
+                "error": "Acceso denegado: Se requieren permisos de administrador."
+            }), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
 # --------------------------------------------------------------------------------------
 # 4. MOTOR CUANTITATIVO MATEMÁTICO (POISSON, MONTE CARLO, 7 PILARES, SUREBETS Y KELLY)
 # --------------------------------------------------------------------------------------
