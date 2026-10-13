@@ -256,9 +256,6 @@
                             <button onclick="reproducirAudioTop5Completo()" id="btn-audio-top5-full" class="bg-cardDark hover:bg-slate-800 text-lime-400 border border-lime-500/40 text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-md shadow-lime-950/30 cursor-pointer" title="Escuchar el resumen narrado por voz de los 5 destacados de hoy">
                                 <i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 5 (Voz IA)</span>
                             </button>
-                            <button onclick="abrirModalAdminPin()" id="btn-admin-unlock-top5" class="bg-baseDark hover:bg-slate-800 text-slate-500 hover:text-amber-400 border border-cardBorder text-xs font-bold px-2.5 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer" title="Activar controles de administración para Telegram">
-                                <i class="fa-solid fa-lock text-xs"></i>
-                            </button>
                             <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-lg shadow-sky-950/40 cursor-pointer" title="Enviar Top 5 directamente al canal VIP de Telegram">
                                 <i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>
                             </button>
@@ -538,7 +535,7 @@
                                         <span id="res-hedge-stake" class="text-lg font-black text-white font-mono">S/ 78.12</span>
                                     </div>
                                     <div class="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/60">
-                                        <span class="text-[10px] text-accentGreen block mb-0.5">Ganancia Neta Asegurada</span>
+                                        <span class="text-[10px] text-accentGreen block mb-0.5">Ganancia neta estimada</span>
                                         <span id="res-hedge-profit" class="text-lg font-black text-accentGreen font-mono">+S/ 71.88</span>
                                     </div>
                                 </div>
@@ -561,32 +558,6 @@
     </div>
 
         <!-- MODAL DE ACCESO ADMINISTRADOR POR PIN -->
-    <div id="modal-admin-pin" role="dialog" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-cardDark border border-amber-500/40 w-full max-w-[360px] rounded-2xl p-6 relative shadow-2xl">
-            <button onclick="cerrarAdminPinModal()" class="absolute top-4 right-4 text-slate-500 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
-            <div class="text-center mb-4">
-                <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl font-black mb-2 shadow-inner">
-                    <i class="fa-solid fa-shield-halved"></i>
-                </div>
-                <h3 class="text-lg font-black text-white m-0">Acceso Administrador</h3>
-                <p class="text-xs text-slate-400 mt-1">Ingresa tu clave maestra o PIN para ver y activar los botones de Telegram en este dispositivo.</p>
-            </div>
-            <form onsubmit="verificarAdminPin(event)" class="space-y-3">
-                <div>
-                    <label class="text-[10px] text-slate-400 font-bold block mb-1">PIN / Clave de Administrador</label>
-                    <input type="password" id="input-admin-pin" required placeholder="Ingresa tu PIN" class="w-full bg-baseDark border border-cardBorder rounded-xl px-3 py-2 text-center text-sm font-mono tracking-widest text-amber-400 focus:outline-none focus:border-amber-400">
-                </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black py-2.5 rounded-xl transition text-xs shadow-lg shadow-amber-950/40 cursor-pointer">
-                    Desbloquear Controles de Telegram
-                </button>
-                <div id="msg-admin-pin" class="text-xs text-center text-red-400 hidden">Clave incorrecta. Intenta nuevamente.</div>
-            </form>
-            <div id="admin-status-box" class="hidden mt-3 pt-3 border-t border-cardBorder text-center">
-                <span class="text-xs text-emerald-400 font-bold block">✓ Modo Administrador Activo</span>
-                <button onclick="cerrarModoAdmin()" class="text-[10px] text-slate-400 hover:text-red-400 underline mt-1 cursor-pointer">Desactivar Modo Admin en este navegador</button>
-            </div>
-        </div>
-    </div>
 
     <!-- MODAL DE AUTENTICACIÓN -->
     <div id="modal-auth" role="dialog" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
@@ -684,11 +655,11 @@
                     <button onclick="enviarPagoManual('yape')" id="btn-yape-sub" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-2.5 rounded-xl transition text-xs">Validar Yape (S/ 39.90)</button>
                 </div>
 
-                <!-- Formulario Plin Gabriel Cerdán (942 791 524) -->
+                <!-- Formulario Plin Flor Cerdán (935 682 686) -->
                 <div id="form-plin" class="metodo-form hidden bg-baseDark border border-cyan-900/40 rounded-2xl p-4 space-y-3">
                     <div class="flex items-center justify-between text-[11px] text-cyan-300 bg-cyan-950/40 px-3 py-2 rounded-xl border border-cyan-500/20">
-                        <span>Plin al número: <strong>942 791 524</strong> (Gabriel Cerdán)</span>
-                        <button onclick="navigator.clipboard.writeText('942791524'); notificar('Número 942791524 copiado');" class="text-xs text-white hover:text-cyan-300"><i class="fa-regular fa-copy"></i></button>
+                        <span>Plin al número: <strong>935 682 686</strong> (Flor Cerdán)</span>
+                        <button onclick="navigator.clipboard.writeText('935682686'); notificar('Número 935682686 copiado');" class="text-xs text-white hover:text-cyan-300"><i class="fa-regular fa-copy"></i></button>
                     </div>
                     <div class="grid grid-cols-2 gap-2.5">
                         <div><label class="text-[10px] text-slate-400 font-bold block mb-1">Tu Celular Plin</label><input type="tel" id="plin-phone" maxlength="9" placeholder="987654321" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"></div>
@@ -924,7 +895,7 @@
                         elVeredicto.innerText = `Ambas opciones otorgan exactamente el mismo beneficio (+S/ ${guaranteedProfit.toFixed(2)}).`;
                     }
                 } else {
-                    elVeredicto.innerText = `Apostando S/ ${hedgeStake.toFixed(2)} al resultado contrario garantizas una ganancia de +S/ ${guaranteedProfit.toFixed(2)} pase lo que pase en el partido.`;
+                    elVeredicto.innerText = `Si apuestas S/ ${hedgeStake.toFixed(2)} al resultado contrario, la ganancia neta estimada es +S/ ${guaranteedProfit.toFixed(2)}. Solo se cumple si las cuotas reales coinciden con las usadas y ambas apuestas se pagan.`;
                 }
             }
         }
@@ -995,7 +966,7 @@
         function actualizarUI() {
             const u = window.currentUserState;
             const plan = (u && u.plan) ? u.plan.toLowerCase() : 'free';
-            const esAdminPorPin = localStorage.getItem('predicxion_admin_activo') === 'true';
+            const esAdminPorPin = false;
             const esAdmin = Boolean(u && u.esAdmin) || esAdminPorPin;
 
             const b = document.getElementById('nav-user-badge');
@@ -1512,7 +1483,7 @@
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-cardDark border border-cardBorder text-slate-200">
                                     <i class="fa-solid ${iconBadge}"></i> ${tipoBadge}: <strong class="text-white ml-0.5">${p.equipo || eqNombre}</strong>
                                 </span>
-                                <span class="text-[9px] font-mono font-bold text-accentGreen bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">${m0.prob} viabilidad</span>
+                                <span class="text-[9px] font-mono font-bold text-accentGreen bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">${m0.prob} probabilidad estimada</span>
                             </div>
                             <div class="flex items-center gap-2.5 mb-2">
                                 <span class="w-8 h-8 rounded-full bg-slate-800 text-cyan-300 text-xs font-black flex items-center justify-center border border-slate-700 shadow-md">${p.dorsal || 9}</span>
@@ -2059,6 +2030,12 @@
                             <p class="text-[9px] text-slate-500 mt-2">Estimaciones de un modelo estadístico. No son garantías ni predicciones seguras. Sin cuotas reales no se puede calcular si una apuesta tiene valor.</p>
                             <p class="text-[9px] text-amber-400/90 mt-1">Juega con responsabilidad. Si apostar te genera problemas, busca ayuda profesional antes de seguir.</p>
                         </div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-xs font-black uppercase text-cyan-400 tracking-wider flex items-center gap-1.5"><i class="fa-solid fa-dice"></i> 4. Simulación Monte Carlo (10,000 Partidos)</h4>
+                            <button onclick="ejecutarMonteCarloPartido('${item.id_partido}', '${item.local}', '${item.visitante}')" id="btn-mc-${item.id_partido}" class="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black text-xs px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5">
+                                <i class="fa-solid fa-play"></i> ${esVip ? 'Simular Gráfico' : '🔒 Desbloquear con VIP'}
+                            </button>
+                        </div>
                     </div>
                     ` : `
                     <!-- BLOQUEO VIP CONSENSO TRIPLE IA -->
@@ -2198,7 +2175,7 @@
                             </span>
                         </div>
 
-                        ${renderizarTermometroRachaHtml(item)}
+                        ${esVip ? renderizarTermometroRachaHtml(item) : '<div class="text-[11px] text-amber-400 bg-black/30 border border-amber-500/30 rounded-xl p-3"><i class="fa-solid fa-lock"></i> Termómetro de racha disponible con el Pase Pro.</div>'}
                     </div>
 
             `;
@@ -2972,7 +2949,7 @@
             }
 
             let guion = `¡Hola! Aquí tienes el análisis de voz de PredicXion IA para el partidazo entre ${local} y ${vis} en ${liga}... `;
-            guion += `Para este encuentro, la jugada recomendada con mayor certeza matemática es: ${seleccion}, con una probabilidad estimada del ${prob}... `;
+            guion += `Para este encuentro, la selección de mayor probabilidad según el modelo es: ${seleccion}, con una probabilidad estimada del ${prob}... `;
             guion += `¿Por qué elegimos esta jugada? El modelo proyecta una generación de ${xgLoc} goles esperados para ${local} contra ${xgVis} de ${vis}, bajo un estilo de ${estilo}... `;
             if (figurasTexto) guion += figurasTexto + "... ";
             guion += riesgoTexto + "... ";
@@ -3242,11 +3219,9 @@
             <p><strong class="text-slate-200">Solo mayores de 18 años.</strong> PredicXion IA ofrece estimaciones estadísticas de fútbol con fines informativos. No es una casa de apuestas, no recibe apuestas y no garantiza resultados ni ganancias. Los resultados pasados no aseguran resultados futuros.</p>
             <p>Las probabilidades salen de un modelo Poisson con valores base de cada equipo que se actualizan manualmente; pueden contener errores. Compáralas siempre con la cuota real de tu casa y apuesta solo dinero que puedas permitirte perder.</p>
             <p>Si apostar deja de ser un pasatiempo o te genera problemas, busca ayuda profesional y considera pausar el juego.</p>
+            <p class="text-[10px] text-slate-500">Datos de equipos: <span id="datos-estado">consultando...</span>. Fuente: football-data.co.uk, resultados reales con ataque, defensa y Elo calculados.</p>
             <div class="flex items-center justify-between pt-2 border-t border-cardBorder/40">
                 <span class="text-[10px] text-slate-500">© 2026 PredicXion IA • Terminal Cuantitativa</span>
-                <button onclick="abrirModalAdminPin()" class="text-[10px] text-slate-600 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer">
-                    <i class="fa-solid fa-shield-halved"></i> <span>Panel Administrador</span>
-                </button>
             </div>
         </div>
     </footer>
@@ -3309,6 +3284,22 @@
                 jrStatus(d.success ? ('Ajustes guardados. ' + (d.aviso || '')) : (d.error || 'No se pudo guardar.'));
             } catch (e) { jrStatus('Error de conexión.'); }
         }
+    </script>
+
+    <script>
+        (async function cargarEstadoDatos() {
+            const el = document.getElementById('datos-estado');
+            if (!el) return;
+            try {
+                const r = await fetch(`${API_BASE}/api/v1/datos/estado`);
+                const d = await r.json();
+                if (!d.success || !d.actualizado) { el.textContent = 'aún no disponibles; se muestran estimaciones de respaldo.'; return; }
+                const fecha = new Date(d.actualizado).toLocaleDateString('es-PE');
+                el.textContent = `actualizados el ${fecha} · ${d.equipos_con_datos} equipos con datos reales · ${d.partidos_usados} partidos usados`;
+            } catch (e) {
+                el.textContent = 'no se pudo consultar el estado.';
+            }
+        })();
     </script>
 </body>
 </html>
