@@ -565,14 +565,11 @@
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0"><i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Historial Oficial Top 5 (Auditoría Transparente)</h3>
-                            <span class="text-[10px] bg-slate-800/80 text-emerald-400 font-mono px-2 py-0.5 rounded border border-slate-700">Rotación 24/7 · Aciertos y Fallos Reales</span>
+                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0"><i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Historial Oficial</h3>
+                            <span class="text-[10px] bg-slate-800/80 text-emerald-400 font-mono px-2 py-0.5 rounded border border-slate-700">Rotación 24/7 · Aciertos y Fallas Reales</span>
                         </div>
                         <div class="flex items-center gap-2 flex-wrap">
-                            <select id="select-fecha-auditoria" onchange="cargarAuditoria(this.value)" class="bg-baseDark border border-cardBorder text-slate-300 text-xs px-2.5 py-1 rounded-lg focus:outline-none focus:border-cyan-500 font-mono cursor-pointer" title="Seleccionar jornada finalizada">
-                                <option value="">Cargando jornadas...</option>
-                            </select>
-                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition cursor-pointer" title="Enviar reporte de aciertos y pérdidas a Telegram">
+                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition cursor-pointer" title="Enviar reporte a Telegram">
                                 <i class="fa-brands fa-telegram"></i> Telegram VIP
                             </button>
                             <span class="text-[10px] bg-emerald-950/90 text-accentGreen border border-emerald-800 px-3 py-1 rounded-lg font-black font-mono shadow-sm" id="auditoria-roi-badge">Cargando...</span>
@@ -1288,32 +1285,19 @@
             }
         }
 
-        async function cargarAuditoria(fechaSeleccionada = '') {
+        async function cargarAuditoria() {
             const cont = document.getElementById('contenedor-auditoria');
             const badge = document.getElementById('auditoria-roi-badge');
-            const selFecha = document.getElementById('select-fecha-auditoria');
-            const esAdmin = Boolean(window.currentUserState && window.currentUserState.esAdmin);
             try {
-                const url = fechaSeleccionada ? `${API_BASE}/api/v1/vip/auditoria?fecha=${encodeURIComponent(fechaSeleccionada)}` : `${API_BASE}/api/v1/vip/auditoria`;
-                const res = await fetch(url);
+                const res = await fetch(`${API_BASE}/api/v1/vip/auditoria`);
                 const data = await res.json();
                 const m = data.metricas || {};
                 
-                // Actualizar badge con tasa y yield real
+                // Actualizar badge con tasa y desglose real
                 if (badge) {
                     badge.innerText = (m.total_picks_auditados > 0)
-                        ? `${m.tasa_acierto_global} acierto (${m.ganadas}G - ${m.perdidas}P) · Yield ${m.yield_acumulado}`
+                        ? `${m.tasa_acierto_global} acierto · ${m.ganadas} ganadas y ${m.perdidas} perdidas`
                         : 'Sin picks auditados';
-                }
-
-                // Actualizar selector de jornadas disponibles
-                if (selFecha && data.fechas_disponibles_auditoria && data.fechas_disponibles_auditoria.length) {
-                    const activa = data.fecha_auditada;
-                    selFecha.innerHTML = data.fechas_disponibles_auditoria.map(f => {
-                        const esHoy = (f === data.fecha_operativa) ? ' (Hoy)' : '';
-                        const esSel = (f === activa) ? ' selected' : '';
-                        return `<option value="${f}"${esSel}>Jornada ${f}${esHoy}</option>`;
-                    }).join('');
                 }
 
                 let html = '';
@@ -1323,7 +1307,7 @@
                             <span class="text-lime-400 text-sm">✓</span>
                             <span>${esc(m.aviso)}</span>
                         </div>
-                        <span class="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded">Fecha auditada: ${esc(data.fecha_auditada || '')}</span>
+                        <span class="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded">Jornada Concluida</span>
                     </div>`;
                 }
 
@@ -1340,8 +1324,8 @@
                             <th class="py-2.5 px-3">Partido</th>
                             <th class="py-2.5 px-3">Selección Oficial</th>
                             <th class="py-2.5 px-3">Cuota</th>
-                            <th class="py-2.5 px-3">Marcador Final</th>
-                            <th class="py-2.5 px-3 text-center">Calificación</th>
+                            <th class="py-2.5 px-3">Marcador Oficial</th>
+                            <th class="py-2.5 px-3 text-center">Resultado</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-cardBorder/30">`;
@@ -1372,7 +1356,7 @@
                 html += '</tbody></table></div>';
                 cont.innerHTML = html;
             } catch (e) {
-                cont.innerHTML = '<p class="text-red-400 py-3 text-center">Error al consultar el historial del Top 5.</p>';
+                cont.innerHTML = '<p class="text-red-400 py-3 text-center">Error al consultar el historial oficial.</p>';
             }
         }
 
