@@ -15044,6 +15044,16 @@ def create_app() -> Flask:
     def enforce_https_redirect():
         if request.headers.get("X-Forwarded-Proto") == "http":
             return redirect(request.url.replace("http://", "https://", 1), code=301)
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        if request.headers.get("X-Forwarded-Proto") == "https" or request.is_secure:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
     analytics = SportsAnalyticsEngine()
 
     # Rutas Auxiliares Anti-404
@@ -15150,19 +15160,21 @@ def create_app() -> Flask:
     def create_mercadopago_preference():
         try:
             body = request.get_json() or {}
-            plan_code = (body.get("plan_codigo") or body.get("plan_name") or "pro").lower().strip()
+            plan_code = (body.get("plan") or body.get("plan_codigo") or body.get("plan_name") or "pro").lower().strip()
             
-            # Tabla Oficial de Precios en el Servidor (Previene manipulación de precios desde el cliente)
+            # Tabla Oficial de Precios de Lanzamiento en el Servidor (Previene manipulación de precios desde el cliente)
             OFFICIAL_PLANS = {
-                "pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
-                "mensual pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
-                "pase pro": {"nombre": "Pase Pro Mensual", "precio": 39.90, "vigencia_dias": 30},
-                "elite": {"nombre": "Pase Élite Cuantitativo", "precio": 79.90, "vigencia_dias": 30},
-                "pase elite": {"nombre": "Pase Élite Cuantitativo", "precio": 79.90, "vigencia_dias": 30},
-                "anual": {"nombre": "Pase Anual VIP", "precio": 299.00, "vigencia_dias": 365}
+                "pro": {"id": "pro", "nombre": "Pase Pro Mensual", "precio": 19.90, "vigencia_dias": 30},
+                "mensual pro": {"id": "pro", "nombre": "Pase Pro Mensual", "precio": 19.90, "vigencia_dias": 30},
+                "pase pro": {"id": "pro", "nombre": "Pase Pro Mensual", "precio": 19.90, "vigencia_dias": 30},
+                "elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo", "precio": 39.90, "vigencia_dias": 30},
+                "pase elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo", "precio": 39.90, "vigencia_dias": 30},
+                "pase élite": {"id": "elite", "nombre": "Pase Élite Cuantitativo", "precio": 39.90, "vigencia_dias": 30},
+                "anual": {"id": "anual", "nombre": "Pase Anual VIP", "precio": 149.00, "vigencia_dias": 365}
             }
 
             matched_plan = OFFICIAL_PLANS.get(plan_code, OFFICIAL_PLANS["pro"])
+            plan_id_canon = matched_plan["id"]
             plan_name = matched_plan["nombre"]
             amount = float(matched_plan["precio"])
             bloqueo = _bloqueo_compra(getattr(g, "user_id", ""), amount)
@@ -15173,25 +15185,36 @@ def create_app() -> Flask:
                 return jsonify({
                     "success": True,
                     "init_point": "https://www.mercadopago.com.pe",
-                    "preference_id": f"PREF-TEST-{int(time.time())}"
+                    "preference_id": f"PREF-TEST-{int(time.time())}",
+                    "plan": plan_id_canon,
+                    "monto": amount
                 }), 200
 
             preference_payload = {
                 "items": [
                     {
+                        "id": f"predicxion_{plan_id_canon}",
                         "title": f"PredicXion IA - {plan_name}",
+                        "description": f"Suscripción digital informativa {plan_name} ({matched_plan['vigencia_dias']} días)",
                         "quantity": 1,
                         "unit_price": amount,
                         "currency_id": "PEN"
                     }
                 ],
                 "payer": {"email": g.user_email or "usuario@predicxion.com"},
-                "external_reference": g.user_id,
+                "external_reference": f"{g.user_id}|{plan_id_canon}",
+                "metadata": {
+                    "user_id": g.user_id,
+                    "plan_id": plan_id_canon,
+                    "user_email": g.user_email or ""
+                },
                 "back_urls": {
                     "success": request.host_url.rstrip('/') + "/?pago=aprobado",
                     "failure": request.host_url.rstrip('/') + "/?pago=fallido",
                     "pending": request.host_url.rstrip('/') + "/?pago=pendiente"
                 },
+                "notification_url": request.host_url.rstrip('/') + "/api/v1/payments/webhook",
+                "statement_descriptor": "PREDICXION IA",
                 "auto_return": "approved"
             }
 
@@ -15354,103 +15377,89 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/payments/webhook", methods=["POST"])
     def mercadopago_webhook():
-        """Recibe y valida notificaciones de pago directamente de Mercado Pago servidor a servidor."""
+        """Recibe y valida notificaciones de pago directamente de Mercado Pago servidor a servidor con idempotencia."""
         try:
             topic = request.args.get("topic") or request.args.get("type")
             payment_id = request.args.get("id") or request.args.get("data.id")
 
             if not payment_id and request.is_json:
                 body = request.get_json(silent=True) or {}
-                payment_id = body.get("data", {}).get("id")
-                topic = topic or body.get("type")
+                payment_id = (body.get("data") or {}).get("id") or body.get("id")
+                topic = topic or body.get("type") or body.get("topic")
 
-            if not payment_id:
+            if not payment_id or not str(payment_id).strip():
                 return jsonify({"status": "ignored", "reason": "No payment id"}), 200
+
+            payment_id_str = str(payment_id).strip()
+            if not MP_ACCESS_TOKEN:
+                return jsonify({"status": "pending_configuration"}), 200
 
             # Consultar estado real a la API oficial de Mercado Pago
             headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
-            payment_url = f"https://api.mercadopago.com/v1/payments/{payment_id}"
+            payment_url = f"https://api.mercadopago.com/v1/payments/{payment_id_str}"
             resp = requests.get(payment_url, headers=headers, timeout=10)
 
             if resp.status_code == 200:
                 payment_data = resp.json()
                 status = payment_data.get("status")
-                user_id = payment_data.get("external_reference")
-                payer_email = payment_data.get("payer", {}).get("email")
+                ext_ref = str(payment_data.get("external_reference") or "").strip()
+                metadata = payment_data.get("metadata") or {}
+                tx_amount = float(payment_data.get("transaction_amount") or 0.0)
+
+                user_id = metadata.get("user_id") or (ext_ref.split("|")[0] if "|" in ext_ref else ext_ref)
+                plan_id = metadata.get("plan_id") or (ext_ref.split("|")[1] if "|" in ext_ref else "")
+                if plan_id not in ("pro", "elite", "anual"):
+                    if tx_amount >= 140.0:
+                        plan_id = "anual"
+                    elif tx_amount >= 35.0:
+                        plan_id = "elite"
+                    else:
+                        plan_id = "pro"
 
                 if status == "approved" and db and user_id:
-                    # Activar membresía en Firestore verificada por servidor
+                    pago_ref = db.collection("pagos_mp").document(payment_id_str)
+                    if pago_ref.get().exists:
+                        return jsonify({"status": "already_processed", "payment_status": status}), 200
+
+                    ahora_utc = datetime.now(timezone.utc)
+                    dias_vigencia = 365 if plan_id == "anual" else 30
+                    expira_dt = ahora_utc + timedelta(days=dias_vigencia)
+
+                    pago_ref.set({
+                        "payment_id": payment_id_str,
+                        "usuario_id": user_id,
+                        "plan": plan_id,
+                        "monto": tx_amount,
+                        "estado": "APROBADO",
+                        "fecha_utc": ahora_utc.isoformat()
+                    })
+
                     user_ref = db.collection("usuarios").document(user_id)
                     user_ref.set({
                         "esVip": True,
-                        "plan": "pro",
-                        "ultimo_pago_id": payment_id,
+                        "plan": plan_id,
+                        "suscripcion_activa": True,
+                        "suscripcion_expira": expira_dt.isoformat(),
+                        "ultimo_pago_id": payment_id_str,
                         "pago_estado": "approved",
-                        "fecha_activacion": datetime.now(timezone.utc).isoformat()
+                        "fecha_activacion": ahora_utc.isoformat()
                     }, merge=True)
-                    logger.info("Membresía activada exitosamente para usuario %s vía webhook MP.", user_id)
+                    logger.info("Membresía %s activada exitosamente para usuario %s vía webhook MP.", plan_id, user_id)
 
-                return jsonify({"status": "processed", "payment_status": status}), 200
+                return jsonify({"status": "processed", "payment_status": status, "plan": plan_id}), 200
             return jsonify({"status": "pending_validation"}), 200
         except Exception as e:
             logger.error("Error en mercadopago_webhook: %s", e)
             return jsonify({"status": "error", "error": str(e)}), 500
 
-    # Pagos Manuales (Yape / Plin - Gabriel Cerdán 942 791 524)
+    # Pagos Manuales Deshabilitados (Pasarela Exclusiva: Mercado Pago Oficial)
     @app.route("/api/v1/payments/manual-submit", methods=["POST"])
     @require_auth
     def process_manual_payment():
-        try:
-            body = request.get_json() or {}
-            metodo = body.get("metodo", "").lower()
-            telefono = str(body.get("telefono", "")).strip()
-            codigo = str(body.get("codigo", "")).strip()
-            plan_texto = body.get("plan_texto", "Mensual Pro")
-            monto = float(body.get("monto", 39.90))
-
-            if metodo not in ["yape", "plin"]:
-                return jsonify({"success": False, "error": "Método no admitido."}), 400
-
-            if not re.match(r"^9\d{8}$", telefono):
-                return jsonify({"success": False, "error": "El celular debe tener 9 dígitos y empezar con 9."}), 400
-
-            if not codigo or len(codigo) < 4:
-                return jsonify({"success": False, "error": "Código de operación obligatorio."}), 400
-
-            bloqueo = _bloqueo_compra(getattr(g, "user_id", ""), monto)
-            if bloqueo:
-                return jsonify({"success": False, "error": bloqueo}), 403
-
-            if db:
-                repetido = list(db.collection("pagos_manuales").where("codigo_operacion", "==", codigo).limit(1).stream())
-                if repetido:
-                    return jsonify({"success": False, "error": "Ese código de operación ya fue registrado previamente."}), 409
-
-            operacion_id = f"{metodo.upper()}-{int(time.time())}"
-            pago_record = {
-                "usuario_id": g.user_id,
-                "email": g.user_email,
-                "metodo": metodo.upper(),
-                "receptor_nombre": "Gabriel Cerdán",
-                "receptor_telefono": "942791524",
-                "telefono_remitente": telefono,
-                "codigo_operacion": codigo,
-                "monto": monto,
-                "plan": plan_texto,
-                "estado": "PENDIENTE_REVISION",
-                "fecha_utc": datetime.now(timezone.utc).isoformat()
-            }
-            if db:
-                db.collection("pagos_manuales").document(operacion_id).set(pago_record)
-
-            return jsonify({
-                "success": True,
-                "message": "Comprobante recibido. La suscripción se activará una vez verificado el abono por Gabriel Cerdán.",
-                "operacion_id": operacion_id,
-                "estado": "PENDIENTE_REVISION"
-            }), 200
-        except Exception as exc:
-            return jsonify({"success": False, "error": str(exc)}), 500
+        return jsonify({
+            "success": False,
+            "error": "Los pagos manuales han sido deshabilitados por seguridad. Utiliza exclusivamente el Checkout Oficial de Mercado Pago (acepta Tarjetas, Yape y Saldo MP con activación inmediata)."
+        }), 410
 
     # Cartelera Completa y Pronósticos (Con Inyección Completa de UEFA Nations League 2026)
     _CARTELERA_MEMO_CACHE = {}
@@ -16327,6 +16336,11 @@ def create_app() -> Flask:
     @app.route("/api/v1/vip/telegram-auditoria/broadcast", methods=["POST"])
     def broadcast_telegram_auditoria():
         """Transmite el balance oficial de auditoría (ganadas y pérdidas) directamente al canal VIP de Telegram."""
+        if not _verificar_es_admin():
+            return jsonify({
+                "success": False,
+                "error": "Acceso restringido: Esta acción es exclusiva para el administrador."
+            }), 403
 
         bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
         channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
@@ -17014,93 +17028,182 @@ def create_app() -> Flask:
 
     # Health Check
     
-    # ENDPOINT CRON AUTOMÁTICO 24/7 (WEBHOOK / AUTOMATIZACIÓN EXTERNA)
+    # ENDPOINT CRON AUTOMÁTICO 24/7 (WEBHOOK / AUTOMATIZACIÓN EXTERNA PROTEGIDO)
     @app.route("/api/v1/cron/telegram-top5-auto", methods=["GET", "POST"])
     def cron_telegram_auto():
+        import hmac
         cron_key = (request.args.get("key") or request.headers.get("X-Cron-Key") or "").strip()
-        secret = (os.getenv("CRON_SECRET_KEY") or "2026").strip()
-        if cron_key != secret and not _verificar_es_admin():
+        secret = (os.getenv("CRON_SECRET_KEY") or "").strip()
+        cron_valido = bool(secret and len(secret) >= 12 and cron_key and hmac.compare_digest(cron_key, secret))
+        if not cron_valido and not _verificar_es_admin():
             return jsonify({"success": False, "error": "Acceso no autorizado al cron."}), 403
 
         exito, msg = ejecutar_envio_automatico_top5(motivo="WEBHOOK_CRON")
         return jsonify({"success": exito, "mensaje": msg})
 
     
-    # VERIFICACIÓN SEGURA DE PIN DE ADMINISTRADOR (SIN EXPONER CLAVES EN EL FRONTEND)
+    # VERIFICACIÓN SEGURA DE PIN DE ADMINISTRADOR (SIN CLAVES POR DEFECTO HARDCODEADAS)
     @app.route("/api/v1/admin/verify-pin", methods=["POST"])
     def verify_admin_pin():
+        import hmac
+        ip_key = f"verify_pin:{request.remote_addr}"
+        if rate_limited(ip_key, 5, 300):
+            return jsonify({"success": False, "error": "Demasiados intentos. Espera 5 minutos."}), 429
+
         body = request.get_json(silent=True) or {}
         pin_ingresado = (body.get("pin") or "").strip()
-        expected_key = (os.getenv("ADMIN_SECRET_KEY") or "2026").strip()
+        expected_key = (os.getenv("ADMIN_SECRET_KEY") or "").strip()
 
-        if pin_ingresado and (pin_ingresado == expected_key or pin_ingresado == "predicxion_master_2026"):
+        if expected_key and len(expected_key) >= 12 and pin_ingresado and hmac.compare_digest(pin_ingresado, expected_key):
             return jsonify({
                 "success": True,
-                "mensaje": "PIN verificado correctamente.",
+                "mensaje": "Clave administrativa verificada correctamente.",
                 "token": expected_key
             }), 200
         return jsonify({
             "success": False,
-            "error": "PIN o clave de administración incorrecta."
+            "error": "Clave de administración inválida o no configurada."
         }), 401
 
     
     # --------------------------------------------------------------------------------------
-    # MOTOR DE IA DE VOZ NEURONAL CUANTITATIVA (VOZ MASCULINA LATINA 100% REAL)
+    # MOTOR DE IA DE VOZ NEURONAL CUANTITATIVA ULTRA-RÁPIDA (CACHÉ RAM + CERO EMOJIS/BARRAS)
     # --------------------------------------------------------------------------------------
+    _VOICE_AUDIO_CACHE = {}
+    _VOICE_CACHE_LOCK = threading.Lock()
+    _VOICE_CATALOG = {
+        "gonzalo": {"voice": "es-CO-GonzaloNeural", "rate": "+7%", "pitch": "+0Hz", "label": "Analista Latino (Gonzalo Neural)"},
+        "tomas": {"voice": "es-AR-TomasNeural", "rate": "+6%", "pitch": "+0Hz", "label": "Relator Argentino (Tomás Neural)"},
+        "alvaro": {"voice": "es-ES-AlvaroNeural", "rate": "+6%", "pitch": "+0Hz", "label": "Comentarista Español (Álvaro Neural)"},
+        "alex": {"voice": "es-PE-AlexNeural", "rate": "+6%", "pitch": "+0Hz", "label": "Analista Peruano (Alex Neural)"},
+        "jorge": {"voice": "es-MX-JorgeNeural", "rate": "+6%", "pitch": "+0Hz", "label": "Locutor Mexicano (Jorge Neural)"},
+    }
+
+    def _limpiar_texto_locutor(raw_text: str) -> str:
+        if not raw_text:
+            return ""
+        t = str(raw_text)
+        # 1. Eliminar códigos redundantes entre paréntesis o corchetes para que no los deletree
+        t = re.sub(r"\((?:Doble Oportunidad\s*)?(?:1X|X2|12|0\.0\s*/\s*DNB|DNB)\)", "", t, flags=re.IGNORECASE)
+        t = re.sub(r"\[[VWDEL\-\s]+\]", "", t)
+        t = re.sub(r"\([VWDEL\-]{3,}\)", "", t)
+        # 2. Eliminar absolutamente todos los emojis, stickers e íconos Unicode (jamás dirá 'balón de fútbol' ni 'escudo')
+        t = re.sub(r"[\U00010000-\U0010ffff\u2600-\u27bf\u2300-\u23ff\ufe00-\ufe0f\u200d⚡⚽🛡️🚩🟨🎯📈🔥👑💎🔒✓✗•*_#`~]+", " ", t)
+        # 3. Reemplazar temporadas, monedas y barras diagonales (jamás dirá 'barra diagonal')
+        t = re.sub(r"2026\s*/\s*2027|2026\s*/\s*27|26\s*/\s*27", "esta temporada", t)
+        t = re.sub(r"S/\s*", "soles ", t)
+        t = re.sub(r"0\.0\s*/\s*DNB", "cero punto cero sin empate", t, flags=re.IGNORECASE)
+        t = re.sub(r"/p\b|/partido\b", " por partido", t, flags=re.IGNORECASE)
+        t = re.sub(r"/mes\b", " al mes", t, flags=re.IGNORECASE)
+        t = t.replace("/", " o ")
+        # 4. Normalización fonética de términos deportivos
+        t = re.sub(r"\b1X\b", "gana local o empata", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bX2\b", "gana visita o empata", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bDNB\b", "empate no acción", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bxGA\b", "goles esperados en contra", t, flags=re.IGNORECASE)
+        t = re.sub(r"\bxG\b", "goles esperados", t, flags=re.IGNORECASE)
+        t = re.sub(r"\+EV\b", "valor positivo", t, flags=re.IGNORECASE)
+        t = re.sub(r"@\s*([0-9]+(?:\.[0-9]+)?)", r"cuota \1", t)
+        t = re.sub(r"\+([0-9]+(?:\.[0-9]+)?)", r"más de \1", t)
+        # Quitar decimales .0 innecesarios en porcentajes (ej. 82.0% -> 82 por ciento)
+        t = re.sub(r"(\d+)\.0\s*%", r"\1 por ciento", t)
+        t = t.replace("%", " por ciento")
+        t = re.sub(r"\bvs\.?\b", "contra", t, flags=re.IGNORECASE)
+        # Reemplazar puntos suspensivos múltiples por punto seguido natural (evita pausas robóticas de 1.5s)
+        t = re.sub(r"\.{2,}", ". ", t)
+        t = re.sub(r"\s+", " ", t).strip()
+        return t
+
     @app.route("/api/v1/voice/audio", methods=["GET"])
     def generate_voice_audio():
-        """Genera audio MP3 en tiempo real con voz masculina humana ultra natural en español latino."""
+        """Genera audio MP3 neuronal con caché en RAM (respuesta <0.05s) y limpieza total de emojis/símbolos."""
         raw_text = (request.args.get("text") or "").strip()
+        voice_key = (request.args.get("voice") or "gonzalo").lower().strip()
         if not raw_text:
             return jsonify({"error": "Texto requerido"}), 400
 
-        # Normalización fonética para locutor de fútbol
-        texto_limpio = (
-            raw_text.replace("1X", "gana local o empata")
-            .replace("X2", "gana visita o empata")
-            .replace("12", "cualquiera de los dos gana")
-            .replace("DNB", "empate apuesta no válida")
-            .replace("xG", "goles esperados")
-            .replace("+EV", "valor positivo")
-            .replace("@", "cuota ")
-            .replace("%", " por ciento")
-            .replace("vs.", "frente a")
-            .replace("vs", "frente a")
-        )
+        texto_limpio = _limpiar_texto_locutor(raw_text)[:950]
+        v_cfg = _VOICE_CATALOG.get(voice_key, _VOICE_CATALOG["gonzalo"])
+        cache_key = hashlib.sha256(f"{v_cfg['voice']}|{texto_limpio}".encode("utf-8")).hexdigest()[:32]
 
+        with _VOICE_CACHE_LOCK:
+            cached_mp3 = _VOICE_AUDIO_CACHE.get(cache_key)
+        if cached_mp3:
+            resp = Response(cached_mp3, mimetype="audio/mpeg")
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+            resp.headers["X-Voice-Cache"] = "HIT"
+            return resp
+
+        mp3_bytes = None
+
+        # 1. Motor Primario: Microsoft Edge Neural TTS (Voz de comentarista deportivo latino en alta definición)
         try:
             import io
             import asyncio
             import edge_tts
 
-            # Voz masculina latina neural de Microsoft (es-MX-JorgeNeural)
-            # Tono cálido, humano, locutor deportivo profesional
-            voice_name = "es-MX-JorgeNeural"
-
             async def _synthesize():
-                communicate = edge_tts.Communicate(texto_limpio, voice_name, rate="-4%", pitch="-2Hz")
+                communicate = edge_tts.Communicate(
+                    texto_limpio,
+                    v_cfg["voice"],
+                    rate=v_cfg["rate"],
+                    pitch=v_cfg["pitch"]
+                )
                 fp = io.BytesIO()
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
                         fp.write(chunk["data"])
-                fp.seek(0)
-                return fp
+                return fp.getvalue()
 
+            loop = asyncio.new_event_loop()
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_closed():
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            audio_data = loop.run_until_complete(_synthesize())
-            return Response(audio_data.read(), mimetype="audio/mpeg")
+                mp3_bytes = loop.run_until_complete(_synthesize())
+            finally:
+                loop.close()
         except Exception as err:
-            logger.warning("Generador de voz edge-tts no disponible: %s. Usando fallback cliente.", err)
-            return jsonify({"success": False, "error": str(err), "fallback_browser": True}), 503
+            logger.warning("Aviso en edge-tts (%s), activando respaldo neuronal MP3 directo.", err)
+
+        # 2. Motor Secundario de Respaldo Servidor: Stream MP3 Neuronal Directo (sin depender de WebSockets)
+        if not mp3_bytes:
+            try:
+                import urllib.parse
+                palabras = texto_limpio.split(" ")
+                fragmentos = []
+                actual = ""
+                for pal in palabras:
+                    if len(actual) + len(pal) + 1 <= 180:
+                        actual = f"{actual} {pal}".strip()
+                    else:
+                        if actual:
+                            fragmentos.append(actual)
+                        actual = pal
+                if actual:
+                    fragmentos.append(actual)
+
+                buf = bytearray()
+                tl_code = "es-US" if voice_key in ("gonzalo", "alex", "jorge") else "es-ES"
+                for frag in fragmentos[:6]:
+                    q_enc = urllib.parse.quote(frag)
+                    tts_url = f"https://translate.google.com/translate_tts?ie=UTF-8&tl={tl_code}&client=tw-ob&q={q_enc}"
+                    r_tts = requests.get(tts_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=6)
+                    if r_tts.status_code == 200 and r_tts.content:
+                        buf.extend(r_tts.content)
+                if len(buf) > 256:
+                    mp3_bytes = bytes(buf)
+            except Exception as fb_err:
+                logger.warning("Fallo respaldo MP3: %s", fb_err)
+
+        if mp3_bytes:
+            with _VOICE_CACHE_LOCK:
+                if len(_VOICE_AUDIO_CACHE) >= 250:
+                    _VOICE_AUDIO_CACHE.pop(next(iter(_VOICE_AUDIO_CACHE)), None)
+                _VOICE_AUDIO_CACHE[cache_key] = mp3_bytes
+            resp = Response(mp3_bytes, mimetype="audio/mpeg")
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+            resp.headers["X-Voice-Engine"] = v_cfg["voice"]
+            return resp
+
+        return jsonify({"success": False, "fallback_browser": True}), 503
 
     @app.route("/api/v1/plantillas", methods=["GET"])
     def get_plantillas_json():
@@ -17148,6 +17251,8 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/admin/calendario/rotar-fase", methods=["POST"])
     def rotar_fase_calendario():
+        if not _verificar_es_admin():
+            return jsonify({"success": False, "error": "Acceso restringido: Se requieren permisos de administrador."}), 403
         global ALL_FIXTURES_POOL, _CURRENT_ACTIVE_WINDOW, _CARTELERA_MEMO_CACHE
         body = request.get_json(silent=True) or {}
         fase_num = body.get("fase")
@@ -17193,6 +17298,8 @@ def create_app() -> Flask:
     def sync_auditoria_results():
         """Sincroniza y liquida automáticamente los pronósticos del Top 5 de una fecha
         consultando SofaScore, ESPN y API-Sports en tiempo real."""
+        if not _verificar_es_admin():
+            return jsonify({"success": False, "error": "Acceso restringido: Se requieren permisos de administrador."}), 403
         try:
             body = request.get_json(silent=True) or {}
             target_date = body.get("fecha") or get_current_operational_date()
@@ -17295,8 +17402,61 @@ def create_app() -> Flask:
             logger.error("Error en juego-responsable: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
 
+    # ----------------------------------------------------------------------------------
+    # LIBRO DE RECLAMACIONES VIRTUAL (CUMPLIMIENTO INDECOPI - LEY N° 29571 PERÚ)
+    # ----------------------------------------------------------------------------------
+    @app.route("/api/v1/legal/libro-reclamaciones", methods=["POST"])
+    def registrar_libro_reclamaciones():
+        try:
+            ip_key = f"libro_rec:{request.remote_addr}"
+            if rate_limited(ip_key, 5, 3600):
+                return jsonify({"success": False, "error": "Has superado el límite de envíos por hora."}), 429
 
+            body = request.get_json(silent=True) or {}
+            nombre = str(body.get("nombre") or "").strip()
+            documento = str(body.get("documento") or "").strip()
+            email = str(body.get("email") or "").strip()
+            tipo = str(body.get("tipo") or "RECLAMO").upper().strip()
+            detalle = str(body.get("detalle") or "").strip()
 
+            if len(nombre) < 3 or len(documento) < 6 or "@" not in email or len(detalle) < 10:
+                return jsonify({
+                    "success": False,
+                    "error": "Por favor completa tu nombre, DNI/CE válido, correo electrónico y el detalle (mínimo 10 caracteres)."
+                }), 400
+
+            if tipo not in ("RECLAMO", "QUEJA"):
+                tipo = "RECLAMO"
+
+            ahora_utc = datetime.now(timezone.utc)
+            codigo_hoja = f"REC-{ahora_utc.strftime('%Y%m%d')}-{int(time.time()) % 100000:05d}"
+            registro = {
+                "codigo_hoja": codigo_hoja,
+                "nombre": nombre[:120],
+                "documento": documento[:25],
+                "email": email[:120],
+                "tipo": tipo,
+                "detalle": detalle[:1500],
+                "estado": "RECIBIDO",
+                "fecha_utc": ahora_utc.isoformat(),
+                "plazo_respuesta_dias_habiles": 15
+            }
+
+            if db:
+                try:
+                    db.collection("libro_reclamaciones").document(codigo_hoja).set(registro)
+                except Exception as db_err:
+                    logger.warning("Aviso guardando hoja de reclamación en Firestore: %s", db_err)
+
+            return jsonify({
+                "success": True,
+                "codigo": codigo_hoja,
+                "fecha": ahora_utc.strftime("%Y-%m-%d %H:%M UTC"),
+                "mensaje": f"Hoja de Reclamación {codigo_hoja} registrada conforme a la Ley N° 29571 (Indecopi). Recibirás respuesta en un plazo máximo de 15 días hábiles."
+            }), 200
+        except Exception as exc:
+            logger.error("Error en libro-reclamaciones: %s", exc)
+            return jsonify({"success": False, "error": "No se pudo procesar la solicitud."}), 500
 
     return app
 
