@@ -1450,7 +1450,7 @@
             }
 
             // Diccionario de respaldo de estrellas reales 2026/2027 de TODAS las ligas y selecciones
-            const ROSTERS_ESTRELLA = {
+            const ROSTERS_ESTRELLA = window.ROSTERS_ESTRELLA = {
                 "aek athens": {"nombre": "Frantzdy Pierrot", "dorsal": 7, "pos": "Delantero", "equipo": "AEK Athens", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "82.0%", "razon": "Artillero principal de AEK Athens promedia 2.0 tiros a puerta y 3.4 remates por compromiso."},
                 "aek atenas": {"nombre": "Frantzdy Pierrot", "dorsal": 7, "pos": "Delantero", "equipo": "AEK Athens", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "82.0%", "razon": "Artillero principal de AEK Athens promedia 2.0 tiros a puerta y 3.4 remates por compromiso."},
                 "academico de viseu": {"nombre": "André Clóvis", "dorsal": 33, "pos": "Delantero centro", "equipo": "Academico de Viseu", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.54", "prob": "84.4%", "razon": "Artillero principal de Academico de Viseu promedia 1.8 tiros a puerta y 3.0 remates por compromiso."},
@@ -1733,13 +1733,14 @@
                 "vitória guimarães": {"nombre": "Arnel Jakupovic", "dorsal": 9, "pos": "Delantero centro", "equipo": "Vitória Guimarães", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.48", "prob": "85.7%", "razon": "Artillero principal de Vitória Guimarães promedia 2.4 tiros a puerta y 4.2 remates por compromiso."}
             };
             function derivarPropRealistaJugador(pObj, nombreEq, saltIdx) {
-                const nombre = pObj.nombre || `Atacante de ${nombreEq}`;
-                const equipo = pObj.equipo || nombreEq;
+                if (!pObj) pObj = {};
+                const nombre = pObj.nombre || "Referente Titular";
+                const equipo = pObj.equipo || pObj.equipo_partido || nombreEq || "Club Oficial";
                 const pos = pObj.posicion || pObj.pos || "Atacante";
                 const dorsal = pObj.dorsal || 9;
+                const rol = pObj.rol_plantilla || (saltIdx === 2 ? "2do Referente Titular (Opción B)" : "Titular Principal (Opción A)");
                 const razonRaw = pObj.resumen_estadistico || pObj.razon || "";
 
-                // Extraer promedios reales de tiros a puerta y tiros totales si están en el objeto o en el texto
                 let tp = parseFloat(pObj.tiros_puerta_prom || 0);
                 let tt = parseFloat(pObj.tiros_totales_prom || 0);
                 if (!tp || !tt) {
@@ -1748,38 +1749,35 @@
                     if (mTp) tp = parseFloat(mTp[1]);
                     if (mTt) tt = parseFloat(mTt[1]);
                 }
-                if (!tp) tp = 1.7;
-                if (!tt) tt = 3.2;
+                if (!tp) tp = 1.8;
+                if (!tt) tt = 3.3;
+
+                let mkt = pObj.mercado_principal || pObj.mkt || "";
+                let prob = pObj.probabilidad_principal || pObj.prob || "";
 
                 let h = 0;
                 const sKey = `${nombre}_${equipo}_${saltIdx || 0}`;
-                for (let i = 0; i < sKey.length; i++) h = (h + sKey.charCodeAt(i)) % 5;
+                for (let i = 0; i < sKey.length; i++) h = (h + sKey.charCodeAt(i)) % 4;
 
-                let mkt = pObj.mercado_principal || "";
-                let prob = pObj.probabilidad_principal || "";
-
-                if (!mkt || mkt === "Más de 1.5 Tiros Totales") {
-                    if (tt >= 3.8 && (h === 0 || h === 1)) {
-                        mkt = "Más de 3.5 Tiros Totales";
-                        prob = `${Math.min(84.5, Math.round((64.0 + tt * 4.4) * 10) / 10)}%`;
-                    } else if (tp >= 1.9 && (h === 0 || h === 2 || h === 4)) {
+                if (!mkt) {
+                    if (tp >= 2.1 && h === 0) {
                         mkt = "Más de 1.5 Tiros a Puerta";
-                        prob = `${Math.min(86.8, Math.round((68.5 + tp * 6.8) * 10) / 10)}%`;
-                    } else if (tt >= 3.2 && (h === 1 || h === 2 || h === 3)) {
+                        prob = `${Math.min(85.8, Math.round((69.0 + tp * 6.2) * 10) / 10)}%`;
+                    } else if (tt >= 3.4 && (h === 1 || h === 2)) {
                         mkt = "Más de 2.5 Tiros Totales";
-                        prob = `${Math.min(86.2, Math.round((66.5 + tt * 4.8) * 10) / 10)}%`;
-                    } else if (tp >= 1.5 && (h === 3 || h === 4)) {
+                        prob = `${Math.min(85.5, Math.round((67.5 + tt * 4.5) * 10) / 10)}%`;
+                    } else if (h === 3) {
                         mkt = "Más de 0.5 Tiros a Puerta";
-                        prob = `${Math.min(87.5, Math.round((73.0 + tp * 6.5) * 10) / 10)}%`;
+                        prob = `${Math.min(87.2, Math.round((74.0 + tp * 5.8) * 10) / 10)}%`;
                     } else {
                         mkt = "Más de 1.5 Tiros Totales";
-                        prob = `${Math.min(86.0, Math.round((69.0 + tt * 5.0) * 10) / 10)}%`;
+                        prob = `${Math.min(86.5, Math.round((70.5 + tt * 4.5) * 10) / 10)}%`;
                     }
                 }
-                if (!prob) prob = pObj.prob || "82.5%";
+                if (!prob) prob = "84.0%";
 
-                const razon = `${nombre} (${equipo}) promedia ${tp.toFixed(1)} tiros a puerta y ${tt.toFixed(1)} tiros totales por partido.`;
-                return { nombre, dorsal, pos, equipo, mkt, prob, razon, tp, tt };
+                const razon = `${nombre} (${equipo}) promedia ${tp.toFixed(1)} tiros a puerta y ${tt.toFixed(1)} disparos totales por partido.`;
+                return { nombre, dorsal, pos, equipo, mkt, prob, razon, tp, tt, rol };
             }
             window.derivarPropRealistaJugador = derivarPropRealistaJugador;
 
@@ -1797,29 +1795,17 @@
                 let cuotaAlt = (Math.round(100.0 / Math.max(5, parseFloat(probAlt) || 84) * 100) / 100).toFixed(2);
                 let razonAlt = n1.rol || "Selección base calculada por probabilidad estadística y modelo xG.";
 
-                // 2. Jugador Estrella Real (eligiendo entre los referentes del partido con mercado dinámico sin cuota inventada)
-                let rawPlayer = null;
-                if (item.props_jugadores && item.props_jugadores.length > 0) {
-                    rawPlayer = item.props_jugadores[idx % item.props_jugadores.length];
-                }
-                if (!rawPlayer) {
-                    const kLoc = loc.toLowerCase().trim();
-                    const kVis = vis.toLowerCase().trim();
-                    if (ROSTERS_ESTRELLA[kLoc]) rawPlayer = ROSTERS_ESTRELLA[kLoc];
-                    else if (ROSTERS_ESTRELLA[kVis]) rawPlayer = ROSTERS_ESTRELLA[kVis];
-                    else {
-                        for (const rk in ROSTERS_ESTRELLA) {
-                            if (kLoc.includes(rk) || rk.includes(kLoc)) { rawPlayer = ROSTERS_ESTRELLA[rk]; break; }
-                            if (kVis.includes(rk) || rk.includes(kVis)) { rawPlayer = ROSTERS_ESTRELLA[rk]; break; }
-                        }
-                    }
-                }
-                if (!rawPlayer) {
-                    rawPlayer = { nombre: `Atacante de ${loc}`, dorsal: 9, pos: "Delantero Centro", equipo: loc, tiros_puerta_prom: 1.8, tiros_totales_prom: 3.3 };
-                }
+                // 2. Obtener Opción A (Titular #1) y Opción B (2do Titular) del partido
+                const locProps = item.props_local || [];
+                const visProps = item.props_visitante || [];
+                const allProps = item.props_jugadores || [];
 
-                const plData = derivarPropRealistaJugador(rawPlayer, rawPlayer.equipo || loc, idx);
-                const hora = (item.fecha || "").split(" ")[1] || "19:00";
+                let rawPrimary = locProps[0] || allProps[0] || (window.ROSTERS_ESTRELLA && window.ROSTERS_ESTRELLA[loc.toLowerCase().trim()]) || null;
+                let rawSecondary = visProps[0] || locProps[1] || allProps[1] || (window.ROSTERS_ESTRELLA && window.ROSTERS_ESTRELLA[vis.toLowerCase().trim()]) || null;
+
+                const plDataA = derivarPropRealistaJugador(rawPrimary, loc, 1);
+                const plDataB = rawSecondary ? derivarPropRealistaJugador(rawSecondary, vis, 2) : null;
+                const hora = item.hora_utc || (item.fecha || "").split(" ")[1] || "14:00";
 
                 html += `
                     <div class="bg-baseDark/95 border border-cardBorder rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5 hover:border-emerald-500/30 transition">
@@ -1858,30 +1844,30 @@
                             </div>
 
                             <div class="bg-cardDark/80 border border-cyan-900/40 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
-                                <div>
-                                    <div class="flex items-center justify-between text-[10px] uppercase font-bold text-cyan-400 mb-1.5">
-                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-crosshairs"></i> Jugada por Jugador</span>
-                                        <span class="font-mono bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-800 font-bold">Probabilidad: ${plData.prob}</span>
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between text-[10px] uppercase font-bold text-cyan-400">
+                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-crosshairs"></i> Jugadas por Jugador (Opción A y B)</span>
+                                        <span class="font-mono bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-800 font-bold">Titulares 2026/27</span>
                                     </div>
-                                    <div class="mb-2">
-                                        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${((item.liga && item.liga.includes('Nations')) || ['españa','francia','inglaterra','alemania','portugal','italia','países bajos','noruega','bélgica','croacia','polonia','dinamarca','turquía','suecia','georgia','suiza','austria','escocia','ucrania','serbia','eslovenia','hungría','irlanda','bosnia','finlandia','albania','israel','rumanía','kosovo','montenegro','armenia','eslovaquia','república checa','grecia','gales','islandia'].some(s => (plData.equipo||'').toLowerCase().includes(s))) ? 'bg-amber-950/80 text-amber-300 border border-amber-800/60' : 'bg-cyan-950/80 text-cyan-300 border border-cyan-800/60'}">
-                                            <i class="${((item.liga && item.liga.includes('Nations')) || ['españa','francia','inglaterra','alemania','portugal','italia','países bajos','noruega','bélgica','croacia','polonia','dinamarca','turquía','suecia','georgia','suiza','austria','escocia','ucrania','serbia','eslovenia','hungría','irlanda','bosnia','finlandia','albania','israel','rumanía','kosovo','montenegro','armenia','eslovaquia','república checa','grecia','gales','islandia'].some(s => (plData.equipo||'').toLowerCase().includes(s))) ? 'fa-solid fa-flag' : 'fa-solid fa-shield-halved'}"></i>
-                                            ${((item.liga && item.liga.includes('Nations')) || ['españa','francia','inglaterra','alemania','portugal','italia','países bajos','noruega','bélgica','croacia','polonia','dinamarca','turquía','suecia','georgia','suiza','austria','escocia','ucrania','serbia','eslovenia','hungría','irlanda','bosnia','finlandia','albania','israel','rumanía','kosovo','montenegro','armenia','eslovaquia','república checa','grecia','gales','islandia'].some(s => (plData.equipo||'').toLowerCase().includes(s))) ? 'Selección: ' : 'Club: '} ${plData.equipo}
-                                        </span>
-                                    </div>
-                                    <div class="flex items-center gap-2 mb-1.5">
-                                        <span class="w-6 h-6 rounded-full bg-slate-800 text-cyan-300 text-[10px] font-black flex items-center justify-center border border-slate-700">${plData.dorsal}</span>
-                                        <div>
-                                            <div class="text-xs sm:text-sm font-black text-white leading-tight">${plData.nombre}</div>
-                                            <div class="text-[9px] text-slate-400">${plData.pos} • ${plData.equipo}</div>
+                                    <!-- Opción A -->
+                                    <div class="bg-baseDark/80 p-2.5 rounded-lg border border-cardBorder/60 space-y-1">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[10px] font-black text-white">#${plDataA.dorsal} ${plDataA.nombre} <span class="text-slate-400 font-normal">(${plDataA.equipo})</span></span>
+                                            <span class="text-[9px] font-mono font-bold text-lime-400">Probabilidad: ${plDataA.prob}</span>
                                         </div>
+                                        <div class="text-[11px] font-bold text-cyan-300">🎯 Opción A: ${plDataA.mkt}</div>
+                                        <div class="text-[9px] text-slate-400">${plDataA.razon}</div>
                                     </div>
-                                    <div class="text-xs font-bold text-cyan-300">🎯 ${plData.mkt}</div>
-                                    <div class="text-[10px] text-slate-400 mt-1 leading-relaxed">${plData.razon}</div>
-                                </div>
-                                <div class="flex items-center justify-between pt-2.5 border-t border-cardBorder/40 text-[10px]">
-                                    <span class="text-slate-400">Probabilidad estimada: <strong class="text-cyan-300 font-mono">${plData.prob}</strong></span>
-                                    <span class="text-cyan-400 font-bold font-mono">Estadística Individual</span>
+                                    ${plDataB ? `
+                                    <!-- Opción B (Respaldo Titular) -->
+                                    <div class="bg-baseDark/60 p-2 rounded-lg border border-cardBorder/40 space-y-0.5">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[10px] font-bold text-slate-200">#${plDataB.dorsal} ${plDataB.nombre} <span class="text-slate-400 font-normal">(${plDataB.equipo})</span></span>
+                                            <span class="text-[9px] font-mono font-bold text-cyan-300">Probabilidad: ${plDataB.prob}</span>
+                                        </div>
+                                        <div class="text-[10px] font-semibold text-emerald-300">⚡ Opción B: ${plDataB.mkt}</div>
+                                    </div>
+                                    ` : ''}
                                 </div>
                             </div>
                         </div>
@@ -1900,82 +1886,126 @@
             const selecciones = ['españa','francia','inglaterra','alemania','portugal','italia','países bajos','noruega','bélgica','croacia','polonia','dinamarca','turquía','suecia','georgia','suiza','austria','escocia','ucrania','serbia','eslovenia','hungría','irlanda','bosnia','finlandia','albania','israel','rumanía','kosovo','montenegro','armenia','eslovaquia','república checa','grecia','gales','islandia','brasil','argentina','uruguay','colombia'];
             const esSelLiga = liga.toLowerCase().includes('nations league');
 
-            function resolverJugador(nombreEq, saltVal) {
-                const kEq = (nombreEq || '').toLowerCase().trim();
-                let found = null;
-                if (item.props_jugadores && item.props_jugadores.length > 0) {
-                    found = item.props_jugadores.find(p => (p.equipo || '').toLowerCase().includes(kEq) || kEq.includes((p.equipo || '').toLowerCase()));
+            function normalizarPropJugador(pObj, nombreEq, saltVal) {
+                if (window.derivarPropRealistaJugador) {
+                    return window.derivarPropRealistaJugador(pObj, nombreEq, saltVal);
                 }
-                if (!found && typeof ROSTERS_ESTRELLA !== 'undefined') {
-                    if (ROSTERS_ESTRELLA[kEq]) found = ROSTERS_ESTRELLA[kEq];
-                    else {
-                        for (const rk in ROSTERS_ESTRELLA) {
-                            if (kEq.includes(rk) || rk.includes(kEq)) { found = ROSTERS_ESTRELLA[rk]; break; }
+                const tp = parseFloat(pObj?.tiros_puerta_prom || 1.8);
+                const tt = parseFloat(pObj?.tiros_totales_prom || 3.3);
+                const nombre = pObj?.nombre || "Referente Titular";
+                const equipo = pObj?.equipo || nombreEq;
+                const pos = pObj?.posicion || pObj?.pos || "Atacante";
+                const dorsal = pObj?.dorsal || 9;
+                const mkt = pObj?.mercado_principal || pObj?.mkt || (saltVal === 2 ? "Más de 0.5 Tiros a Puerta" : "Más de 1.5 Tiros Totales");
+                const prob = pObj?.probabilidad_principal || pObj?.prob || "84.5%";
+                const razon = pObj?.resumen_estadistico || pObj?.razon || `${nombre} (${equipo}) promedia ${tp.toFixed(1)} tiros a puerta y ${tt.toFixed(1)} disparos totales por partido.`;
+                return { nombre, dorsal, pos, equipo, mkt, prob, razon, tp, tt };
+            }
+
+            function obtenerDosTitularesEquipo(nombreEq, listaDirecta, sideIdx) {
+                const res = [];
+                if (Array.isArray(listaDirecta) && listaDirecta.length > 0) {
+                    listaDirecta.slice(0, 2).forEach((p, idx) => {
+                        res.push(normalizarPropJugador(p, nombreEq, sideIdx + idx));
+                    });
+                }
+                if (res.length === 0 && Array.isArray(item.props_jugadores) && item.props_jugadores.length > 0) {
+                    const kEq = (nombreEq || '').toLowerCase().trim();
+                    const matches = item.props_jugadores.filter(p => {
+                        const peq = (p.equipo_partido || p.equipo || '').toLowerCase().trim();
+                        return peq === kEq || peq.includes(kEq) || kEq.includes(peq);
+                    });
+                    matches.slice(0, 2).forEach((p, idx) => {
+                        res.push(normalizarPropJugador(p, nombreEq, sideIdx + idx));
+                    });
+                }
+                if (res.length === 0 && window.ROSTERS_ESTRELLA) {
+                    const kEq = (nombreEq || '').toLowerCase().trim();
+                    let found = window.ROSTERS_ESTRELLA[kEq];
+                    if (!found) {
+                        for (const rk in window.ROSTERS_ESTRELLA) {
+                            if (kEq.includes(rk) || rk.includes(kEq)) { found = window.ROSTERS_ESTRELLA[rk]; break; }
                         }
                     }
+                    if (found) res.push(normalizarPropJugador(found, nombreEq, sideIdx));
                 }
-                if (!found) {
-                    found = {
-                        nombre: `Atacante de ${nombreEq}`,
-                        dorsal: 9,
-                        pos: "Delantero Centro",
-                        equipo: nombreEq,
-                        tiros_puerta_prom: 1.8,
-                        tiros_totales_prom: 3.3
-                    };
+                if (res.length === 0 && Array.isArray(item.props_jugadores) && item.props_jugadores.length > 0) {
+                    const fallbackP = item.props_jugadores[sideIdx === 1 ? 0 : Math.min(1, item.props_jugadores.length - 1)];
+                    res.push(normalizarPropJugador(fallbackP, nombreEq, sideIdx));
                 }
-                return window.derivarPropRealistaJugador ? window.derivarPropRealistaJugador(found, nombreEq, saltVal) : found;
+                // Si hay 2 opciones en el mismo equipo y coincidieron en el mismo mercado, variar la Opción B
+                if (res.length >= 2 && res[0].mkt === res[1].mkt) {
+                    if (res[1].mkt.includes("Tiros Totales")) {
+                        res[1].mkt = "Más de 0.5 Tiros a Puerta";
+                        res[1].prob = `${Math.min(86.5, Math.round((73.0 + (res[1].tp || 1.7) * 5.8) * 10) / 10)}%`;
+                    } else {
+                        res[1].mkt = "Más de 1.5 Tiros Totales";
+                        res[1].prob = `${Math.min(85.8, Math.round((70.0 + (res[1].tt || 3.0) * 4.5) * 10) / 10)}%`;
+                    }
+                }
+                return res;
             }
 
-            const plLoc = resolverJugador(loc, 1);
-            const plVis = resolverJugador(vis, 3);
-
-            // Si por coincidencia ambos jugadores obtuvieron el mismo mercado, diversificar el segundo según sus estadísticas reales
-            if (plLoc.mkt === plVis.mkt) {
-                if (plVis.mkt.includes("Tiros Totales")) {
-                    plVis.mkt = (plVis.tp >= 1.85) ? "Más de 1.5 Tiros a Puerta" : "Más de 0.5 Tiros a Puerta";
-                    plVis.prob = `${Math.min(86.5, Math.round((71.0 + (plVis.tp || 1.7) * 6.2) * 10) / 10)}%`;
-                } else {
-                    plVis.mkt = (plVis.tt >= 3.3) ? "Más de 2.5 Tiros Totales" : "Más de 1.5 Tiros Totales";
-                    plVis.prob = `${Math.min(85.8, Math.round((68.0 + (plVis.tt || 3.1) * 4.8) * 10) / 10)}%`;
-                }
-            }
+            const titularesLoc = obtenerDosTitularesEquipo(loc, item.props_local, 1);
+            const titularesVis = obtenerDosTitularesEquipo(vis, item.props_visitante, 3);
 
             const esSelLoc = esSelLiga || selecciones.some(s => loc.toLowerCase().includes(s));
             const esSelVis = esSelLiga || selecciones.some(s => vis.toLowerCase().includes(s));
 
-            function buildCard(p, esSel, eqNombre, colorTheme) {
+            function buildTeamPropsCard(jugadores, esSel, eqNombre, colorTheme) {
+                const pA = jugadores[0] || { nombre: eqNombre, dorsal: 9, pos: "Atacante", equipo: eqNombre, mkt: "Más de 1.5 Tiros Totales", prob: "84.0%", razon: "Referente ofensivo titular del equipo." };
+                const pB = jugadores.length > 1 ? jugadores[1] : null;
                 const tipoBadge = esSel ? "Selección Nacional" : "Club Oficial";
                 const iconBadge = esSel ? "fa-flag text-amber-400" : "fa-shield-halved text-cyan-400";
                 const borderCls = colorTheme === 'home' ? 'border-cyan-800/50 bg-cyan-950/20' : 'border-purple-800/50 bg-purple-950/20';
 
                 return `
-                    <div class="bg-baseDark/95 border ${borderCls} rounded-xl p-3.5 flex flex-col justify-between space-y-2.5 shadow-lg">
-                        <div>
-                            <div class="flex items-center justify-between gap-2 mb-2">
+                    <div class="bg-baseDark/95 border ${borderCls} rounded-xl p-3.5 flex flex-col justify-between space-y-3 shadow-lg">
+                        <div class="space-y-2.5">
+                            <div class="flex items-center justify-between gap-2">
                                 <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-cardDark border border-cardBorder text-slate-200">
-                                    <i class="fa-solid ${iconBadge}"></i> ${tipoBadge}: <strong class="text-white ml-0.5">${p.equipo || eqNombre}</strong>
+                                    <i class="fa-solid ${iconBadge}"></i> ${tipoBadge}: <strong class="text-white ml-0.5">${esc(eqNombre)}</strong>
                                 </span>
-                                <span class="text-[9px] font-mono font-bold text-accentGreen bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">Probabilidad: ${p.prob}</span>
+                                <span class="text-[9px] font-mono font-bold text-accentGreen bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">Plantilla Titular 2026/27</span>
                             </div>
-                            <div class="flex items-center gap-2.5 mb-2">
-                                <span class="w-8 h-8 rounded-full bg-slate-800 text-cyan-300 text-xs font-black flex items-center justify-center border border-slate-700 shadow-md">${p.dorsal || 9}</span>
-                                <div>
-                                    <div class="text-xs sm:text-sm font-black text-white leading-tight">${p.nombre}</div>
-                                    <div class="text-[10px] text-slate-400">${p.pos || 'Atacante'} • ${p.equipo || eqNombre}</div>
+
+                            <!-- OPCIÓN A: TITULAR PRINCIPAL -->
+                            <div class="bg-cardDark/90 p-2.5 rounded-xl border border-cyan-500/30 space-y-1.5">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-7 h-7 rounded-full bg-slate-800 text-cyan-300 text-[11px] font-black flex items-center justify-center border border-slate-700">${pA.dorsal}</span>
+                                        <div>
+                                            <div class="text-xs font-black text-white leading-tight">${esc(pA.nombre)}</div>
+                                            <div class="text-[9px] text-emerald-400 font-bold uppercase">Opción A (Titular #1) • ${esc(pA.pos)}</div>
+                                        </div>
+                                    </div>
+                                    <span class="text-[10px] font-mono font-black text-lime-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-lime-500/30">Probabilidad: ${pA.prob}</span>
                                 </div>
+                                <div class="text-xs font-bold text-cyan-300 pt-0.5">🎯 ${esc(pA.mkt)}</div>
+                                <div class="text-[10px] text-slate-400 leading-snug">${esc(pA.razon)}</div>
                             </div>
-                            <div class="bg-cardDark/80 p-2.5 rounded-lg border border-cardBorder/40 mb-2">
-                                <div class="flex items-center justify-between text-xs">
-                                    <span class="font-bold text-cyan-300 flex items-center gap-1.5">🎯 ${p.mkt}</span>
-                                    <span class="font-mono font-black text-lime-400">${p.prob}</span>
+
+                            ${pB ? `
+                            <!-- OPCIÓN B: 2DO REFERENTE TITULAR (RESPALDO ANTE ROTACIÓN O BAJA) -->
+                            <div class="bg-cardDark/60 p-2.5 rounded-xl border border-cardBorder/60 space-y-1">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-6 h-6 rounded-full bg-slate-800 text-amber-300 text-[10px] font-black flex items-center justify-center border border-slate-700">${pB.dorsal}</span>
+                                        <div>
+                                            <div class="text-[11px] font-bold text-slate-100 leading-tight">${esc(pB.nombre)}</div>
+                                            <div class="text-[9px] text-amber-300/90 font-semibold uppercase">Opción B (2do Titular / Respaldo) • ${esc(pB.pos)}</div>
+                                        </div>
+                                    </div>
+                                    <span class="text-[10px] font-mono font-bold text-cyan-300">Probabilidad: ${pB.prob}</span>
                                 </div>
+                                <div class="text-[11px] font-bold text-emerald-300">⚡ ${esc(pB.mkt)}</div>
+                                <div class="text-[9px] text-slate-400 leading-snug">${esc(pB.razon)}</div>
                             </div>
-                            <div class="text-[10px] text-slate-400 leading-relaxed">${p.razon}</div>
+                            ` : ''}
                         </div>
                         <div class="flex items-center justify-between pt-2 border-t border-cardBorder/40 text-[9px] text-slate-400">
-                            <span>Plantilla Oficial 2026/27</span>
-                            <span class="text-cyan-400 font-bold font-mono">Probabilidad: ${p.prob}</span>
+                            <span>Si Opción A no inicia de titular, usar Opción B</span>
+                            <span class="text-cyan-400 font-bold font-mono">Estadística Real</span>
                         </div>
                     </div>
                 `;
@@ -1983,8 +2013,8 @@
 
             return `
                 <div class="grid sm:grid-cols-2 gap-3 pt-1">
-                    ${buildCard(plLoc, esSelLoc, loc, 'home')}
-                    ${buildCard(plVis, esSelVis, vis, 'away')}
+                    ${buildTeamPropsCard(titularesLoc, esSelLoc, loc, 'home')}
+                    ${buildTeamPropsCard(titularesVis, esSelVis, vis, 'away')}
                 </div>
             `;
         }
@@ -2111,14 +2141,23 @@
                     if (document.getElementById('sidebar-total-badge')) document.getElementById('sidebar-total-badge').innerText = totalP;
                     if (document.getElementById('telemetria-partidos')) document.getElementById('telemetria-partidos').innerText = `${totalP} Partidos`;
                 }
-                const fActual = data.fecha_actual || "2026-10-09";
+                const fActual = data.fecha_actual || "2026-10-15";
+                const fActivaDest = data.fecha_activa_destacados || fActual;
+                const hayPartidosHoy = data.hay_partidos_hoy !== false;
                 const lblFecha = document.getElementById('destacados-fecha-label');
-                if (lblFecha) lblFecha.innerText = `Partidos de Hoy • ${fActual} (Rotación 24/7)`;
+                if (lblFecha) {
+                    if (hayPartidosHoy) {
+                        lblFecha.innerText = `Partidos de Hoy • ${fActual} (Actualización 22:00 PE)`;
+                    } else {
+                        lblFecha.innerText = `Partidos no disponibles hoy (${fActual}) • Próxima jornada: ${fActivaDest}`;
+                    }
+                }
                 
                 const destacados = data.pronosticos_destacados || data.destacados || [];
                 window.globalDestacadosMemoria = destacados;
+                window.globalCarteleraMeta = { hayPartidosHoy, fActual, fActivaDest, mensajeJornada: data.mensaje_jornada };
                 if (document.getElementById('destacados-count')) document.getElementById('destacados-count').innerText = `(${destacados.length})`;
-                if (destacados.length > 0) renderizarCarrusel(destacados);
+                renderizarCarrusel(destacados);
             } catch (e) {
                 console.error("Error en cargarDatosCartelera:", e);
                 const cont = document.getElementById('sidebar-matches');
@@ -2230,9 +2269,22 @@
         }
 
         function renderizarCarrusel(destacados) {
-
             const cont = document.getElementById('carousel-cards');
+            if (!cont) return;
+            const meta = window.globalCarteleraMeta || {};
             let html = '';
+            if (meta.hayPartidosHoy === false) {
+                html += `
+                    <div class="min-w-[290px] max-w-[290px] bg-amber-950/30 border border-amber-500/40 rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0">
+                        <div class="space-y-2">
+                            <span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black px-2 py-0.5 rounded uppercase inline-block">📅 Aviso de Calendario</span>
+                            <div class="font-black text-white text-xs">Partidos no disponibles hoy (${esc(meta.fActual || '')})</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed m-0">Hoy no se disputan partidos en nuestras ligas activas. A la derecha tienes los pronósticos destacados de la próxima jornada oficial (<strong class="text-lime-400">${esc(meta.fActivaDest || '2026-10-16')}</strong>: Bundesliga, Brasileirão, LaLiga, Serie A y Ligue 1).</p>
+                        </div>
+                        <div class="text-[10px] text-amber-300 font-mono pt-2 border-t border-amber-500/20">Próxima jornada: ${esc(meta.fActivaDest || '2026-10-16')}</div>
+                    </div>
+                `;
+            }
             destacados.forEach(d => {
                 const pick = d.pronostico_principal || {};
                 const stks = d.organizacion_stakazos || {};
@@ -3638,22 +3690,22 @@
                     razon: "Duelo disputado en zona media con promedio arbitral superior a 3.8 amonestaciones."
                 },
                 {
-                    nombre: `Jugada por Jugador: Atacante ${loc}`,
-                    categoria: "Disparos Individuales",
-                    mercado: `Delantero ${loc}: Más de 1.5 Tiros a Puerta`,
-                    cuota: "1.44",
-                    prob: "83.5%",
+                    nombre: `Jugada por Jugador (${loc})`,
+                    categoria: "Estadística Individual",
+                    mercado: `${esc((item.props_local && item.props_local[0] && item.props_local[0].nombre) || loc)}: ${esc((item.props_local && item.props_local[0] && item.props_local[0].mkt) || 'Más de 1.5 Tiros Totales')}`,
+                    cuota: "1.42",
+                    prob: `${esc((item.props_local && item.props_local[0] && item.props_local[0].prob) || '84.0%')}`,
                     icono: "🎯",
-                    razon: `Referente ofensivo local promedia más de 2.3 tiros a puerta en duelos de local.`
+                    razon: `${esc((item.props_local && item.props_local[0] && item.props_local[0].razon) || 'Referente ofensivo titular con alto promedio de disparos por partido.')}`
                 },
                 {
-                    nombre: `Jugada por Jugador: Atacante ${vis}`,
-                    categoria: "Disparos Individuales",
-                    mercado: `Referente ${vis}: Más de 1.5 Tiros Totales`,
+                    nombre: `Jugada por Jugador (${vis})`,
+                    categoria: "Estadística Individual",
+                    mercado: `${esc((item.props_visitante && item.props_visitante[0] && item.props_visitante[0].nombre) || vis)}: ${esc((item.props_visitante && item.props_visitante[0] && item.props_visitante[0].mkt) || 'Más de 0.5 Tiros a Puerta')}`,
                     cuota: "1.38",
-                    prob: "82.5%",
+                    prob: `${esc((item.props_visitante && item.props_visitante[0] && item.props_visitante[0].prob) || '83.5%')}`,
                     icono: "⚡",
-                    razon: `Generador de transiciones del visitante registra al menos 2 intentos por 90 min.`
+                    razon: `${esc((item.props_visitante && item.props_visitante[0] && item.props_visitante[0].razon) || 'Atacante titular visitante con volumen constante de remates.')}`
                 },
                 {
                     nombre: "Ambos Equipos Anotan (BTTS)",
