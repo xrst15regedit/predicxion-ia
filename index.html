@@ -515,9 +515,9 @@
             <div id="seccion-admin" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
-                        <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-money-check-dollar text-emerald-400"></i> Pagos Yape / Plin pendientes</h3>
-                        <p class="text-[11px] text-slate-400">Verifica cada abono en tu app antes de aprobar. Al aprobar se activan 30 días del plan.</p>
-                        <div id="admin-pagos" class="space-y-2 text-xs"><p class="text-slate-500">Cargando...</p></div>
+                        <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-emerald-400"></i> Pasarela Oficial Mercado Pago (100% Automática)</h3>
+                        <p class="text-[11px] text-slate-400">Todos los pagos de suscripciones (Pase Pro S/ 19.90 y Pase Élite S/ 39.90) se procesan y activan automáticamente mediante el Webhook oficial de Mercado Pago en Firestore Cloud.</p>
+                        <div id="admin-pagos" class="bg-baseDark border border-emerald-900/50 rounded-xl p-3 text-xs text-emerald-400 font-mono">✓ Webhook Mercado Pago Activo · Sin validación manual requerida</div>
                     </div>
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
                         <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-cyan-400"></i> Registrar un pick</h3>
@@ -696,92 +696,86 @@
         </div>
     </div>
 
-    <!-- MODAL VIP ACTUALIZADO (GABRIEL CERDÁN - 942 791 524) -->
+    <!-- MODAL VIP EXCLUSIVO MERCADO PAGO (PRECIOS DE LANZAMIENTO) -->
     <div id="modal-vip" role="dialog" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
-        <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-6 relative my-auto">
+        <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-6 relative my-auto shadow-2xl">
             <button onclick="cerrarVipModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             <div class="text-center mb-5">
-                <span class="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">Suscripciones Cuantitativas</span>
+                <span class="bg-emerald-500/20 text-accentGreen border border-emerald-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">🔥 Oferta Especial de Lanzamiento (-50% OFF)</span>
                 <h3 class="font-outfit font-black text-2xl text-white mt-2">Planes y Membresías VIP</h3>
+                <p class="text-[11px] text-slate-400 mt-1">Activación inmediata y 100% automatizada con Mercado Pago Perú</p>
             </div>
 
             <!-- Selector de Planes -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
                 <!-- Pase Básico -->
-                <div class="bg-baseDark border border-cardBorder rounded-2xl p-4 text-center">
-                    <span class="text-[9px] font-black text-slate-400 uppercase block">Pase Básico</span>
-                    <div class="font-black text-xl text-white mt-1">Gratis</div>
-                    <ul class="text-[10px] text-slate-400 space-y-1.5 mt-3 text-left">
-                        <li>✓ Cartelera completa del mes</li>
-                        <li>✓ Probabilidades 1X2 y goles del modelo</li>
-                        <li>✓ Historial de picks público</li>
-                    </ul>
+                <div class="bg-baseDark border border-cardBorder rounded-2xl p-4 text-center flex flex-col justify-between">
+                    <div>
+                        <span class="text-[9px] font-black text-slate-400 uppercase block">Pase Básico</span>
+                        <div class="font-black text-xl text-white mt-1">Gratis</div>
+                        <ul class="text-[10px] text-slate-400 space-y-1.5 mt-3 text-left">
+                            <li>✓ Cartelera completa del mes</li>
+                            <li>✓ 3 análisis diarios gratuitos</li>
+                            <li>✓ Pick #5 libre del día</li>
+                            <li>✓ Historial oficial auditado</li>
+                        </ul>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-500 mt-3 block">Plan inicial por defecto</span>
                 </div>
 
                 <!-- Pase Pro -->
-                <div onclick="seleccionarPlan(39.90, 'Pase Pro')" id="card-plan-pro" class="cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10">
+                <div onclick="seleccionarPlan(19.90, 'Pase Pro')" id="card-plan-pro" class="cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10 relative">
+                    <span class="bg-accentGreen text-slate-950 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">MÁS POPULAR • -50%</span>
                     <span class="text-[9px] font-black text-accentGreen uppercase block">Pase Pro</span>
-                    <div class="font-black text-xl text-white mt-1">S/ 39.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
+                    <div class="text-[10px] text-slate-500 line-through font-mono mt-0.5">Antes S/ 39.90</div>
+                    <div class="font-black text-2xl text-white">S/ 19.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
-                        <li>✓ Análisis completo de cada partido</li>
-                        <li>✓ Top 5 del día completo</li>
+                        <li>✓ Pronósticos diarios ilimitados</li>
+                        <li>✓ Top 5 del día desbloqueado</li>
                         <li>✓ Simulación Monte Carlo (10K)</li>
                         <li>✓ Selecciones de alta probabilidad</li>
-                        <li>✓ Kelly en soles personalizado</li>
+                        <li>✓ Calculadora Kelly en soles</li>
                     </ul>
                 </div>
 
                 <!-- Pase Quant Élite -->
-                <div onclick="seleccionarPlan(79.90, 'Pase Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500">
+                <div onclick="seleccionarPlan(39.90, 'Pase Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500 relative">
+                    <span class="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">ACCESO TOTAL • -50%</span>
                     <span class="text-[9px] font-black text-amber-400 uppercase block">Pase Élite</span>
-                    <div class="font-black text-xl text-white mt-1">S/ 79.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
+                    <div class="text-[10px] text-slate-500 line-through font-mono mt-0.5">Antes S/ 79.90</div>
+                    <div class="font-black text-2xl text-white">S/ 39.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
-                        <li>✓ Todo lo del Pase Pro</li>
-                        <li>✓ Canal de Telegram con los picks del analista</li>
-                        <li>✓ Análisis de partido con IA (uso moderado)</li>
+                        <li>✓ Todo lo incluido en Pase Pro</li>
+                        <li>✓ Consenso Triple IA en vivo</li>
+                        <li>✓ Alertas VIP directas en Telegram</li>
+                        <li>✓ Voz IA Cuantitativa completa</li>
+                        <li>✓ Soporte prioritario 24/7</li>
                     </ul>
                 </div>
             </div>
 
-            <!-- Métodos de Pago Disponibles -->
+            <!-- Pago Exclusivo con Mercado Pago -->
             <div class="border-t border-cardBorder pt-4">
-                <div class="grid grid-cols-3 gap-2 mb-4">
-                    <button onclick="seleccionarMetodo('mp')" id="tab-mp" class="metodo-tab bg-emerald-950/60 border-2 border-emerald-500 text-white font-black text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-credit-card text-emerald-400"></i> MercadoPago</button>
-                    <button onclick="seleccionarMetodo('yape')" id="tab-yape" class="metodo-tab bg-baseDark border border-cardBorder text-slate-300 font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-mobile-screen-button"></i> Yape</button>
-                    <button onclick="seleccionarMetodo('plin')" id="tab-plin" class="metodo-tab bg-baseDark border border-cardBorder text-slate-300 font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-bolt text-cyan-400"></i> Plin</button>
-                </div>
+                <div id="form-mp" class="bg-baseDark border border-emerald-500/40 rounded-2xl p-4 space-y-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-xl text-emerald-400"></i>
+                            <div class="text-left">
+                                <span class="text-xs font-black text-white block">Checkout Oficial Mercado Pago Perú</span>
+                                <span class="text-[10px] text-slate-400 block">Acepta Tarjetas Visa/Mastercard, Yape vía Mercado Pago y Saldo en Soles (PEN).</span>
+                            </div>
+                        </div>
+                        <span class="text-[9px] font-mono bg-emerald-950 text-accentGreen border border-emerald-800 px-2 py-1 rounded-lg font-bold">SSL 256-bit • Activación Inmediata</span>
+                    </div>
 
-                <!-- Formulario MercadoPago -->
-                <div id="form-mp" class="metodo-form bg-baseDark border border-emerald-900/40 rounded-2xl p-4 text-center space-y-2">
-                    <i class="fa-solid fa-shield-halved text-2xl text-emerald-400"></i>
-                    <p class="text-xs text-slate-300">Paga automáticamente con tarjeta o saldo MercadoPago en Soles (PEN).</p>
-                    <button onclick="pagarConMercadoPago()" id="btn-pagar-mp" class="w-full mt-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition text-xs">Pagar S/ 39.90 con MercadoPago</button>
-                </div>
+                    <label class="flex items-start gap-2 text-left text-[10px] text-slate-300 bg-cardDark/80 p-2.5 rounded-xl border border-cardBorder cursor-pointer select-none">
+                        <input type="checkbox" id="chk-terminos-vip" checked class="mt-0.5 accent-emerald-400 rounded cursor-pointer">
+                        <span>Confirmo que soy <strong>mayor de 18 años</strong> y acepto los <button type="button" onclick="abrirModalLegal('terminos')" class="text-accentGreen underline hover:text-emerald-300">Términos y Condiciones</button> y la <button type="button" onclick="abrirModalLegal('privacidad')" class="text-accentGreen underline hover:text-emerald-300">Política de Privacidad (Ley N° 29733)</button>. Entiendo que PredicXion IA es un software de análisis estadístico informativo y no garantiza resultados ni ganancias.</span>
+                    </label>
 
-                <!-- Formulario Yape Gabriel Cerdán (942 791 524) -->
-                <div id="form-yape" class="metodo-form hidden bg-baseDark border border-purple-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between text-[11px] text-purple-300 bg-purple-950/40 px-3 py-2 rounded-xl border border-purple-500/20">
-                        <span>Yapear al número: <strong>942 791 524</strong> (Gabriel Cerdán)</span>
-                        <button onclick="navigator.clipboard.writeText('942791524'); notificar('Número 942791524 copiado');" class="text-xs text-white hover:text-purple-300"><i class="fa-regular fa-copy"></i></button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2.5">
-                        <div><label class="text-[10px] text-slate-400 font-bold block mb-1">Tu Celular Yape</label><input type="tel" id="yape-phone" maxlength="9" placeholder="987654321" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
-                        <div><label class="text-[10px] text-slate-400 font-bold block mb-1">Código de Operación</label><input type="text" id="yape-code" placeholder="123456" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500"></div>
-                    </div>
-                    <button onclick="enviarPagoManual('yape')" id="btn-yape-sub" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-2.5 rounded-xl transition text-xs">Validar Yape (S/ 39.90)</button>
-                </div>
-
-                <!-- Formulario Plin Gabriel Cerdán (942 791 524) -->
-                <div id="form-plin" class="metodo-form hidden bg-baseDark border border-cyan-900/40 rounded-2xl p-4 space-y-3">
-                    <div class="flex items-center justify-between text-[11px] text-cyan-300 bg-cyan-950/40 px-3 py-2 rounded-xl border border-cyan-500/20">
-                        <span>Plin al número: <strong>942 791 524</strong> (Gabriel Cerdán)</span>
-                        <button onclick="navigator.clipboard.writeText('942791524'); notificar('Número 942791524 copiado');" class="text-xs text-white hover:text-cyan-300"><i class="fa-regular fa-copy"></i></button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2.5">
-                        <div><label class="text-[10px] text-slate-400 font-bold block mb-1">Tu Celular Plin</label><input type="tel" id="plin-phone" maxlength="9" placeholder="987654321" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"></div>
-                        <div><label class="text-[10px] text-slate-400 font-bold block mb-1">N° de Operación</label><input type="text" id="plin-code" placeholder="Operación" class="w-full bg-cardDark border border-cardBorder rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"></div>
-                    </div>
-                    <button onclick="enviarPagoManual('plin')" id="btn-plin-sub" class="w-full bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-black py-2.5 rounded-xl transition text-xs">Validar Plin (S/ 39.90)</button>
+                    <button onclick="pagarConMercadoPago()" id="btn-pagar-mp" class="w-full bg-gradient-to-r from-emerald-500 to-lime-400 hover:from-emerald-400 hover:to-lime-300 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ 19.90 con Mercado Pago</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -853,7 +847,7 @@
         let globalTodosPartidos = {};
         const ligasAbiertas = {};
         let authModoActual = 'login';
-        let planMontoActual = 39.90;
+        let planMontoActual = 19.90;
         let planNombreActual = 'Pase Pro';
         let planIdActual = 'pro';
         let metodoSeleccionado = 'mp';
@@ -893,8 +887,8 @@
                 } else if (window.fbAuth && window.fbAuth.currentUser) {
                     h['Authorization'] = `Bearer ${await window.fbAuth.currentUser.getIdToken()}`;
                 }
-                const savedPin = localStorage.getItem('predicxion_admin_pin') || '2026';
-                if (savedPin) {
+                const savedPin = localStorage.getItem('predicxion_admin_pin');
+                if (savedPin && savedPin.length >= 12) {
                     h['X-Admin-Key'] = savedPin;
                 }
             } catch (e) {}
@@ -916,9 +910,9 @@
             const u = window.currentUserState;
             const plan = (u && u.plan) ? u.plan.toLowerCase() : 'free';
             if (MODULOS_PRO.includes(moduloId) && plan === 'free') {
-                notificar('🔒 Esta herramienta requiere el Pase Pro.');
+                notificar('🔒 Esta herramienta requiere el Pase Pro (S/ 19.90/mes).');
                 abrirVipModal();
-                seleccionarPlan(39.90, 'Pase Pro');
+                seleccionarPlan(19.90, 'Pase Pro');
                 return;
             }
             cambiarModuloPrincipal(moduloId);
@@ -1137,82 +1131,55 @@
         }
 
         function seleccionarPlan(monto, nombre) {
-            planIdActual = (monto === 79.90) ? 'elite' : 'pro';
+            planIdActual = (monto >= 39.0) ? 'elite' : 'pro';
             planMontoActual = monto;
             planNombreActual = nombre;
             const cPro = document.getElementById('card-plan-pro');
             const cElite = document.getElementById('card-plan-elite');
 
-            if (monto === 39.90) {
-                cPro.className = 'cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10';
-                cElite.className = 'cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500';
+            if (planIdActual === 'pro') {
+                cPro.className = 'cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10 relative';
+                cElite.className = 'cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500 relative';
             } else {
-                cElite.className = 'cursor-pointer bg-baseDark border-2 border-amber-500 rounded-2xl p-4 text-center transition shadow-lg shadow-amber-500/10';
-                cPro.className = 'cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-accentGreen';
+                cElite.className = 'cursor-pointer bg-baseDark border-2 border-amber-500 rounded-2xl p-4 text-center transition shadow-lg shadow-amber-500/10 relative';
+                cPro.className = 'cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-accentGreen relative';
             }
 
-            document.getElementById('btn-pagar-mp').innerText = `Pagar S/ ${monto.toFixed(2)} con MercadoPago`;
-            document.getElementById('btn-yape-sub').innerText = `Validar Yape (S/ ${monto.toFixed(2)})`;
-            document.getElementById('btn-plin-sub').innerText = `Validar Plin (S/ ${monto.toFixed(2)})`;
-        }
-
-        function seleccionarMetodo(metodo) {
-            metodoSeleccionado = metodo;
-            document.querySelectorAll('.metodo-tab').forEach(t => t.className = 'metodo-tab bg-baseDark border border-cardBorder text-slate-300 font-bold text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5');
-            document.querySelectorAll('.metodo-form').forEach(f => f.classList.add('hidden'));
-
-            const tab = document.getElementById(`tab-${metodo}`);
-            if (metodo === 'mp') {
-                tab.className = 'metodo-tab bg-emerald-950/60 border-2 border-emerald-500 text-white font-black text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5';
-                document.getElementById('form-mp').classList.remove('hidden');
-            } else if (metodo === 'yape') {
-                tab.className = 'metodo-tab bg-purple-950/60 border-2 border-purple-500 text-white font-black text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5';
-                document.getElementById('form-yape').classList.remove('hidden');
-            } else if (metodo === 'plin') {
-                tab.className = 'metodo-tab bg-cyan-950/60 border-2 border-cyan-500 text-white font-black text-xs py-2.5 rounded-xl transition flex items-center justify-center gap-1.5';
-                document.getElementById('form-plin').classList.remove('hidden');
+            const btnMp = document.getElementById('btn-pagar-mp');
+            if (btnMp) {
+                btnMp.innerHTML = `<i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ ${monto.toFixed(2)} con Mercado Pago</span>`;
             }
         }
 
         async function pagarConMercadoPago() {
             const u = window.currentUserState;
             if (!u || !u.logueado) {
-                cerrarVipModal(); abrirAuthModal(); notificar("Inicia sesión primero."); return;
+                cerrarVipModal(); abrirAuthModal(); notificar("Inicia sesión o regístrate primero para activar tu plan."); return;
             }
+            const chk = document.getElementById('chk-terminos-vip');
+            if (chk && !chk.checked) {
+                notificar("Debes confirmar que eres mayor de 18 años y aceptar los Términos y Condiciones.");
+                return;
+            }
+            const btnMp = document.getElementById('btn-pagar-mp');
+            if (btnMp) btnMp.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Conectando con Mercado Pago...</span>`;
             try {
                 const res = await fetch(`${API_BASE}/api/v1/payments/create-preference`, {
                     method: 'POST',
                     headers: await authHeaders(),
-                    body: JSON.stringify({ plan: planIdActual })
+                    body: JSON.stringify({ plan: planIdActual, acepta_terminos: true })
                 });
                 const data = await res.json();
-                if (data.success && data.init_point) window.location.href = data.init_point;
-                else notificar(data.error || "Error al conectar con MercadoPago.");
-            } catch (e) { notificar("Fallo de red."); }
-        }
-
-        async function enviarPagoManual(metodo) {
-            const u = window.currentUserState;
-            if (!u || !u.logueado) {
-                cerrarVipModal(); abrirAuthModal(); notificar("Inicia sesión primero."); return;
+                if (data.success && data.init_point) {
+                    window.location.href = data.init_point;
+                } else {
+                    notificar(data.error || "Error al conectar con Mercado Pago.");
+                }
+            } catch (e) {
+                notificar("Fallo de red al conectar con la pasarela de pago.");
+            } finally {
+                if (btnMp) btnMp.innerHTML = `<i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ ${planMontoActual.toFixed(2)} con Mercado Pago</span>`;
             }
-            const tel = document.getElementById(metodo === 'yape' ? 'yape-phone' : 'plin-phone').value.trim();
-            const cod = document.getElementById(metodo === 'yape' ? 'yape-code' : 'plin-code').value.trim();
-            if (!tel || tel.length !== 9 || !tel.startsWith('9')) { notificar("Ingresa un celular válido de 9 dígitos."); return; }
-            if (!cod || cod.length < 4) { notificar("Ingresa el código de comprobante."); return; }
-
-            try {
-                const res = await fetch(`${API_BASE}/api/v1/payments/manual-submit`, {
-                    method: 'POST',
-                    headers: await authHeaders(),
-                    body: JSON.stringify({ metodo, telefono: tel, codigo: cod, plan: planIdActual })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    cerrarVipModal();
-                    notificar("Comprobante enviado. Activaremos tu plan al confirmar el abono.");
-                } else notificar(data.error || "Fallo.");
-            } catch (e) { notificar("Fallo de conexión."); }
         }
 
         // DISPARAR ALERTA A TELEGRAM (BOT VIP ROTATIVO DINÁMICO)
@@ -2782,7 +2749,7 @@
             const esVip = (u && (u.esVip || u.plan === 'pro' || u.plan === 'elite'));
             if (!esVip) {
                 notificar("🔒 La simulación estocástica requiere Membresía PRO o ÉLITE.");
-                abrirVipModal(); seleccionarPlan(39.90, 'Pase Pro'); return;
+                abrirVipModal(); seleccionarPlan(19.90, 'Pase Pro'); return;
             }
             const btn = document.getElementById(`btn-mc-${matchId}`);
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Simulando...`;
@@ -3771,12 +3738,56 @@
             <p><strong class="text-slate-200">Solo mayores de 18 años.</strong> PredicXion IA ofrece estimaciones estadísticas de fútbol con fines informativos. No es una casa de apuestas, no recibe apuestas y no garantiza resultados ni ganancias. Los resultados pasados no aseguran resultados futuros.</p>
             <p>Las probabilidades salen de un modelo Poisson con valores base de cada equipo que se actualizan manualmente; pueden contener errores. Compáralas siempre con la cuota real de tu casa y apuesta solo dinero que puedas permitirte perder.</p>
             <p>Si apostar deja de ser un pasatiempo o te genera problemas, busca ayuda profesional y considera pausar el juego.</p>
-            <div class="flex items-center justify-between pt-2 border-t border-cardBorder/40">
-                <span class="text-[10px] text-slate-500">© 2026 PredicXion IA • Terminal Cuantitativa</span>
+            <div class="flex items-center justify-between flex-wrap gap-3 pt-2 border-t border-cardBorder/40">
+                <span class="text-[10px] text-slate-500">© 2026 PredicXion IA • Software de Analítica Estadística Deportiva (+18)</span>
+                <div class="flex items-center gap-3 text-[10px]">
+                    <button type="button" onclick="abrirModalLegal('terminos')" class="text-slate-300 hover:text-accentGreen underline cursor-pointer">Términos y Condiciones</button>
+                    <span class="text-slate-600">•</span>
+                    <button type="button" onclick="abrirModalLegal('privacidad')" class="text-slate-300 hover:text-accentGreen underline cursor-pointer">Política de Privacidad (Ley N° 29733)</button>
+                    <span class="text-slate-600">•</span>
+                    <button type="button" onclick="abrirJuegoResponsable()" class="text-slate-300 hover:text-cyan-400 underline cursor-pointer">Juego Responsable</button>
                 </div>
+            </div>
         </div>
     <div class="mt-2 text-center"><span id="datos-estado" class="text-[10px] text-emerald-400/90 font-mono tracking-wide"></span></div>
 </footer>
+
+    <!-- Modal Legal: Términos y Condiciones & Política de Privacidad (Perú - Ley N° 29733) -->
+    <div id="modal-legal" role="dialog" class="hidden fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-cardDark border border-cardBorder rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col relative">
+            <button onclick="cerrarModalLegal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            <div class="flex items-center gap-2 border-b border-cardBorder pb-3 mb-4">
+                <i class="fa-solid fa-scale-balanced text-accentGreen text-lg"></i>
+                <div>
+                    <h3 class="text-base font-black text-white m-0">Marco Legal, Transparencia y Privacidad</h3>
+                    <span class="text-[10px] text-slate-400 font-mono">Cumplimiento Normativo • República del Perú</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2 mb-4">
+                <button type="button" onclick="cambiarTabLegal('terminos')" id="tab-leg-terminos" class="px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-950 text-accentGreen border border-emerald-700 cursor-pointer">1. Términos y Condiciones</button>
+                <button type="button" onclick="cambiarTabLegal('privacidad')" id="tab-leg-privacidad" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-baseDark text-slate-400 border border-cardBorder hover:text-white cursor-pointer">2. Privacidad (Ley N° 29733)</button>
+            </div>
+
+            <div id="contenido-leg-terminos" class="overflow-y-auto space-y-3 text-xs text-slate-300 leading-relaxed pr-2">
+                <p><strong class="text-white">1. Naturaleza del Servicio (SaaS Estadístico e Informativo):</strong> PredicXion IA es una plataforma tecnológica de software como servicio (SaaS) dedicada exclusivamente al procesamiento matemático de datos históricos de fútbol mediante modelos de Distribución de Poisson, simulaciones Monte Carlo e inteligencia artificial. <strong>PredicXion IA NO es una casa de apuestas, no capta dinero para apuestas, no intermedia jugadas ni opera juegos a distancia bajo la Ley N° 31557 (MINCETUR).</strong></p>
+                <p><strong class="text-white">2. Ausencia de Garantía de Ganancias (Riesgo Estadístico):</strong> Todas las probabilidades, métricas de goles esperados (xG), índices de valor (+EV) y selecciones mostradas constituyen estimaciones estadísticas de carácter informativo y educativo. En el deporte existen variables imprevistas (expulsiones, lesiones, decisiones arbitrales o clima); por tanto, <strong>ningún modelo matemático ni algoritmo garantiza aciertos futuros ni rentabilidades económicas</strong>. El usuario asume la total responsabilidad sobre el uso de esta información.</p>
+                <p><strong class="text-white">3. Restricción Estricta de Mayoría de Edad (+18):</strong> El acceso y suscripción a PredicXion IA están estrictamente restringidos a personas mayores de 18 años con plena capacidad civil.</p>
+                <p><strong class="text-white">4. Suscripciones y Pagos Automatizados vía Mercado Pago:</strong> Las membresías VIP (Pase Pro S/ 19.90/mes y Pase Élite S/ 39.90/mes) se procesan exclusivamente a través de la pasarela segura de Mercado Pago Perú en Soles (PEN). Al confirmarse el pago, el sistema activa automáticamente el acceso por 30 días calendario.</p>
+            </div>
+
+            <div id="contenido-leg-privacidad" class="hidden overflow-y-auto space-y-3 text-xs text-slate-300 leading-relaxed pr-2">
+                <p><strong class="text-white">1. Cumplimiento de la Ley N° 29733 (Ley de Protección de Datos Personales - Perú):</strong> PredicXion IA garantiza la confidencialidad y seguridad de los datos personales proporcionados por los usuarios conforme a la legislación peruana vigente.</p>
+                <p><strong class="text-white">2. Datos Recopilados y Finalidad:</strong> Únicamente almacenamos el nombre o alias y el correo electrónico autenticados mediante Google Firebase Authentication con la finalidad exclusiva de identificar la cuenta del usuario, sincronizar su nivel de membresía (Free, Pro o Élite) y aplicar sus preferencias de Juego Responsable.</p>
+                <p><strong class="text-white">3. Seguridad Financiera (Cero Almacenamiento de Tarjetas):</strong> PredicXion IA <strong>jamás solicita, procesa ni almacena números de tarjetas de crédito/débito ni códigos CVV</strong>. Toda transacción se realiza de forma encriptada directamente en los servidores certificados PCI-DSS de Mercado Pago.</p>
+                <p><strong class="text-white">4. Ejercicio de Derechos ARCO:</strong> El titular de los datos puede ejercer en cualquier momento sus derechos de Acceso, Rectificación, Cancelación y Oposición (ARCO) o solicitar la baja de su cuenta a través de nuestros canales oficiales de soporte en la plataforma y comunidad de Telegram.</p>
+            </div>
+
+            <div class="pt-4 mt-4 border-t border-cardBorder flex justify-end">
+                <button type="button" onclick="cerrarModalLegal()" class="bg-accentGreen text-slate-950 font-black text-xs px-5 py-2 rounded-xl hover:brightness-105 transition cursor-pointer">Entendido y Cerrar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Botón y Modal de Juego Responsable -->
     <button id="jr-open" onclick="abrirJuegoResponsable()" class="fixed bottom-4 left-4 z-40 text-[10px] font-bold bg-slate-900/90 border border-slate-700/80 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg shadow-xl backdrop-blur-md transition-all hover:border-cyan-500/50 flex items-center gap-1.5">
@@ -3859,6 +3870,54 @@
                 jrStatus(d.success ? ('✓ Ajustes guardados. ' + (d.aviso || '')) : ('❌ ' + (d.error || 'No se pudo guardar.')));
             } catch (e) { jrStatus('Error de conexión.'); }
         }
+        function abrirModalLegal(tab = 'terminos') {
+            const m = document.getElementById('modal-legal');
+            if (m) m.classList.remove('hidden');
+            cambiarTabLegal(tab);
+        }
+        function cerrarModalLegal() {
+            const m = document.getElementById('modal-legal');
+            if (m) m.classList.add('hidden');
+        }
+        function cambiarTabLegal(tab) {
+            const tTerm = document.getElementById('tab-leg-terminos');
+            const tPriv = document.getElementById('tab-leg-privacidad');
+            const cTerm = document.getElementById('contenido-leg-terminos');
+            const cPriv = document.getElementById('contenido-leg-privacidad');
+            if (tab === 'privacidad') {
+                if (tPriv) tPriv.className = 'px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-950 text-accentGreen border border-emerald-700 cursor-pointer';
+                if (tTerm) tTerm.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-baseDark text-slate-400 border border-cardBorder hover:text-white cursor-pointer';
+                if (cPriv) cPriv.classList.remove('hidden');
+                if (cTerm) cTerm.classList.add('hidden');
+            } else {
+                if (tTerm) tTerm.className = 'px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-950 text-accentGreen border border-emerald-700 cursor-pointer';
+                if (tPriv) tPriv.className = 'px-3 py-1.5 rounded-xl text-xs font-bold bg-baseDark text-slate-400 border border-cardBorder hover:text-white cursor-pointer';
+                if (cTerm) cTerm.classList.remove('hidden');
+                if (cPriv) cPriv.classList.add('hidden');
+            }
+        }
+        window.abrirModalLegal = abrirModalLegal;
+        window.cerrarModalLegal = cerrarModalLegal;
+        window.cambiarTabLegal = cambiarTabLegal;
+
+        // Detectar retorno desde pasarela Mercado Pago (?pago=aprobado)
+        (function verificarRetornoMercadoPago() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const estadoPago = params.get('pago');
+                if (estadoPago === 'aprobado') {
+                    setTimeout(() => notificar('🎉 ¡Pago aprobado en Mercado Pago! Tu Membresía VIP se ha activado automáticamente.'), 800);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else if (estadoPago === 'pendiente') {
+                    setTimeout(() => notificar('⏳ Tu pago en Mercado Pago está en proceso de confirmación.'), 800);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else if (estadoPago === 'fallido') {
+                    setTimeout(() => notificar('⚠️ El pago no se completó. Puedes intentarlo nuevamente con Mercado Pago.'), 800);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            } catch (e) {}
+        })();
+
         // Consulta del estado de datos reales
         (async function cargarEstadoDatos() {
             try {
