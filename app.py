@@ -228,6 +228,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("PredicXionCore")
 
+ALLOW_SIMULATED_ACTA = os.getenv("ALLOW_SIMULATED_ACTA", "false").strip().lower() == "true"
 OWNER_EMAILS = set(filter(None, [e.strip().lower() for e in (os.getenv("OWNER_EMAILS") or os.getenv("ADMIN_EMAIL") or "fabiancermaz@gmail.com").split(",")]))
 
 def _verificar_es_admin() -> bool:
@@ -235,7 +236,7 @@ def _verificar_es_admin() -> bool:
     No admite claves por defecto, ni coincidencias parciales de email, ni accesos no autorizados."""
     # 1. Comprobar email verificado en g (puesto por require_auth)
     user_email = (getattr(g, "user_email", None) or "").strip().lower()
-    if user_email and user_email in OWNER_EMAILS:
+    if user_email and user_email in OWNER_EMAILS and getattr(g, "email_verified", False):
         return True
 
     # 2. Token de Firebase Auth en el header Authorization
@@ -268,7 +269,7 @@ def _verificar_es_admin() -> bool:
 # AUTOMATIZACIÓN 24/7: DESPACHO AUTOMÁTICO DEL TOP 5 AL CANAL VIP DE TELEGRAM (EXACTAMENTE 22:00 PM HORA PERÚ)
 # --------------------------------------------------------------------------------------
 # Se pre-marca 2026-10-16 como ya emitido para no duplicar el envío ya realizado hoy
-_ultimo_envio_auto_fecha = "2026-10-16"
+_ultimo_envio_auto_fecha = ""
 _auto_telegram_lock = threading.Lock()
 _LAST_TG_FILE = "/tmp/predicxion_last_tg_top5_date.txt"
 
@@ -288,8 +289,7 @@ def _obtener_fecha_activa_top5() -> str:
 
 def _ya_enviado_top5_fecha(target_date: str) -> bool:
     global _ultimo_envio_auto_fecha
-    if target_date <= "2026-10-16":
-        return True
+    # (corte fijo eliminado: el control se hace por fecha real)
     if _ultimo_envio_auto_fecha == target_date:
         return True
     try:
@@ -530,6 +530,7 @@ def require_auth(f):
         g.user_id = decoded_token.get("uid") or decoded_token.get("user_id") or decoded_token.get("sub")
         g.user_email = (decoded_token.get("email") or "").strip().lower()
         g.user_claims = decoded_token
+        g.email_verified = bool(decoded_token.get("email_verified"))
         return f(*args, **kwargs)
     return decorated
 
@@ -540,7 +541,7 @@ def require_subscription(f):
         user_email = (getattr(g, "user_email", None) or "").strip().lower()
 
         # Solo fabiancermaz@gmail.com exacto tiene pase maestro
-        if user_email in OWNER_EMAILS:
+        if user_email in OWNER_EMAILS and getattr(g, "email_verified", False):
             g.is_owner = True
             return f(*args, **kwargs)
 
@@ -549,7 +550,7 @@ def require_subscription(f):
             return jsonify({"success": False, "error": "Identidad no verificada."}), 401
 
         if not db:
-            return jsonify({"success": True, "notice": "Modo offline temporal."}), 200
+            return jsonify({"success": False, "error": "Servicio de validación no disponible. Inténtalo más tarde."}), 503
 
         try:
             doc = db.collection("usuarios").document(user_id).get()
@@ -1043,15 +1044,15 @@ class DualAIEngine:
         # FASE 1: GEMINI (Analista Cuantitativo & Motor de Generación)
         if live_call and gemini_key:
             try:
-                prompt_gemini = f"""Actúa como el Analista Cuantitativo Principal de PredicXion IA con datos extraídos y cruzados de 4 fuentes oficiales especializadas: Flashscore, WhoScored, FBref y API-Football.
+                prompt_gemini = f"""Actúa como el Analista Cuantitativo Principal de PredicXion IA usando únicamente los datos proporcionados. No inventes estadísticas.
 Analiza estrictamente las siguientes métricas del encuentro real con las plantillas oficiales 2026/2027:
 - Partido Oficial 2026/2027: {local} vs {visita} ({liga})
 - Referentes Ofensivos Oficiales 2026/2027:
   * {tag_loc}: {home_stars_txt}
   * {tag_vis}: {away_stars_txt}
-- Métricas Avanzadas FBref/WhoScored: xG {p1.get('xg_proyectado_local')} vs {p1.get('xg_proyectado_visitante')}
+- Métricas del modelo: xG {p1.get('xg_proyectado_local')} vs {p1.get('xg_proyectado_visitante')}
 - Distribución de Poisson 1X2: {probs.get('1X2', {})}
-- Volumen Proyectado Flashscore/API-Football: {p1.get('corners_proyectados')} córners | Fricción H2H: {p4.get('friccion')}
+- Volumen proyectado: {p1.get('corners_proyectados')} córners | Fricción H2H: {p4.get('friccion')}
 - Propuesta Cuantitativa Base: {p_princ.get('seleccion')} ({p_princ.get('probabilidad')})
 
 Formula tu Tesis Cuantitativa en 2 oraciones exactas integrando el protagonismo de las figuras de ambos conjuntos ({home_stars_txt} y {away_stars_txt}) y fundamentando el mercado con mayor valor esperado (+EV)."""
@@ -1066,14 +1067,14 @@ Formula tu Tesis Cuantitativa en 2 oraciones exactas integrando el protagonismo 
 
         if not gemini_thesis:
             ref_txt = f" con el volumen de remates liderado por {home_stars_txt} en {local} frente a {away_stars_txt} en {visita}," if (pl_home and pl_away) else ""
-            gemini_thesis = f"Tesis Cuantitativa (Gemini): Cruzando registros de Flashscore y métricas xG de FBref ({p1.get('xg_proyectado_local', 1.5)} vs {p1.get('xg_proyectado_visitante', 1.5)}),{ref_txt} se ratifica '{p_princ.get('seleccion')}' con {p_princ.get('probabilidad')} de probabilidad matemática."
+            gemini_thesis = f"Tesis Cuantitativa (modelo Poisson): xG estimado ({p1.get('xg_proyectado_local', 1.5)} vs {p1.get('xg_proyectado_visitante', 1.5)}),{ref_txt} la selección con mayor probabilidad del modelo es '{p_princ.get('seleccion')}' ({p_princ.get('probabilidad')} estimada)."
 
         # FASE 2: DEEPSEEK (Razonamiento Lógico Profundo & Cálculo de Arbitraje +EV)
         deepseek_reasoning = None
         if live_call and deepseek_key:
             try:
                 prompt_ds = f"""Actúa como el Motor de Razonamiento Lógico Profundo de DeepSeek en PredicXion IA.
-Cruza la información cuantitativa verificada en Flashscore, WhoScored, FBref y API-Football para el partido real {local} vs {visita} ({liga}):
+Analiza los datos proporcionados para el partido {local} vs {visita} ({liga}):
 - Plantillas Oficiales 2026/2027: {tag_loc} ({home_stars_txt}) vs {tag_vis} ({away_stars_txt})
 - Datos de Generación Ofensiva y Eficiencia: xG {p1.get('xg_proyectado_local')} vs {p1.get('xg_proyectado_visitante')}
 - Probabilidades 1X2: {probs.get('1X2', {})} | Mercado Sugerido: {p_princ.get('seleccion')} ({p_princ.get('probabilidad')})
@@ -1103,14 +1104,14 @@ Tu misión de deducción matemática formal:
         if not deepseek_reasoning:
             star_h = pl_home[0]["nombre"] if pl_home else local
             star_a = pl_away[0]["nombre"] if pl_away else visita
-            deepseek_reasoning = f"Razonamiento Lógico (DeepSeek): Deducción formal confirma +EV (+14.8%) para '{p_princ.get('seleccion')}'. La generación ofensiva y xG proyectada para {star_h} ({tag_loc}) frente al esquema de {tag_vis} ({star_a}) valida una ventaja estructural sobre el margen de la cuota."
+            deepseek_reasoning = f"Razonamiento Lógico (DeepSeek): Sin respuesta de la API en este momento. La selección '{p_princ.get('seleccion')}' se apoya solo en las probabilidades del modelo; compárala con la cuota real antes de decidir."
 
         grok_verdict = None
         # FASE 3: GROK / GROQ (Auditor Crítico & Red Team de Control de Riesgo)
         if live_call and grok_key:
             try:
                 prompt_grok = f"""Actúa como el Auditor Crítico y Gestor de Riesgos (Red Team) de PredicXion IA.
-Audita los datos consolidados de Flashscore, WhoScored, FBref y API-Football para ratificar el veredicto final de consenso:
+Audita los datos proporcionados para ratificar el veredicto final de consenso:
 - Alineaciones Oficiales 2026/2027: {tag_loc} ({home_stars_txt}) vs {tag_vis} ({away_stars_txt})
 - Tesis Gemini: "{gemini_thesis}"
 - Razonamiento Lógico DeepSeek: "{deepseek_reasoning}"
@@ -1147,7 +1148,7 @@ Tu misión:
                 logger.warning("Fallo en llamada live a Groq/Grok: %s", e)
 
         if not grok_verdict:
-            grok_verdict = f"Auditoría de Riesgo (Grok Red Team): Contrastada la plantilla oficial 2026/2027 de {local} y {visita}, no se detectan trampas de cuota ni sesgos en las líneas de remate. Se ratifica '{p_princ.get('seleccion')}' con consenso unificado de las 3 IA."
+            grok_verdict = f"Auditoría de Riesgo (Grok Red Team): No se pudo ejecutar la auditoría externa. Revisa alineaciones, lesiones y cuotas antes de decidir sobre '{p_princ.get('seleccion')}'."
 
         return {
             "estado": "ACTIVO",
@@ -1166,7 +1167,7 @@ Tu misión:
                 "tag_local": tag_loc,
                 "tag_visitante": tag_vis
             },
-            "nivel_seguridad": "MÁXIMA (Consenso Triple IA: Gemini + DeepSeek + Grok)",
+            "nivel_seguridad": "Consenso de 3 modelos de IA (no garantiza el resultado)",
             "llaves_activas": {
                 "gemini": bool(gemini_key),
                 "deepseek": bool(deepseek_key),
@@ -13342,7 +13343,7 @@ def _generar_acta_partido_realista(local: str, visitante: str, fecha_str: str, a
         "cards_total": cards_total,
         "yellow_cards": yellow_cards,
         "red_cards": red_cards,
-        "source": "Official Match Stats"
+        "source": "SIMULADO_NO_VERIFICADO"
     }
 
 
@@ -13394,7 +13395,7 @@ def obtener_resultado_real_verificado(local: str, visitante: str, fecha_str: str
         final_res = dict(res_espn)
 
     # 3. Si el partido ya terminó por horario oficial y faltan datos del acta externa, completar con el modelo estadístico del club
-    if ya_termino_reloj:
+    if ya_termino_reloj and ALLOW_SIMULATED_ACTA:
         acta_respaldo = _generar_acta_partido_realista(local, visitante, fecha_str, an_data=an_data)
         if not final_res or not final_res.get("finished"):
             final_res = acta_respaldo
@@ -15035,9 +15036,112 @@ def _arranque_ratings():
 threading.Thread(target=_arranque_ratings, daemon=True).start()
 
 
+def _plan_de_peticion() -> str:
+    """Devuelve 'elite', 'pro' o 'free' según el token Bearer. Nunca lanza excepciones."""
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return "free"
+        token = auth_header.split("Bearer ", 1)[1].strip()
+        ensure_firebase_initialized()
+        if not (auth and firebase_admin and firebase_admin._apps):
+            return "free"
+        decoded = auth.verify_id_token(token, clock_skew_seconds=60)
+        email = (decoded.get("email") or "").strip().lower()
+        if decoded.get("email_verified") and email in OWNER_EMAILS:
+            return "elite"
+        uid = decoded.get("uid")
+        if uid and db:
+            data = db.collection("usuarios").document(uid).get().to_dict() or {}
+            if data.get("suscripcion_activa"):
+                exp = data.get("suscripcion_expira")
+                if not exp or _as_utc(exp) > datetime.now(timezone.utc):
+                    return "elite" if data.get("plan") == "elite" else "pro"
+    except Exception:
+        pass
+    return "free"
+
+
+def _recortar_item_gratis(it: dict) -> None:
+    """Oculta en el servidor el contenido VIP de una tarjeta de cartelera."""
+    it["props_jugadores"] = []
+    st = it.get("organizacion_stakazos") or {}
+    st.pop("micromercado_oro", None)
+    it["organizacion_stakazos"] = st
+    pil = it.get("pilares_cuantitativos") or {}
+    for k in ("pilar_6_compatibilidad_tactica", "pilar_7_micromercados_friccion"):
+        pil.pop(k, None)
+    it["pilares_cuantitativos"] = pil
+    pp = it.get("pronostico_principal") or {}
+    pp["justificacion"] = "Justificación disponible con Membresía VIP"
+    it["pronostico_principal"] = pp
+    it["consenso_dual_ia"] = None
+
+
+def _ocultar_contenido_vip(path: str, data: dict) -> dict:
+    if path == "/api/v1/top3/daily":
+        for key in ("top3", "top5"):
+            for it in data.get(key) or []:
+                if int(it.get("rank", 0)) <= 4:
+                    it.update({
+                        "mercado": "🔒 Pick exclusivo VIP",
+                        "probabilidad": "🔒",
+                        "cuota_justa": None,
+                        "justificacion": "Disponible con Membresía VIP",
+                        "xg_local": None,
+                        "xg_visita": None,
+                        "bloqueado": True,
+                    })
+    elif path == "/obtener-pronostico":
+        for bloque in ("destacados", "pronosticos_destacados"):
+            for it in data.get(bloque) or []:
+                _recortar_item_gratis(it)
+        for bloque in ("todos", "todos_los_partidos"):
+            for lista in (data.get(bloque) or {}).values():
+                for it in lista or []:
+                    _recortar_item_gratis(it)
+    return data
+
+
+_AVISO_ILUSTRATIVO = {
+    "/api/v1/vip/surebets": "Módulo ilustrativo: las casas y cuotas mostradas no son datos en vivo verificados y no constituyen una oportunidad de arbitraje real.",
+    "/api/v1/value-edge/comparison": "Ejemplos ilustrativos: no son cuotas verificadas en tiempo real.",
+    "/api/v1/streaks/finder": "Rachas ilustrativas: no provienen de una base estadística verificada en este momento.",
+    "/api/v1/vip/fatiga": "Índice de fatiga estimado por el modelo; no mide datos físicos reales de los jugadores.",
+    "/api/v1/vip/smart-money": "Indicadores ilustrativos; no reflejan flujo real de apuestas.",
+}
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
-    CORS(app, resources={r"/*": {"origins": "*"}})
+    _ORIGENES = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "https://predicxion-ia.onrender.com").split(",") if o.strip()]
+    CORS(app, resources={r"/*": {"origins": _ORIGENES}})
+
+    @app.after_request
+    def _post_procesar_respuesta(resp):
+        try:
+            path = request.path
+            if resp.status_code == 200 and resp.is_json:
+                data = resp.get_json(silent=True)
+                if isinstance(data, dict):
+                    cambio = False
+                    if path in _AVISO_ILUSTRATIVO:
+                        data["aviso_legal"] = _AVISO_ILUSTRATIVO[path]
+                        cambio = True
+                    if path in ("/api/v1/top3/daily", "/obtener-pronostico") and _plan_de_peticion() == "free":
+                        data = _ocultar_contenido_vip(path, data)
+                        cambio = True
+                    if cambio:
+                        resp.set_data(json.dumps(data, ensure_ascii=False))
+                        resp.mimetype = "application/json"
+        except Exception as exc:
+            logger.debug("Post-proceso de respuesta omitido: %s", exc)
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+        resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return resp
+
 
     # Forzar redirección automática a HTTPS seguro (evita advertencia de sitio no seguro en navegadores)
     @app.before_request
@@ -15105,7 +15209,7 @@ def create_app() -> Flask:
     @require_auth
     def sync_user():
         user_email = (g.user_email or "").strip().lower()
-        es_owner = user_email in OWNER_EMAILS
+        es_owner = user_email in OWNER_EMAILS and bool(getattr(g, "email_verified", False))
 
         if not db:
             return jsonify({
@@ -15358,7 +15462,11 @@ def create_app() -> Flask:
             partido = body.get("partido")
             seleccion = body.get("seleccion")
             cuota = float(body.get("cuota", 1.80))
-            fecha = body.get("fecha") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if not (1.01 <= cuota <= 100.0):
+                return jsonify({"success": False, "error": "Cuota fuera de rango válido (1.01 - 100)."}), 400
+            fecha = str(body.get("fecha") or datetime.now(timezone.utc).strftime("%Y-%m-%d"))[:10]
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", fecha):
+                return jsonify({"success": False, "error": "Fecha inválida (use AAAA-MM-DD)."}), 400
 
             nuevo_doc = db.collection("auditoria_picks").document()
             nuevo_doc.set({
@@ -15612,6 +15720,8 @@ def create_app() -> Flask:
 
     
     @app.route("/api/v1/vip/value-bets", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_value_bets():
         if not db:
             return jsonify({"success": True, "value_bets": []}), 200
@@ -15671,6 +15781,8 @@ def create_app() -> Flask:
 
     # VIP 2: Generador de Anclas Seguras (>80% Viabilidad)
     @app.route("/api/v1/vip/anclas", methods=["GET"])
+    @require_auth
+    @require_subscription
     def list_anclas():
         try:
             op_date = get_current_operational_date()
@@ -15759,6 +15871,8 @@ def create_app() -> Flask:
 
     # VIP 4: Escáner de Micromercados (Tarjetas & Córners)
     @app.route("/api/v1/vip/micromercados", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_micromarkets():
         if not db:
             return jsonify({"success": True, "micromercados": []}), 200
@@ -16113,7 +16227,7 @@ def create_app() -> Flask:
             # Si ya fue liquidado en firme en Firestore (GANADA o PERDIDA), respetarlo
             if partido_nombre in firestore_map:
                 saved_id, saved_d = firestore_map[partido_nombre]
-                if saved_d.get("estado") in ("GANADA", "PERDIDA"):
+                if saved_d.get("estado") in ("GANADA", "PERDIDA") and str(saved_d.get("fuente_resultado") or "").startswith(("SofaScore", "ESPN")):
                     resultados_auditados.append({
                         "id": saved_id,
                         "fecha": fecha_str,
@@ -16151,9 +16265,16 @@ def create_app() -> Flask:
                 "cuota": item["cuota"],
                 "resultado": resultado_texto,
                 "estado": estado_final,
-                "verificado": (estado_final in ("GANADA", "PERDIDA"))
+                "verificado": (estado_final in ("GANADA", "PERDIDA")),
+                "fuente_resultado": ((real_stats or {}).get("source") if estado_final in ("GANADA", "PERDIDA") else None)
             }
             resultados_auditados.append(registro)
+
+            if db and estado_final == "PENDIENTE":
+                try:
+                    db.collection("auditoria_picks").document(doc_id).set({"estado": "PENDIENTE", "verificado": False, "resultado": "Pendiente de resultado verificado", "fuente_resultado": None}, merge=True)
+                except Exception:
+                    pass
 
             # Guardar automáticamente en Firestore cuando ya tiene calificación definitiva
             if db and estado_final in ("GANADA", "PERDIDA"):
@@ -16401,6 +16522,8 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": str(err)}), 500
 
     @app.route("/api/v1/vip/surebets", methods=["GET"])
+    @require_auth
+    @require_subscription
     def list_surebets():
         surebets = [
             {
@@ -16409,7 +16532,7 @@ def create_app() -> Flask:
                 "mercado": "Victoria Local (1) vs Doble Oportunidad (X2)",
                 "casas": "Betano (1 @ 1.95) vs Te Apuesto (X2 @ 2.25)",
                 "margen_beneficio_pct": 4.5,
-                "distribucion_stake": "S/ 53.60 en Betano | S/ 46.40 en Te Apuesto (Retorno garantizado: S/ 104.50)",
+                "distribucion_stake": "S/ 53.60 en Betano | S/ 46.40 en Te Apuesto (Retorno estimado: S/ 104.50)",
                 "estado": "ACTIVA"
             },
             {
@@ -16418,7 +16541,7 @@ def create_app() -> Flask:
                 "mercado": "Más de 2.5 Goles vs Menos de 2.5 Goles",
                 "casas": "Bet365 (Over 2.5 @ 2.20) vs Doradobet (Under 2.5 @ 1.95)",
                 "margen_beneficio_pct": 3.4,
-                "distribucion_stake": "S/ 47.00 en Bet365 | S/ 53.00 en Doradobet (Retorno garantizado: S/ 103.40)",
+                "distribucion_stake": "S/ 47.00 en Bet365 | S/ 53.00 en Doradobet (Retorno estimado: S/ 103.40)",
                 "estado": "ACTIVA"
             },
             {
@@ -16427,7 +16550,7 @@ def create_app() -> Flask:
                 "mercado": "Empate Apuesta No Válida (DNB 1 vs DNB 2)",
                 "casas": "Betano (DNB Inter @ 1.75) vs Betfair (DNB Corinthians @ 2.65)",
                 "margen_beneficio_pct": 5.4,
-                "distribucion_stake": "S/ 60.20 en Betano | S/ 39.80 en Betfair (Retorno garantizado: S/ 105.40)",
+                "distribucion_stake": "S/ 60.20 en Betano | S/ 39.80 en Betfair (Retorno estimado: S/ 105.40)",
                 "estado": "ACTIVA"
             },
             {
@@ -16436,7 +16559,7 @@ def create_app() -> Flask:
                 "mercado": "Ambos Equipos Anotan (Sí vs No)",
                 "casas": "1xBet (Sí @ 2.12) vs Te Apuesto (No @ 2.05)",
                 "margen_beneficio_pct": 4.2,
-                "distribucion_stake": "S/ 49.20 en 1xBet | S/ 50.80 en Te Apuesto (Retorno garantizado: S/ 104.20)",
+                "distribucion_stake": "S/ 49.20 en 1xBet | S/ 50.80 en Te Apuesto (Retorno estimado: S/ 104.20)",
                 "estado": "ACTIVA"
             },
             {
@@ -16445,13 +16568,15 @@ def create_app() -> Flask:
                 "mercado": "Victoria Local (1) vs Doble Oportunidad (X2)",
                 "casas": "Bet365 (1 @ 1.88) vs Doradobet (X2 @ 2.38)",
                 "margen_beneficio_pct": 4.9,
-                "distribucion_stake": "S/ 55.90 en Bet365 | S/ 44.10 en Doradobet (Retorno garantizado: S/ 104.90)",
+                "distribucion_stake": "S/ 55.90 en Bet365 | S/ 44.10 en Doradobet (Retorno estimado: S/ 104.90)",
                 "estado": "ACTIVA"
             }
         ]
         return jsonify({"success": True, "surebets": surebets}), 200
 
     @app.route("/api/v1/vip/fatiga", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_fatigue_index():
         if not db:
             return jsonify({"success": True, "fatiga": []}), 200
@@ -16564,6 +16689,8 @@ def create_app() -> Flask:
 
     # VIP 10: Rastreador de Dinero Inteligente (Smart Money & Dropping Odds)
     @app.route("/api/v1/vip/smart-money", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_smart_money():
         if not db:
             return jsonify({"success": True, "smart_money": []}), 200
@@ -16634,6 +16761,8 @@ def create_app() -> Flask:
 
     # MÓDULO A: Estadísticas y Proyecciones de Jugadores (Player Props)
     @app.route("/api/v1/players/props", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_player_props():
         """Retorna las estadísticas reales de Player Props (goles, xG, tiros al arco) sincronizadas
         con los 4 sitios de datos oficiales (Flashscore, WhoScored, FBref, API-Football) y vincula
@@ -16689,7 +16818,7 @@ def create_app() -> Flask:
                     p_copy["proxima_fecha"] = op_date
 
                 # Metadatos de fuentes estadísticas cruzadas
-                p_copy["fuentes_auditadas"] = ["Flashscore", "WhoScored", "FBref", "API-Football"]
+                p_copy["fuentes_auditadas"] = ["Plantilla interna (pendiente de verificación externa)"]
                 players_db.append(p_copy)
 
             # Filtros dinámicos
@@ -16717,7 +16846,7 @@ def create_app() -> Flask:
                 "success": True,
                 "total": len(filtrados),
                 "fecha_operativa": op_date,
-                "fuentes_validadas": ["Flashscore", "WhoScored", "FBref", "API-Football"],
+                "fuentes_validadas": ["Plantilla interna (pendiente de verificación externa)"],
                 "ligas_disponibles": ligas_disponibles,
                 "equipos_disponibles": equipos_disponibles,
                 "jugadores": filtrados
@@ -16727,6 +16856,8 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/v1/streaks/finder", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_streak_finder():
         try:
             categoria = request.args.get("categoria", "todas").lower()
@@ -16767,6 +16898,8 @@ def create_app() -> Flask:
 
     # MÓDULO C: Creador de Combinadas Inteligentes (Bet Builder Quant)
     @app.route("/api/v1/bet-builder/quant", methods=["POST", "GET"])
+    @require_auth
+    @require_subscription
     def generate_bet_builder():
         import random
         try:
@@ -16904,7 +17037,7 @@ def create_app() -> Flask:
                 "cuota_total": cuota_redondeada,
                 "cuota_combinada": cuota_redondeada,
                 "probabilidad_matematica": prob_pct,
-                "viabilidad_cuantitativa": "ALTA (>80%)" if prob_total >= 0.70 else "MEDIA",
+                "probabilidad_estimada_combinada": "Alta según el modelo" if prob_total >= 0.70 else "Moderada según el modelo",
                 "total_selecciones": len(chosen),
                 "total_partidos": len(chosen),
                 "gestion_bankroll_kelly": "Stake 2.5% (Kelly Fraccional 1/4)",
@@ -16916,6 +17049,8 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/v1/value-edge/comparison", methods=["GET"])
+    @require_auth
+    @require_subscription
     def get_value_edge_comparison():
         try:
             comparisons = [
