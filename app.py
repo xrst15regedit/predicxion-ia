@@ -11717,15 +11717,21 @@ class SportsAnalyticsEngine:
         n3_icono = "🎯"
 
         # NIVEL 4: MICROMERCADO ESPECIALIZADO
-        if corners_estimados >= 9.6:
+        if tarjetas_esperadas >= 3.9 and estilo_partido in [1, 3, 4]:
+            micro_mercado = "Más de 3.5 Tarjetas Totales"
+            micro_prob = f"{max(82.5, prob_cards_35)}%"
+            micro_tipo = "TARJETAS"
+            micro_icono = "🟨"
+            micro_motivo = f"Promedio de {tarjetas_esperadas} tarjetas combinadas por encuentro en duelo de alta fricción."
+        elif corners_estimados >= 9.6:
             micro_mercado = "Más de 8.5 Córners Totales"
             micro_prob = f"{prob_corners_85}%"
             micro_tipo = "CÓRNERS"
             micro_icono = "🚩"
             micro_motivo = f"Media combinada de {corners_estimados} córners por desborde en bandas."
-        elif tarjetas_esperadas >= 4.3:
+        elif tarjetas_esperadas >= 3.8:
             micro_mercado = "Más de 3.5 Tarjetas Totales"
-            micro_prob = f"{prob_cards_35}%"
+            micro_prob = f"{max(81.5, prob_cards_35)}%"
             micro_tipo = "TARJETAS"
             micro_icono = "🟨"
             micro_motivo = f"Promedio de {tarjetas_esperadas} tarjetas combinadas por encuentro."
@@ -11823,15 +11829,34 @@ class SportsAnalyticsEngine:
                 prob_principal = f"{p_comb}%"
                 justificacion_quant = f"Superioridad ofensiva de {fav_team} ({fav_xg} xG proyectado, racha {racha_fav}) frente a una zaga de {opp_team} que concede {opp_xg} xGA."
 
-        # Regla 4: Favorito sólido ante rival de menor pegada (opp_xg < 1.25) pero con riesgo de empate -> Doble Oportunidad + Más de 1.5 Goles
-        elif p_do_fav >= 72.0 and pGoles15["over"] >= 74.0 and diferencia_xg >= 0.35:
+        # Regla 2.5: Partidos de alta fricción o cuando el 1X2 es difícil de predecir -> MERCADO DE TARJETAS
+        elif tarjetas_esperadas >= 3.8 and (diferencia_xg <= 0.50 or p_max_win < 62.0 or estilo_partido in [1, 3]):
+            linea_t = "4.5" if tarjetas_esperadas >= 4.8 else "3.5"
+            prob_t = max(82.5, prob_cards_35 if linea_t == "3.5" else round(min(83.0, max(68.0, 50.0 + tarjetas_esperadas * 4.5)), 1))
+            mercado_sugerido = f"Más de {linea_t} Tarjetas Totales 🟨"
+            prob_principal = f"{prob_t}%"
+            justificacion_quant = f"Duelo cerrado y de alta fricción táctica con media combinada de {tarjetas_esperadas} tarjetas por partido. Ante la dificultad de asegurar ganador o empate, el mercado de amonestaciones ofrece el mayor valor y certeza matemática."
+
+        # Regla 3.5: Si el favorito es visitante y hay expectativa de goles, IR A GOLES, NO A DOBLE OPORTUNIDAD X2
+        elif fav_is_away and (pGoles15["over"] >= 74.0 or suma_xg >= 2.55):
+            if suma_xg >= 2.90 and pGoles["over"] >= 56.0:
+                mercado_sugerido = "Más de 2.5 Goles Totales ⚽"
+                prob_principal = f"{round(min(85.0, max(pGoles['over'], 70.0 + (suma_xg - 2.6) * 12.0)), 1)}%"
+                justificacion_quant = f"Duelo dinámico con {round(suma_xg, 2)} xG proyectado. Al ser {fav_team} visitante en plaza exigente, se evita el riesgo del 1X2 y se respalda la línea de goles."
+            else:
+                mercado_sugerido = "Más de 1.5 Goles Totales ⚽"
+                prob_principal = f"{round(min(86.5, max(pGoles15['over'], 78.0)), 1)}%"
+                justificacion_quant = f"Ambos equipos generan y conceden peligro ({lh} xG vs {la} xG). La línea de más de 1.5 goles ofrece mayor seguridad que arriesgar el resultado 1X2 del visitante."
+
+        # Regla 4: Favorito sólido LOCAL ante rival de menor pegada (opp_xg < 1.25) pero con riesgo de empate -> Doble Oportunidad + Más de 1.5 Goles
+        elif not fav_is_away and p_do_fav >= 72.0 and pGoles15["over"] >= 74.0 and diferencia_xg >= 0.35:
             p_comb_do = round(min(84.5, (p_do_fav * 0.56) + (pGoles15["over"] * 0.44)), 1)
             mercado_sugerido = f"Gana {fav_team} o Empate ({do_code_fav}) y Más de 1.5 Goles Totales 🛡️"
             prob_principal = f"{p_comb_do}%"
             justificacion_quant = f"Ventaja estadística de {fav_team} ({fav_xg} xG vs {opp_xg} xG; racha {racha_fav}). Se asegura el empate con Doble Oportunidad ({do_code_fav}) y línea de +1.5 goles ({round(suma_xg, 2)} xG total)."
 
         # Regla 5: Partidos de alto ritmo por bandas o con artillero titular dominante
-        elif corners_estimados >= 10.2 and estilo_partido in [0, 1, 3]:
+        elif corners_estimados >= 10.0 and estilo_partido in [0, 2]:
             mercado_sugerido = "Más de 8.5 Córners Totales 🚩"
             prob_principal = f"{prob_corners_85}%"
             justificacion_quant = f"Ritmo vertical por los costados con media combinada de {corners_estimados} córners por partido."
@@ -11839,10 +11864,14 @@ class SportsAnalyticsEngine:
             mercado_sugerido = prop_candidato["mercado"]
             prob_principal = f"{prop_candidato['prob']}%"
             justificacion_quant = prop_candidato["justificacion"]
-        elif tarjetas_esperadas >= 4.5 and diferencia_xg <= 0.30:
+        elif tarjetas_esperadas >= 3.8:
             mercado_sugerido = "Más de 3.5 Tarjetas Totales 🟨"
-            prob_principal = f"{prob_cards_35}%"
-            justificacion_quant = f"Duelo parejo de alta fricción en mediocampo ({tarjetas_esperadas} tarjetas promedio combinadas)."
+            prob_principal = f"{max(82.0, prob_cards_35)}%"
+            justificacion_quant = f"Duelo de alta fricción táctica en mediocampo con promedio de {tarjetas_esperadas} tarjetas por encuentro."
+        elif es_defensa_rota or pGoles15["over"] >= 76.0:
+            mercado_sugerido = "Más de 1.5 Goles Totales ⚽"
+            prob_principal = f"{max(82.0, pGoles15['over'])}%"
+            justificacion_quant = f"Proyección combinada de {round(suma_xg, 2)} xG con tendencia a partido abierto de mínimo dos goles."
         else:
             fav_do = home if p1X >= pX2 else away
             do_code = '1X' if p1X >= pX2 else 'X2'
@@ -11999,135 +12028,7 @@ def _clasificar_categoria_mercado(sel_text: str) -> tuple:
     return "GOALS", "⚽"
 
 
-_LOCKED_TOP5_PICKS_BY_DATE = {
-    "2026-10-16": [
-        {
-            "match_id": "bsa-2026-j31-mir-int_1877",
-            "partido": "Mirassol vs Internacional",
-            "local": "Mirassol",
-            "visitante": "Internacional",
-            "liga": "Campeonato Brasileiro Série A",
-            "codigo_liga": "BSA",
-            "fecha": "2026-10-16",
-            "fecha_utc": "2026-10-16T18:00:00Z",
-            "hora_est": "18:00",
-            "categoria": "DOBLE OPORTUNIDAD",
-            "icono_categoria": "🛡️",
-            "mercado": "Gana Internacional o Empate (X2) y Más de 1.5 Goles Totales 🛡️",
-            "seleccion": "Gana Internacional o Empate (X2) y Más de 1.5 Goles Totales 🛡️",
-            "probabilidad": "80.3%",
-            "prob_num": 80.3,
-            "cuota_justa": 1.25,
-            "cuota": "1.25",
-            "justificacion": "Mirassol presenta racha competitiva (V-D-V-D-V). Se protege el empate con Doble Oportunidad (X2) a favor de Internacional (E-V-V-E-V) y línea de +1.5 goles (3.19 xG total).",
-            "xg_local": 1.2,
-            "xg_visita": 1.99,
-            "rank": 1,
-            "exclusivo_vip": True,
-            "es_gratis_telegram": False
-        },
-        {
-            "match_id": "bl1-2026-j6-ein-col_802",
-            "partido": "Eintracht Frankfurt vs Colonia",
-            "local": "Eintracht Frankfurt",
-            "visitante": "Colonia",
-            "liga": "Bundesliga",
-            "codigo_liga": "BL1",
-            "fecha": "2026-10-16",
-            "fecha_utc": "2026-10-16T13:30:00Z",
-            "hora_est": "13:30",
-            "categoria": "GOALS",
-            "icono_categoria": "⚽",
-            "mercado": "Más de 2.5 Goles Totales ⚽",
-            "seleccion": "Más de 2.5 Goles Totales ⚽",
-            "probabilidad": "79.1%",
-            "prob_num": 79.1,
-            "cuota_justa": 1.26,
-            "cuota": "1.26",
-            "justificacion": "Alto potencial ofensivo en ambas áreas (2.24 xG Eintracht Frankfurt vs 1.24 xG Colonia; rachas E-V-V-V-E y D-D-D-D-D).",
-            "xg_local": 2.24,
-            "xg_visita": 1.24,
-            "rank": 2,
-            "exclusivo_vip": True,
-            "es_gratis_telegram": False
-        },
-        {
-            "match_id": "pd-2026-j9-dep-lev_180",
-            "partido": "Deportivo de La Coruña vs Levante",
-            "local": "Deportivo de La Coruña",
-            "visitante": "Levante",
-            "liga": "Primera División",
-            "codigo_liga": "PD",
-            "fecha": "2026-10-16",
-            "fecha_utc": "2026-10-16T14:00:00Z",
-            "hora_est": "14:00",
-            "categoria": "CORNERS",
-            "icono_categoria": "🚩",
-            "mercado": "Más de 8.5 Córners Totales 🚩",
-            "seleccion": "Más de 8.5 Córners Totales 🚩",
-            "probabilidad": "76.4%",
-            "prob_num": 76.4,
-            "cuota_justa": 1.31,
-            "cuota": "1.31",
-            "justificacion": "Ritmo vertical por los costados con media combinada de 10.2 córners por partido.",
-            "xg_local": 1.37,
-            "xg_visita": 1.43,
-            "rank": 3,
-            "exclusivo_vip": True,
-            "es_gratis_telegram": False
-        },
-        {
-            "match_id": "sa-2026-j7-fro-sas_1065",
-            "partido": "Frosinone vs Sassuolo",
-            "local": "Frosinone",
-            "visitante": "Sassuolo",
-            "liga": "Serie A",
-            "codigo_liga": "SA",
-            "fecha": "2026-10-16",
-            "fecha_utc": "2026-10-16T13:45:00Z",
-            "hora_est": "13:45",
-            "categoria": "DOBLE OPORTUNIDAD",
-            "icono_categoria": "🛡️",
-            "mercado": "Gana Sassuolo o Empate (X2) y Más de 1.5 Goles Totales 🛡️",
-            "seleccion": "Gana Sassuolo o Empate (X2) y Más de 1.5 Goles Totales 🛡️",
-            "probabilidad": "75.1%",
-            "prob_num": 75.1,
-            "cuota_justa": 1.33,
-            "cuota": "1.33",
-            "justificacion": "Frosinone presenta racha competitiva (V-D-V-D-V). Se protege el empate con Doble Oportunidad (X2) a favor de Sassuolo (D-V-D-V-D) y línea de +1.5 goles (2.91 xG total).",
-            "xg_local": 1.25,
-            "xg_visita": 1.66,
-            "rank": 4,
-            "exclusivo_vip": True,
-            "es_gratis_telegram": False
-        },
-        {
-            "match_id": "fl1-2026-j7-le -tou_1385",
-            "partido": "Le Mans vs Toulouse",
-            "local": "Le Mans",
-            "visitante": "Toulouse",
-            "liga": "Ligue 1",
-            "codigo_liga": "FL1",
-            "fecha": "2026-10-16",
-            "fecha_utc": "2026-10-16T13:45:00Z",
-            "hora_est": "13:45",
-            "categoria": "DOBLE OPORTUNIDAD",
-            "icono_categoria": "🛡️",
-            "mercado": "Gana Le Mans o Empata (Doble Oportunidad 1X) 🛡️",
-            "seleccion": "Gana Le Mans o Empata (Doble Oportunidad 1X) 🛡️",
-            "probabilidad": "64.7%",
-            "prob_num": 64.7,
-            "cuota_justa": 1.55,
-            "cuota": "1.55",
-            "justificacion": "Fuerzas equilibradas (1.39 vs 1.34 xG). La Doble Oportunidad 1X respalda la racha de Le Mans (D-E-D-E-D).",
-            "xg_local": 1.39,
-            "xg_visita": 1.34,
-            "rank": 5,
-            "exclusivo_vip": False,
-            "es_gratis_telegram": True
-        }
-    ]
-}
+_LOCKED_TOP5_PICKS_BY_DATE = {}
 
 def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: int = 5) -> list:
     if target_date in _LOCKED_TOP5_PICKS_BY_DATE:
@@ -12169,12 +12070,22 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
 
     candidates.sort(key=lambda x: x["prob_num"], reverse=True)
 
-    # Seleccionar hasta `limit` asegurando que no haya más de 2 picks de la misma categoría si hay variedad disponible
+    # Seleccionar hasta limit asegurando variedad de categorías y presencia obligatoria de tarjetas si existen
     selected = []
     cat_counts = {}
+
+    # Si hay candidatos con pronóstico de TARJETAS (CARDS), garantizar al menos 1 en el Top 5
+    card_cands = [c for c in candidates if c["categoria"] == "CARDS"]
+    if card_cands and limit >= 4:
+        best_card = card_cands[0]
+        selected.append(best_card)
+        cat_counts["CARDS"] = 1
+
     for c in candidates:
         if len(selected) >= limit:
             break
+        if c in selected:
+            continue
         cat = c["categoria"]
         if cat_counts.get(cat, 0) < 2:
             selected.append(c)
@@ -14264,6 +14175,7 @@ def generate_all_players():
     # AS ROMA (Real 2026: Artem Dovbyk, Paulo Dybala)
     p(513, "Artem Dovbyk", "AS Roma", "Delantero Centro", L_IT, 11, 8, 4, 1, 0.68, 1.7, 3.1, "96%", "Monza", "Más de 0.5 Tiros a Puerta", "80.0%", 1.55, "Marcará Gol en Cualquier Momento", "62.0%", 2.10)
     p(514, "Paulo Dybala", "AS Roma", "Mediapunta", L_IT, 21, 7, 2, 2, 0.48, 1.4, 2.6, "92%", "Monza", "Más de 0.5 Asistencias o Gol", "74.0%", 1.75)
+    p(5141, "Matías Soulé", "AS Roma", "Extremo Derecho", L_IT, 18, 8, 3, 2, 0.52, 1.5, 2.8, "94%", "Monza", "Más de 1.5 Tiros Totales", "82.0%", 1.52)
 
     # FIORENTINA (Real 2026: Moise Kean, Albert Guðmundsson)
     p(515, "Moise Kean", "Fiorentina", "Delantero Centro", L_IT, 20, 8, 5, 1, 0.72, 1.8, 3.4, "96%", "AC Milan", "Más de 0.5 Tiros a Puerta", "80.0%", 1.58)
@@ -14292,6 +14204,7 @@ def generate_all_players():
     # GENOA (Real 2026/2027: Andrea Pinamonti, Ruslan Malinovskyi)
     p(527, "Andrea Pinamonti", "Genoa", "Delantero Centro", L_IT, 19, 8, 4, 0, 0.56, 1.5, 2.8, "94%", "Atalanta", "Más de 0.5 Tiros a Puerta", "76.0%", 1.65)
     p(528, "Ruslan Malinovskyi", "Genoa", "Mediocentro / Disparador", L_IT, 17, 7, 2, 2, 0.42, 1.3, 2.6, "90%", "Atalanta", "Más de 1.5 Tiros Totales", "80.0%", 1.52)
+    p(5281, "Junior Messias", "Genoa", "Extremo / Delantero", L_IT, 10, 7, 2, 1, 0.44, 1.3, 2.5, "91%", "Atalanta", "Más de 1.5 Tiros Totales", "78.0%", 1.58)
 
     # CAGLIARI (Real 2026/2027: Roberto Piccoli, Zito Luvumbo)
     p(529, "Roberto Piccoli", "Cagliari", "Delantero Centro", L_IT, 91, 8, 3, 1, 0.50, 1.4, 2.6, "92%", "Juventus", "Más de 0.5 Tiros a Puerta", "74.0%", 1.70)
@@ -15312,12 +15225,12 @@ def create_app() -> Flask:
             
             # Tabla Oficial de Precios de Lanzamiento en el Servidor (Previene manipulación de precios desde el cliente)
             OFFICIAL_PLANS = {
-                "pro": {"id": "pro", "nombre": "Pase Pro Mensual", "precio": 19.90, "vigencia_dias": 30},
-                "mensual pro": {"id": "pro", "nombre": "Pase Pro Mensual", "precio": 19.90, "vigencia_dias": 30},
-                "pase pro": {"id": "pro", "nombre": "Pase Pro Mensual", "precio": 19.90, "vigencia_dias": 30},
-                "elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo", "precio": 39.90, "vigencia_dias": 30},
-                "pase elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo", "precio": 39.90, "vigencia_dias": 30},
-                "pase élite": {"id": "elite", "nombre": "Pase Élite Cuantitativo", "precio": 39.90, "vigencia_dias": 30},
+                "pro": {"id": "pro", "nombre": "Pase Pro Mensual (15% OFF)", "precio": 16.90, "precio_regular": 19.90, "vigencia_dias": 30},
+                "mensual pro": {"id": "pro", "nombre": "Pase Pro Mensual (15% OFF)", "precio": 16.90, "precio_regular": 19.90, "vigencia_dias": 30},
+                "pase pro": {"id": "pro", "nombre": "Pase Pro Mensual (15% OFF)", "precio": 16.90, "precio_regular": 19.90, "vigencia_dias": 30},
+                "elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo (15% OFF)", "precio": 33.90, "precio_regular": 39.90, "vigencia_dias": 30},
+                "pase elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo (15% OFF)", "precio": 33.90, "precio_regular": 39.90, "vigencia_dias": 30},
+                "pase élite": {"id": "elite", "nombre": "Pase Élite Cuantitativo (15% OFF)", "precio": 33.90, "precio_regular": 39.90, "vigencia_dias": 30},
                 "anual": {"id": "anual", "nombre": "Pase Anual VIP", "precio": 149.00, "vigencia_dias": 365}
             }
 
@@ -15563,7 +15476,7 @@ def create_app() -> Flask:
                 if plan_id not in ("pro", "elite", "anual"):
                     if tx_amount >= 140.0:
                         plan_id = "anual"
-                    elif tx_amount >= 35.0:
+                    elif tx_amount >= 30.0:
                         plan_id = "elite"
                     else:
                         plan_id = "pro"
