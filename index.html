@@ -538,7 +538,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
                         <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-emerald-400"></i> Pasarela Oficial Mercado Pago (100% Automática)</h3>
-                        <p class="text-[11px] text-slate-400">Todos los pagos de suscripciones (Pase Pro S/ 19.90 y Pase Élite S/ 39.90) se procesan y activan automáticamente mediante el Webhook oficial de Mercado Pago en Firestore Cloud.</p>
+                        <p class="text-[11px] text-slate-400">Todos los pagos de suscripciones (Pase Pro S/ 16.90 y Pase Élite S/ 33.90 (15% OFF lanzamiento)) se procesan y activan automáticamente mediante el Webhook oficial de Mercado Pago en Firestore Cloud.</p>
                         <div id="admin-pagos" class="bg-baseDark border border-emerald-900/50 rounded-xl p-3 text-xs text-emerald-400 font-mono">✓ Webhook Mercado Pago Activo · Sin validación manual requerida</div>
                     </div>
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
@@ -727,7 +727,7 @@
         <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-6 relative my-auto shadow-2xl">
             <button onclick="cerrarVipModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             <div class="text-center mb-5">
-                <span class="bg-emerald-500/20 text-accentGreen border border-emerald-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">🔥 Oferta Especial de Lanzamiento (-50% OFF)</span>
+                <span class="bg-emerald-500/20 text-accentGreen border border-emerald-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">🔥 PRECIO DE LANZAMIENTO • 15% OFF POR TIEMPO LIMITADO</span>
                 <h3 class="font-outfit font-black text-2xl text-white mt-2">Planes y Membresías VIP</h3>
                 <p class="text-[11px] text-slate-400 mt-1">Activación inmediata y 100% automatizada con Mercado Pago Perú</p>
             </div>
@@ -750,11 +750,11 @@
                 </div>
 
                 <!-- Pase Pro -->
-                <div onclick="seleccionarPlan(19.90, 'Pase Pro')" id="card-plan-pro" class="cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10 relative">
-                    <span class="bg-accentGreen text-slate-950 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">MÁS POPULAR • -50%</span>
+                <div onclick="seleccionarPlan(16.90, 'Pase Pro')" id="card-plan-pro" class="cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10 relative">
+                    <span class="bg-accentGreen text-slate-950 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">LANZAMIENTO • 15% OFF</span>
                     <span class="text-[9px] font-black text-accentGreen uppercase block">Pase Pro</span>
-                    <div class="text-[10px] text-slate-500 line-through font-mono mt-0.5">Antes S/ 39.90</div>
-                    <div class="font-black text-2xl text-white">S/ 19.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
+                    <div class="text-[10px] text-slate-400 line-through font-mono mt-0.5">Precio Regular S/ 19.90</div>
+                    <div class="font-black text-2xl text-white">S/ 16.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
                         <li>✓ Pronósticos diarios ilimitados</li>
                         <li>✓ Top 5 del día desbloqueado</li>
@@ -765,11 +765,11 @@
                 </div>
 
                 <!-- Pase Quant Élite -->
-                <div onclick="seleccionarPlan(39.90, 'Pase Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500 relative">
-                    <span class="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">ACCESO TOTAL • -50%</span>
+                <div onclick="seleccionarPlan(33.90, 'Pase Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500 relative">
+                    <span class="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">ACCESO TOTAL • 15% OFF</span>
                     <span class="text-[9px] font-black text-amber-400 uppercase block">Pase Élite</span>
-                    <div class="text-[10px] text-slate-500 line-through font-mono mt-0.5">Antes S/ 79.90</div>
-                    <div class="font-black text-2xl text-white">S/ 39.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
+                    <div class="text-[10px] text-slate-400 line-through font-mono mt-0.5">Precio Regular S/ 39.90</div>
+                    <div class="font-black text-2xl text-white">S/ 33.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
                     <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
                         <li>✓ Todo lo incluido en Pase Pro</li>
                         <li>✓ Consenso Triple IA en vivo</li>
@@ -800,7 +800,7 @@
                     </label>
 
                     <button onclick="pagarConMercadoPago()" id="btn-pagar-mp" class="w-full bg-gradient-to-r from-emerald-500 to-lime-400 hover:from-emerald-400 hover:to-lime-300 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer">
-                        <i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ 19.90 con Mercado Pago</span>
+                        <i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ 16.90 con Mercado Pago</span>
                     </button>
                 </div>
             </div>
@@ -898,7 +898,7 @@
         let globalTodosPartidos = {};
         const ligasAbiertas = {};
         let authModoActual = 'login';
-        let planMontoActual = 19.90;
+        let planMontoActual = 16.90;
         let planNombreActual = 'Pase Pro';
         let planIdActual = 'pro';
         let metodoSeleccionado = 'mp';
@@ -941,9 +941,9 @@
         function intentarAccesoModulo(moduloId) {
             const esVip = verificarEsVip();
             if (MODULOS_PRO.includes(moduloId) && !esVip) {
-                notificar('🔒 Esta herramienta requiere el Pase Pro (S/ 19.90/mes).');
+                notificar('🔒 Esta herramienta requiere el Pase Pro (S/ 16.90/mes).');
                 abrirVipModal();
-                seleccionarPlan(19.90, 'Pase Pro');
+                seleccionarPlan(16.90, 'Pase Pro');
                 return;
             }
             cambiarModuloPrincipal(moduloId);
@@ -1182,7 +1182,7 @@
         }
 
         function seleccionarPlan(monto, nombre) {
-            planIdActual = (monto >= 39.0) ? 'elite' : 'pro';
+            planIdActual = (monto >= 30.0) ? 'elite' : 'pro';
             planMontoActual = monto;
             planNombreActual = nombre;
             const cPro = document.getElementById('card-plan-pro');
@@ -1558,7 +1558,7 @@
             "fulham": {"nombre": "Rodrigo Muniz", "dorsal": 9, "pos": "Delantero centro", "equipo": "Fulham", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "86.0%", "razon": "Artillero principal de Fulham promedia 1.9 tiros a puerta y 3.7 remates por compromiso."},
             "galatasaray": {"nombre": "Arda Tagay", "dorsal": 22, "pos": "Delantero centro", "equipo": "Galatasaray", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "87.6%", "razon": "Artillero principal de Galatasaray promedia 1.8 tiros a puerta y 3.1 remates por compromiso."},
             "gales": {"nombre": "Brennan Johnson", "dorsal": 8, "pos": "Mediapunta", "equipo": "Gales", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.66", "prob": "83.7%", "razon": "Generador ofensivo de Gales con gran volumen de remates y llegadas al área rival."},
-            "genoa": {"nombre": "Vítinha", "dorsal": 9, "pos": "Delantero centro", "equipo": "Genoa", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "87.2%", "razon": "Artillero principal de Genoa promedia 2.3 tiros a puerta y 3.8 remates por compromiso."},
+            "genoa": {"nombre": "Andrea Pinamonti", "dorsal": 19, "pos": "Delantero centro", "equipo": "Genoa", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "86.5%", "razon": "Artillero titular de Genoa promedia 1.8 tiros a puerta y 3.1 remates por compromiso (Opción B: Ruslan Malinovskyi / Junior Messias)."},
             "georgia": {"nombre": "Khvicha Kvaratskhelia", "dorsal": 19, "pos": "Delantero", "equipo": "Georgia", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "82.0%", "razon": "Artillero principal de Georgia promedia 1.5 tiros a puerta y 3.2 remates por compromiso."},
             "getafe": {"nombre": "Borja Mayoral", "dorsal": 9, "pos": "Delantero", "equipo": "Getafe", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "82.0%", "razon": "Artillero principal de Getafe promedia 1.5 tiros a puerta y 2.8 remates por compromiso."},
             "gibraltar": {"nombre": "Tjay De Barr", "dorsal": 22, "pos": "Delantero", "equipo": "Gibraltar", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.55", "prob": "82.0%", "razon": "Artillero principal de Gibraltar promedia 2.2 tiros a puerta y 3.8 remates por compromiso."},
@@ -1661,7 +1661,7 @@
             "stade rennais": {"nombre": "Estéban Lepaul", "dorsal": 9, "pos": "Delantero centro", "equipo": "Rennes", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.49", "prob": "85.8%", "razon": "Artillero principal de Rennes promedia 1.8 tiros a puerta y 3.5 remates por compromiso."},
             "república checa": {"nombre": "Tomás Chory", "dorsal": 7, "pos": "Delantero centro", "equipo": "República Checa", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.54", "prob": "87.0%", "razon": "Artillero principal de República Checa promedia 1.9 tiros a puerta y 3.4 remates por compromiso."},
             "rio ave": {"nombre": "Tamble Monteiro", "dorsal": 9, "pos": "Delantero centro", "equipo": "Rio Ave", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.57", "prob": "84.3%", "razon": "Artillero principal de Rio Ave promedia 2.2 tiros a puerta y 3.6 remates por compromiso."},
-            "roma": {"nombre": "Paulo Dybala", "dorsal": 21, "pos": "Delantero centro", "equipo": "Roma", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.52", "prob": "86.4%", "razon": "Artillero principal de Roma promedia 1.6 tiros a puerta y 2.9 remates por compromiso."},
+            "roma": {"nombre": "Artem Dovbyk", "dorsal": 11, "pos": "Delantero centro", "equipo": "Roma", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.52", "prob": "86.4%", "razon": "Artillero titular de Roma promedia 1.8 tiros a puerta y 3.2 remates por compromiso (Opción B: Paulo Dybala / Matías Soulé)."},
             "rumanía": {"nombre": "Dennis Man", "dorsal": 23, "pos": "Mediapunta", "equipo": "Rumanía", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.59", "prob": "80.7%", "razon": "Generador ofensivo de Rumanía con gran volumen de remates y llegadas al área rival."},
             "sc paderborn 07": {"nombre": "Sven Michel", "dorsal": 11, "pos": "Delantero centro", "equipo": "SC Paderborn 07", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.57", "prob": "85.4%", "razon": "Artillero principal de SC Paderborn 07 promedia 1.9 tiros a puerta y 3.5 remates por compromiso."},
             "sv 07 elversberg": {"nombre": "Luca Pfeiffer", "dorsal": 16, "pos": "Delantero centro", "equipo": "SV 07 Elversberg", "mkt": "Más de 1.5 Tiros Totales", "cuota": "1.53", "prob": "84.3%", "razon": "Artillero principal de SV 07 Elversberg promedia 2.4 tiros a puerta y 3.9 remates por compromiso."},
@@ -2820,7 +2820,7 @@
             const esVip = verificarEsVip();
             if (!esVip) {
                 notificar("🔒 La simulación estocástica requiere Membresía PRO o ÉLITE.");
-                abrirVipModal(); seleccionarPlan(19.90, 'Pase Pro'); return;
+                abrirVipModal(); seleccionarPlan(16.90, 'Pase Pro'); return;
             }
             const btn = document.getElementById(`btn-mc-${matchId}`);
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Simulando...`;
@@ -3904,7 +3904,7 @@
                 <p><strong class="text-white">1. Naturaleza del Servicio (SaaS Estadístico e Informativo):</strong> PredicXion IA es una plataforma tecnológica de software como servicio (SaaS) dedicada exclusivamente al procesamiento matemático de datos históricos de fútbol mediante modelos de Distribución de Poisson, simulaciones Monte Carlo e inteligencia artificial. <strong>PredicXion IA NO es una casa de apuestas, no capta dinero para apuestas, no intermedia jugadas ni opera juegos a distancia bajo la Ley N° 31557 (MINCETUR).</strong></p>
                 <p><strong class="text-white">2. Ausencia de Garantía de Ganancias (Riesgo Estadístico):</strong> Todas las probabilidades, métricas de goles esperados (xG), índices de valor (+EV) y selecciones mostradas constituyen estimaciones estadísticas de carácter informativo y educativo. En el deporte existen variables imprevistas (expulsiones, lesiones, decisiones arbitrales o clima); por tanto, <strong>ningún modelo matemático ni algoritmo garantiza aciertos futuros ni rentabilidades económicas</strong>. El usuario asume la total responsabilidad sobre el uso de esta información.</p>
                 <p><strong class="text-white">3. Restricción Estricta de Mayoría de Edad (+18):</strong> El acceso y suscripción a PredicXion IA están estrictamente restringidos a personas mayores de 18 años con plena capacidad civil.</p>
-                <p><strong class="text-white">4. Suscripciones y Pagos Automatizados vía Mercado Pago:</strong> Las membresías VIP (Pase Pro S/ 19.90/mes y Pase Élite S/ 39.90/mes) se procesan exclusivamente a través de la pasarela segura de Mercado Pago Perú en Soles (PEN). Al confirmarse el pago, el sistema activa automáticamente el acceso por 30 días calendario.</p>
+                <p><strong class="text-white">4. Suscripciones y Pagos Automatizados vía Mercado Pago:</strong> Las membresías VIP (Pase Pro S/ 16.90/mes y Pase Élite S/ 33.90/mes (15% OFF lanzamiento)) se procesan exclusivamente a través de la pasarela segura de Mercado Pago Perú en Soles (PEN). Al confirmarse el pago, el sistema activa automáticamente el acceso por 30 días calendario.</p>
             </div>
 
             <div id="contenido-leg-privacidad" class="hidden overflow-y-auto space-y-3 text-xs text-slate-300 leading-relaxed pr-2">
