@@ -10080,12 +10080,47 @@
     ]
   },
   {
-    "id_jugador": 353,
-    "nombre": "Vítinha",
+    "id_jugador": 352,
+    "nombre": "Milutin Osmajic",
     "equipo": "Genoa",
     "posicion": "Delantero centro",
     "liga": "Serie A",
-    "dorsal": 9,
+    "dorsal": 18,
+    "edad": 27,
+    "altura": "1.87 m",
+    "peso": "82 kg",
+    "pierna_buena": "Diestro",
+    "partidos": 10,
+    "goles": 5,
+    "asistencias": 2,
+    "xg_prom": 0.72,
+    "tiros_puerta_prom": 1.9,
+    "tiros_totales_prom": 3.4,
+    "prob_titular": "98%",
+    "rol_plantilla": "Titular Principal (Opción A)",
+    "proximo_rival": "Roma",
+    "mercados_destacados": [
+      {
+        "mercado": "Más de 1.5 Tiros Totales",
+        "prob": "85.5%",
+        "cuota": 1.52,
+        "icono": "🎯"
+      },
+      {
+        "mercado": "Más de 0.5 Tiros a Puerta",
+        "prob": "82.0%",
+        "cuota": 1.6,
+        "icono": "🎯"
+      }
+    ]
+  },
+  {
+    "id_jugador": 353,
+    "nombre": "Andrea Pinamonti",
+    "equipo": "Genoa",
+    "posicion": "Delantero centro",
+    "liga": "Serie A",
+    "dorsal": 19,
     "edad": 31,
     "altura": "1.83 m",
     "peso": "78 kg",
@@ -10094,30 +10129,25 @@
     "goles": 4,
     "asistencias": 4,
     "xg_prom": 0.93,
-    "tiros_puerta_prom": 2.4,
-    "tiros_totales_prom": 4.1,
-    "prob_titular": "94%",
+    "tiros_puerta_prom": 1.6,
+    "tiros_totales_prom": 3.0,
+    "prob_titular": "95%",
     "proximo_rival": "Próximo Rival",
     "mercados_destacados": [
       {
-        "mercado": "Más de 1.5 Tiros Totales",
-        "prob": "87.6%",
-        "cuota": 1.52,
-        "icono": "🎯"
-      },
-      {
         "mercado": "Más de 0.5 Tiros a Puerta",
-        "prob": "86.3%",
-        "cuota": 1.54,
+        "prob": "82.0%",
+        "cuota": 1.62,
         "icono": "🎯"
       },
       {
-        "mercado": "Marcará Gol en Cualquier Momento",
-        "prob": "63.3%",
-        "cuota": 1.94,
-        "icono": "⚽"
+        "mercado": "Más de 1.5 Tiros Totales",
+        "prob": "80.0%",
+        "cuota": 1.65,
+        "icono": "🎯"
       }
-    ]
+    ],
+    "rol_plantilla": "2do Referente Titular (Opción B)"
   },
   {
     "id_jugador": 354,
@@ -10160,42 +10190,59 @@
     ]
   },
   {
-    "id_jugador": 355,
-    "nombre": "Stephan El Shaarawy",
+    "id_jugador": 3541,
+    "nombre": "Ruslan Malinovskyi",
     "equipo": "Genoa",
-    "posicion": "Extremo",
+    "posicion": "Mediocentro / Disparador",
     "liga": "Serie A",
-    "dorsal": 92,
-    "edad": 21,
-    "altura": "1.85 m",
-    "peso": "85 kg",
+    "dorsal": 17,
+    "edad": 33,
+    "altura": "1.81 m",
+    "peso": "79 kg",
     "pierna_buena": "Zurdo",
-    "partidos": 10,
-    "goles": 1,
-    "asistencias": 3,
-    "xg_prom": 0.5,
-    "tiros_puerta_prom": 1.2,
-    "tiros_totales_prom": 2.6,
+    "partidos": 8,
+    "goles": 2,
+    "asistencias": 2,
+    "xg_prom": 0.45,
+    "tiros_puerta_prom": 1.4,
+    "tiros_totales_prom": 2.7,
     "prob_titular": "92%",
-    "proximo_rival": "Próximo Rival",
+    "proximo_rival": "Roma",
     "mercados_destacados": [
       {
         "mercado": "Más de 1.5 Tiros Totales",
-        "prob": "82.6%",
-        "cuota": 1.55,
+        "prob": "80.0%",
+        "cuota": 1.58,
         "icono": "🎯"
-      },
+      }
+    ]
+  },
+  {
+    "id_jugador": 3550,
+    "nombre": "Vítinha",
+    "equipo": "Genoa",
+    "posicion": "Delantero centro",
+    "liga": "Serie A",
+    "dorsal": 9,
+    "edad": 26,
+    "altura": "1.78 m",
+    "peso": "74 kg",
+    "pierna_buena": "Diestro",
+    "partidos": 8,
+    "goles": 1,
+    "asistencias": 0,
+    "xg_prom": 0.22,
+    "tiros_puerta_prom": 0.5,
+    "tiros_totales_prom": 1.0,
+    "prob_titular": "25%",
+    "rol_plantilla": "Suplente / Alternativa de Últimos Minutos",
+    "proximo_rival": "Roma",
+    "mercados_destacados": [
       {
-        "mercado": "Más de 0.5 Tiros a Puerta",
-        "prob": "86.0%",
-        "cuota": 1.64,
-        "icono": "🎯"
-      },
-      {
-        "mercado": "Más de 0.5 Asistencias o Gol",
-        "prob": "82.3%",
-        "cuota": 1.62,
-        "icono": "⚽"
+        "mercado": "Menos de 1.5 Tiros Totales",
+        "prob": "84.0%",
+        "cuota": 1.45,
+        "icono": "🛡️"
       }
     ]
   },
@@ -19720,6 +19767,41 @@
     ]
   },
   {
+    "id_jugador": 596,
+    "nombre": "Santiago Castro",
+    "equipo": "Roma",
+    "posicion": "Delantero centro",
+    "liga": "Serie A",
+    "dorsal": 9,
+    "edad": 29,
+    "altura": "1.79 m",
+    "peso": "73 kg",
+    "pierna_buena": "Diestro",
+    "partidos": 10,
+    "goles": 8,
+    "asistencias": 2,
+    "xg_prom": 0.91,
+    "tiros_puerta_prom": 2.1,
+    "tiros_totales_prom": 3.8,
+    "prob_titular": "98%",
+    "proximo_rival": "Próximo Rival",
+    "mercados_destacados": [
+      {
+        "mercado": "Más de 1.5 Tiros Totales",
+        "prob": "86.8%",
+        "cuota": 1.52,
+        "icono": "🎯"
+      },
+      {
+        "mercado": "Más de 0.5 Tiros a Puerta",
+        "prob": "84.5%",
+        "cuota": 1.55,
+        "icono": "🎯"
+      }
+    ],
+    "rol_plantilla": "Titular Principal (Opción A)"
+  },
+  {
     "id_jugador": 594,
     "nombre": "Paulo Dybala",
     "equipo": "Roma",
@@ -19734,28 +19816,57 @@
     "goles": 3,
     "asistencias": 6,
     "xg_prom": 0.73,
-    "tiros_puerta_prom": 1.9,
-    "tiros_totales_prom": 3.6,
+    "tiros_puerta_prom": 1.8,
+    "tiros_totales_prom": 3.2,
     "prob_titular": "95%",
     "proximo_rival": "Próximo Rival",
     "mercados_destacados": [
       {
+        "mercado": "Más de 0.5 Tiros a Puerta",
+        "prob": "84.0%",
+        "cuota": 1.58,
+        "icono": "🎯"
+      },
+      {
         "mercado": "Más de 1.5 Tiros Totales",
-        "prob": "87.0%",
-        "cuota": 1.51,
+        "prob": "82.0%",
+        "cuota": 1.6,
+        "icono": "🎯"
+      }
+    ],
+    "rol_plantilla": "2do Referente Titular (Opción B)"
+  },
+  {
+    "id_jugador": 3451,
+    "nombre": "Artem Dovbyk",
+    "equipo": "Roma",
+    "posicion": "Delantero centro",
+    "liga": "Serie A",
+    "dorsal": 11,
+    "edad": 29,
+    "altura": "1.89 m",
+    "peso": "82 kg",
+    "pierna_buena": "Zurdo",
+    "partidos": 8,
+    "goles": 4,
+    "asistencias": 1,
+    "xg_prom": 0.68,
+    "tiros_puerta_prom": 1.8,
+    "tiros_totales_prom": 3.2,
+    "prob_titular": "96%",
+    "proximo_rival": "Genoa",
+    "mercados_destacados": [
+      {
+        "mercado": "Más de 1.5 Tiros Totales",
+        "prob": "86.4%",
+        "cuota": 1.52,
         "icono": "🎯"
       },
       {
         "mercado": "Más de 0.5 Tiros a Puerta",
-        "prob": "86.3%",
-        "cuota": 1.51,
+        "prob": "80.0%",
+        "cuota": 1.58,
         "icono": "🎯"
-      },
-      {
-        "mercado": "Marcará Gol en Cualquier Momento",
-        "prob": "67.3%",
-        "cuota": 1.73,
-        "icono": "⚽"
       }
     ]
   },
@@ -19800,42 +19911,30 @@
     ]
   },
   {
-    "id_jugador": 596,
-    "nombre": "Santiago Castro",
+    "id_jugador": 3452,
+    "nombre": "Matías Soulé",
     "equipo": "Roma",
-    "posicion": "Delantero centro",
+    "posicion": "Extremo derecho",
     "liga": "Serie A",
-    "dorsal": 9,
-    "edad": 29,
-    "altura": "1.79 m",
-    "peso": "73 kg",
-    "pierna_buena": "Diestro",
-    "partidos": 10,
-    "goles": 8,
+    "dorsal": 18,
+    "edad": 23,
+    "altura": "1.82 m",
+    "peso": "74 kg",
+    "pierna_buena": "Zurdo",
+    "partidos": 8,
+    "goles": 3,
     "asistencias": 2,
-    "xg_prom": 0.91,
-    "tiros_puerta_prom": 2.0,
-    "tiros_totales_prom": 3.8,
-    "prob_titular": "92%",
-    "proximo_rival": "Próximo Rival",
+    "xg_prom": 0.52,
+    "tiros_puerta_prom": 1.5,
+    "tiros_totales_prom": 2.8,
+    "prob_titular": "94%",
+    "proximo_rival": "Genoa",
     "mercados_destacados": [
       {
         "mercado": "Más de 1.5 Tiros Totales",
-        "prob": "86.8%",
-        "cuota": 1.57,
+        "prob": "82.0%",
+        "cuota": 1.55,
         "icono": "🎯"
-      },
-      {
-        "mercado": "Más de 0.5 Tiros a Puerta",
-        "prob": "85.6%",
-        "cuota": 1.47,
-        "icono": "🎯"
-      },
-      {
-        "mercado": "Marcará Gol en Cualquier Momento",
-        "prob": "67.7%",
-        "cuota": 1.83,
-        "icono": "⚽"
       }
     ]
   },
