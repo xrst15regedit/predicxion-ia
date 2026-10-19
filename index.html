@@ -2033,20 +2033,6 @@
                         </button>
                     </div>
 
-                    <!-- Barra Horizontal de Distribución 1X2 Estilo Oddster -->
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between text-xs sm:text-sm font-bold">
-                            <div><span class="text-white">${esc(item.local)}</span> <span class="text-[#00e676] font-black ml-1">${p1}%</span></div>
-                            <div><span class="text-sky-400">Empate <strong class="font-black">${px}%</strong></span></div>
-                            <div><span class="text-white">${esc(item.visitante)}</span> <span class="text-[#a3e635] font-black ml-1">${p2}%</span></div>
-                        </div>
-                        <div class="w-full h-3.5 rounded-lg overflow-hidden flex bg-slate-800/90 shadow-inner">
-                            <div class="bg-[#00d054] h-full transition-all duration-500" style="width: ${p1}%"></div>
-                            <div class="bg-[#24426b] h-full transition-all duration-500" style="width: ${px}%"></div>
-                            <div class="bg-[#c8d4e0] h-full transition-all duration-500" style="width: ${p2}%"></div>
-                        </div>
-                    </div>
-
                     <!-- Cabecera Key Probabilities -->
                     <div class="flex items-center justify-between pt-1">
                         <h4 class="text-base sm:text-lg font-outfit font-extrabold text-white m-0 tracking-tight">
@@ -2936,7 +2922,7 @@
                         ${renderizarTermometroRachaHtml(item)}
                     </div>
 
-                    <!-- 2.5 ESTRUCTURA ODDSTER: BARRA 1X2 & PROBABILIDADES CLAVE (KEY PROBABILITIES) -->
+                    <!-- 2.5 ESTRUCTURA ODDSTER: PROBABILIDADES CLAVE (KEY PROBABILITIES) -->
                     <div class="border-t border-cardBorder/60 pt-4" id="oddster-key-probs-section">
                         ${renderizarKeyProbabilitiesOddsterHtml(item)}
                     </div>
@@ -2994,7 +2980,7 @@
                                 <div class="bg-cardDark p-2.5 rounded-lg border border-cardBorder"><span class="text-[10px] text-slate-400 block">Empate</span><span id="pmc-emp" class="text-lg font-black text-slate-400 font-mono">0%</span></div>
                                 <div class="bg-cardDark p-2.5 rounded-lg border border-cardBorder"><span class="text-[10px] text-slate-400 block">${item.visitante}</span><span id="pmc-vis" class="text-lg font-black text-cyan-400 font-mono">0%</span></div>
                             </div>
-                            <div id="pmc-extra-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[10px]"></div>
+                            <div id="pmc-extra-stats" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-center text-[10px]"></div>
                             <div style="height: 220px; position:relative;"><canvas id="chartMatchMonteCarlo"></canvas></div>
                         </div>
                     </div>
@@ -3051,10 +3037,8 @@
                     if (extraEl) {
                         const topSc = (mc.marcadores_mas_frecuentes || []).slice(0, 2).map(s => `${s.marcador} (${s.frecuencia_pct}%)`).join(' · ') || '1-1';
                         extraEl.innerHTML = `
-                            <div class="bg-cardDark/80 p-2 rounded-lg border border-cardBorder/60"><span class="text-slate-400 block">xG Calibrado</span><strong class="text-white font-mono">${mc.xg_local || data.parametros?.lambda_local || 1.4} vs ${mc.xg_visitante || data.parametros?.lambda_visitante || 1.2}</strong></div>
-                            <div class="bg-cardDark/80 p-2 rounded-lg border border-cardBorder/60"><span class="text-slate-400 block">Más de 2.5 Goles</span><strong class="text-accentGreen font-mono">${mc.over_2_5_pct || 54.0}%</strong></div>
-                            <div class="bg-cardDark/80 p-2 rounded-lg border border-cardBorder/60"><span class="text-slate-400 block">Ambos Anotan</span><strong class="text-cyan-400 font-mono">${mc.btts_pct || 56.0}%</strong></div>
-                            <div class="bg-cardDark/80 p-2 rounded-lg border border-cardBorder/60"><span class="text-slate-400 block">Marcadores Probables</span><strong class="text-amber-300 font-mono">${topSc}</strong></div>
+                            <div class="bg-cardDark/80 p-2.5 rounded-lg border border-cardBorder/60"><span class="text-slate-400 block">xG Calibrado</span><strong class="text-white font-mono text-xs">${mc.xg_local || data.parametros?.lambda_local || 1.4} vs ${mc.xg_visitante || data.parametros?.lambda_visitante || 1.2}</strong></div>
+                            <div class="bg-cardDark/80 p-2.5 rounded-lg border border-cardBorder/60"><span class="text-slate-400 block">Resultado Probable</span><strong class="text-amber-300 font-mono text-xs">${topSc}</strong></div>
                         `;
                     }
 
