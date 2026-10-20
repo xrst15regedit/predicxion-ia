@@ -457,8 +457,8 @@
                             </p>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="text-[10px] font-mono text-lime-400 bg-emerald-950/80 border border-lime-500/50 px-3 py-1.5 rounded-xl font-bold">
-                                12 Partidos Destacados de Hoy
+                            <span id="badge-total-alternativos" class="text-[10px] font-mono text-lime-400 bg-emerald-950/80 border border-lime-500/50 px-3 py-1.5 rounded-xl font-bold">
+                                Partidos Destacados de Hoy
                             </span>
                         </div>
                     </div>
@@ -509,15 +509,12 @@
                 </div>
             </div>
 
-            
-            </div>
-
             <!-- ADMINISTRACIÓN (solo dueño; el servidor lo vuelve a verificar) -->
             <div id="seccion-admin" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
                         <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-emerald-400"></i> Pasarela Oficial Mercado Pago (100% Automática)</h3>
-                        <p class="text-[11px] text-slate-400">Todos los pagos de suscripciones (Pase Pro S/ 16.90 y Pase Élite S/ 33.90 (15% OFF lanzamiento)) se procesan y activan automáticamente mediante el Webhook oficial de Mercado Pago en Firestore Cloud.</p>
+                        <p class="text-[11px] text-slate-400">Todos los pagos de suscripciones del Pase Pro Todo Incluido (S/ 24.90/mes - 15% OFF lanzamiento, regular S/ 29.90) se procesan y activan automáticamente mediante el Webhook oficial de Mercado Pago en Firestore Cloud.</p>
                         <div id="admin-pagos" class="bg-baseDark border border-emerald-900/50 rounded-xl p-3 text-xs text-emerald-400 font-mono">✓ Webhook Mercado Pago Activo · Sin validación manual requerida</div>
                     </div>
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
@@ -561,21 +558,59 @@
                 </div>
             </div>
 
-            <!-- MÓDULO 6: HISTORIAL DE AUDITORÍA TRANSPARENTE -->
+            <!-- MÓDULO 6: HISTORIAL DE AUDITORÍA TRANSPARENTE CON NAVEGACIÓN DE FECHAS -->
             <div id="seccion-auditoria" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
-                <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
-                    <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <h3 class="text-base font-black text-white flex items-center gap-2 m-0"><i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Historial Oficial</h3>
-                            <span class="text-[10px] bg-slate-800/80 text-emerald-400 font-mono px-2 py-0.5 rounded border border-slate-700">Rotación 24/7 · Aciertos y Fallas Reales</span>
+                <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
+                    <!-- Cabecera con Botón Volver y Estado -->
+                    <div class="flex items-center justify-between border-b border-cardBorder pb-3.5 flex-wrap gap-3">
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <button onclick="navegarPestanaPrincipal('partidos')" class="bg-baseDark hover:bg-slate-800 text-slate-300 hover:text-white border border-cardBorder text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer" title="Volver a la cartelera de partidos">
+                                <i class="fa-solid fa-arrow-left text-[11px] text-accentGreen"></i> <span>Volver a Partidos</span>
+                            </button>
+                            <h3 class="text-lg sm:text-xl font-outfit font-black text-white flex items-center gap-2 m-0">
+                                <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i> Historial Oficial
+                            </h3>
+                            <span class="text-[10px] bg-slate-800/80 text-emerald-400 font-mono px-2.5 py-0.5 rounded-lg border border-slate-700">
+                                Rotación 24/7 · Aciertos y Pérdidas Reales
+                            </span>
                         </div>
                         <div class="flex items-center gap-2 flex-wrap">
-                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition cursor-pointer" title="Enviar reporte a Telegram">
+                            <button onclick="dispararAuditoriaTelegram()" id="btn-disparar-aud-tg" class="solo-admin hidden bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/40 text-[10px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer" title="Enviar reporte a Telegram">
                                 <i class="fa-brands fa-telegram"></i> Telegram VIP
                             </button>
-                            <span class="text-[10px] bg-emerald-950/90 text-accentGreen border border-emerald-800 px-3 py-1 rounded-lg font-black font-mono shadow-sm" id="auditoria-roi-badge">Cargando...</span>
+                            <span class="text-[11px] bg-emerald-950/90 text-accentGreen border border-emerald-700/80 px-3 py-1.5 rounded-xl font-black font-mono shadow-sm" id="auditoria-roi-badge">Cargando...</span>
                         </div>
                     </div>
+
+                    <!-- Barra de Navegación de Fechas del Historial (< Fecha > + Última Jornada + Selector Rápido) -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-baseDark/80 border border-cardBorder/80 rounded-2xl p-3">
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <div class="inline-flex items-center bg-[#0d1717] border border-slate-700/80 rounded-xl px-2 py-1 shadow-inner">
+                                <button onclick="navegarFechaHistorial(-1)" id="btn-hist-prev" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Jornada anterior">
+                                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                                </button>
+                                <div class="px-3 flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-white">
+                                    <i class="fa-regular fa-calendar-check text-[#00e676]"></i>
+                                    <span id="auditoria-fecha-display">19.10.2026</span>
+                                </div>
+                                <button onclick="navegarFechaHistorial(1)" id="btn-hist-next" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Jornada siguiente">
+                                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                                </button>
+                            </div>
+
+                            <button onclick="cargarAuditoria('')" class="px-3 py-2 rounded-xl text-xs font-black bg-emerald-950/90 text-[#00e676] border border-emerald-500/50 hover:bg-emerald-900/80 transition cursor-pointer flex items-center gap-1.5">
+                                <i class="fa-solid fa-rotate text-[10px]"></i> Última Jornada Concluida
+                            </button>
+                        </div>
+
+                        <!-- Píldoras de fechas recientes -->
+                        <div id="auditoria-fechas-pills" class="flex items-center gap-1.5 overflow-x-auto py-1"></div>
+                    </div>
+
+                    <!-- Tarjetas de Balance de Aciertos y Pérdidas -->
+                    <div id="auditoria-resumen-cards" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+
+                    <!-- Tabla de Partidos Auditados -->
                     <div id="contenedor-auditoria" class="overflow-x-auto text-xs"><p class="text-slate-500 py-3">Consultando historial...</p></div>
                 </div>
             </div>
@@ -602,11 +637,6 @@
                     </div>
                 </div>
             </div>
-
-            
-            </div>
-
-
 
         </main>
     </div>
@@ -636,61 +666,55 @@
         </div>
     </div>
 
-    <!-- MODAL VIP EXCLUSIVO MERCADO PAGO (PRECIOS DE LANZAMIENTO) -->
+    <!-- MODAL VIP EXCLUSIVO MERCADO PAGO (PASE PRO ÚNICO TODO INCLUIDO - 15% OFF LANZAMIENTO) -->
     <div id="modal-vip" role="dialog" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
-        <div class="bg-cardDark border border-amber-500/30 w-full max-w-2xl rounded-3xl p-6 relative my-auto shadow-2xl">
+        <div class="bg-cardDark border border-emerald-500/40 w-full max-w-2xl rounded-3xl p-6 relative my-auto shadow-2xl">
             <button onclick="cerrarVipModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             <div class="text-center mb-5">
-                <span class="bg-emerald-500/20 text-accentGreen border border-emerald-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">🔥 PRECIO DE LANZAMIENTO • 15% OFF POR TIEMPO LIMITADO</span>
-                <h3 class="font-outfit font-black text-2xl text-white mt-2">Planes y Membresías VIP</h3>
-                <p class="text-[11px] text-slate-400 mt-1">Activación inmediata y 100% automatizada con Mercado Pago Perú</p>
+                <span class="bg-emerald-500/20 text-accentGreen border border-emerald-500/40 text-[10px] font-black uppercase px-3 py-1 rounded-full">🔥 OFERTA DE LANZAMIENTO • 15% OFF POR TIEMPO LIMITADO</span>
+                <h3 class="font-outfit font-black text-2xl text-white mt-2">Planes y Membresía Pro</h3>
+                <p class="text-[11px] text-slate-400 mt-1">Un solo pase VIP con acceso total a toda la terminal • Activación inmediata vía Mercado Pago Perú</p>
             </div>
 
-            <!-- Selector de Planes -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                <!-- Pase Básico -->
-                <div class="bg-baseDark border border-cardBorder rounded-2xl p-4 text-center flex flex-col justify-between">
+            <!-- Selector de Planes (Pase Gratuito + Pase Pro Todo Incluido) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                <!-- Pase Gratuito -->
+                <div class="bg-baseDark border border-cardBorder rounded-2xl p-5 text-center flex flex-col justify-between">
                     <div>
-                        <span class="text-[9px] font-black text-slate-400 uppercase block">Pase Básico</span>
-                        <div class="font-black text-xl text-white mt-1">Gratis</div>
-                        <ul class="text-[10px] text-slate-400 space-y-1.5 mt-3 text-left">
-                            <li>✓ Cartelera completa del mes</li>
-                            <li>✓ 3 análisis diarios gratuitos</li>
-                            <li>✓ Pick #5 libre del día</li>
-                            <li>✓ Historial oficial auditado</li>
+                        <span class="bg-slate-800 text-slate-300 border border-slate-700 text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full inline-block mb-1">ACCESO INICIAL</span>
+                        <span class="text-[10px] font-black text-slate-400 uppercase block">Pase Gratuito</span>
+                        <div class="font-black text-2xl text-white mt-1">Gratis <span class="text-[10px] text-slate-500 font-normal">/siempre</span></div>
+                        <ul class="text-[11px] text-slate-300 space-y-2 mt-4 text-left">
+                            <li>✓ Cartelera completa del mes (+600 partidos)</li>
+                            <li>✓ Termómetro de Rachas (últimos 5 partidos)</li>
+                            <li>✓ 3 auditorías de partidos diarias gratuitas</li>
+                            <li>✓ Pick #5 libre en el Top 5 del Día</li>
+                            <li>✓ 3 Mercados Alternativos y 3 Destacados del Día</li>
+                            <li>✓ Historial Oficial verificado 24/7 (aciertos y fallas)</li>
+                            <li>✓ Comunidad de Telegram y Locución Voz IA básica</li>
                         </ul>
                     </div>
-                    <span class="text-[9px] font-mono text-slate-500 mt-3 block">Plan inicial por defecto</span>
+                    <span class="text-[10px] font-mono text-slate-500 mt-4 pt-3 border-t border-cardBorder/60 block">Plan activo por defecto en tu cuenta</span>
                 </div>
 
-                <!-- Pase Pro -->
-                <div onclick="seleccionarPlan(16.90, 'Pase Pro')" id="card-plan-pro" class="cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10 relative">
-                    <span class="bg-accentGreen text-slate-950 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">LANZAMIENTO • 15% OFF</span>
-                    <span class="text-[9px] font-black text-accentGreen uppercase block">Pase Pro</span>
-                    <div class="text-[10px] text-slate-400 line-through font-mono mt-0.5">Precio Regular S/ 19.90</div>
-                    <div class="font-black text-2xl text-white">S/ 16.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
-                    <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
-                        <li>✓ Pronósticos diarios ilimitados</li>
-                        <li>✓ Top 5 del día desbloqueado</li>
-                        <li>✓ Simulación Monte Carlo (10K)</li>
-                        <li>✓ Selecciones de alta probabilidad</li>
-                        <li>✓ Parlays IA y Mercados Alternativos</li>
-                    </ul>
-                </div>
-
-                <!-- Pase Quant Élite -->
-                <div onclick="seleccionarPlan(33.90, 'Pase Élite')" id="card-plan-elite" class="cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500 relative">
-                    <span class="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[8px] font-black uppercase px-2 py-0.5 rounded-full inline-block mb-1">ACCESO TOTAL • 15% OFF</span>
-                    <span class="text-[9px] font-black text-amber-400 uppercase block">Pase Élite</span>
-                    <div class="text-[10px] text-slate-400 line-through font-mono mt-0.5">Precio Regular S/ 39.90</div>
-                    <div class="font-black text-2xl text-white">S/ 33.90 <span class="text-[10px] text-slate-400 font-normal">/mes</span></div>
-                    <ul class="text-[10px] text-slate-300 space-y-1 mt-3 text-left">
-                        <li>✓ Todo lo incluido en Pase Pro</li>
-                        <li>✓ Consenso Triple IA en vivo</li>
-                        <li>✓ Alertas VIP directas en Telegram</li>
-                        <li>✓ Voz IA Cuantitativa completa</li>
-                        <li>✓ Soporte prioritario 24/7</li>
-                    </ul>
+                <!-- Pase Pro (Todo Incluido) -->
+                <div onclick="seleccionarPlan(24.90, 'Pase Pro')" id="card-plan-pro" class="cursor-pointer bg-gradient-to-b from-[#091e17] to-baseDark border-2 border-accentGreen rounded-2xl p-5 text-center transition shadow-xl shadow-emerald-500/15 relative flex flex-col justify-between">
+                    <div>
+                        <span class="bg-accentGreen text-slate-950 text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full inline-block mb-1">ACCESO TOTAL • 15% OFF LANZAMIENTO</span>
+                        <span class="text-[10px] font-black text-accentGreen uppercase block flex items-center justify-center gap-1"><i class="fa-solid fa-crown text-amber-400"></i> Pase Pro (Todo Incluido)</span>
+                        <div class="text-[11px] text-slate-400 line-through font-mono mt-0.5">Precio Regular S/ 29.90</div>
+                        <div class="font-black text-3xl text-white">S/ 24.90 <span class="text-xs text-slate-400 font-normal">/mes</span></div>
+                        <ul class="text-[11px] text-slate-200 space-y-1.5 mt-4 text-left">
+                            <li>✓ <strong class="text-accentGreen">Pronósticos y auditorías ilimitadas 24/7</strong></li>
+                            <li>✓ <strong class="text-white">Probabilidades Clave desbloqueadas</strong> (Goles, Remates, Córners y Tarjetas)</li>
+                            <li>✓ <strong class="text-white">Top 5 del Día completo</strong> desbloqueado</li>
+                            <li>✓ <strong class="text-white">Todos los Mercados Alternativos</strong> y todos los Partidos Destacados del Día</li>
+                            <li>✓ <strong class="text-cyan-300">Consenso Triple IA en vivo</strong> (Gemini + DeepSeek + Grok)</li>
+                            <li>✓ <strong class="text-amber-300">Generador de Parlays IA</strong> y Simulación Monte Carlo (10K)</li>
+                            <li>✓ Selecciones de Alta Probabilidad (&gt;80%), Voz IA completa y Alertas VIP</li>
+                        </ul>
+                    </div>
+                    <span class="text-[10px] font-mono text-accentGreen font-bold mt-4 pt-3 border-t border-emerald-800/60 block">★ Todo el ecosistema VIP en un solo pase</span>
                 </div>
             </div>
 
@@ -714,7 +738,7 @@
                     </label>
 
                     <button onclick="pagarConMercadoPago()" id="btn-pagar-mp" class="w-full bg-gradient-to-r from-emerald-500 to-lime-400 hover:from-emerald-400 hover:to-lime-300 text-slate-950 font-black py-3 rounded-xl transition text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 cursor-pointer">
-                        <i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ 16.90 con Mercado Pago</span>
+                        <i class="fa-solid fa-lock text-xs"></i> <span>Desbloquear Pase Pro por S/ 24.90 con Mercado Pago</span>
                     </button>
                 </div>
             </div>
@@ -812,7 +836,7 @@
         let globalTodosPartidos = {};
         const ligasAbiertas = {};
         let authModoActual = 'login';
-        let planMontoActual = 16.90;
+        let planMontoActual = 24.90;
         let planNombreActual = 'Pase Pro';
         let planIdActual = 'pro';
         let metodoSeleccionado = 'mp';
@@ -855,9 +879,9 @@
         function intentarAccesoModulo(moduloId) {
             const esVip = verificarEsVip();
             if (MODULOS_PRO.includes(moduloId) && !esVip) {
-                notificar('🔒 Esta herramienta requiere el Pase Pro (S/ 16.90/mes).');
+                notificar('🔒 Esta herramienta requiere el Pase Pro (S/ 24.90/mes).');
                 abrirVipModal();
-                seleccionarPlan(16.90, 'Pase Pro');
+                seleccionarPlan(24.90, 'Pase Pro');
                 return;
             }
             cambiarModuloPrincipal(moduloId);
@@ -1048,14 +1072,11 @@
 
             const b = document.getElementById('nav-user-badge');
             if (b) {
-                if (plan === 'elite' || (u && String(u.email || '').toLowerCase().trim() === 'fabiancermaz@gmail.com')) {
-                    b.innerText = '💎 ÉLITE';
-                    b.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40';
-                } else if (plan === 'pro' || plan === 'anual' || plan === 'vip' || esVipVal) {
-                    b.innerText = '👑 PRO';
+                if (plan === 'pro' || plan === 'elite' || plan === 'anual' || plan === 'vip' || esVipVal) {
+                    b.innerText = '👑 PASE PRO';
                     b.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40';
                 } else {
-                    b.innerText = 'Free Tier';
+                    b.innerText = 'Pase Gratuito';
                     b.className = 'text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700';
                 }
             }
@@ -1095,24 +1116,13 @@
             if (window.__carteleraCargada && typeof cargarDatosCartelera === 'function') cargarDatosCartelera();
         }
 
-        function seleccionarPlan(monto, nombre) {
-            planIdActual = (monto >= 30.0) ? 'elite' : 'pro';
-            planMontoActual = monto;
-            planNombreActual = nombre;
-            const cPro = document.getElementById('card-plan-pro');
-            const cElite = document.getElementById('card-plan-elite');
-
-            if (planIdActual === 'pro') {
-                cPro.className = 'cursor-pointer bg-baseDark border-2 border-accentGreen rounded-2xl p-4 text-center transition shadow-lg shadow-emerald-500/10 relative';
-                cElite.className = 'cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-amber-500 relative';
-            } else {
-                cElite.className = 'cursor-pointer bg-baseDark border-2 border-amber-500 rounded-2xl p-4 text-center transition shadow-lg shadow-amber-500/10 relative';
-                cPro.className = 'cursor-pointer bg-baseDark border border-cardBorder rounded-2xl p-4 text-center transition hover:border-accentGreen relative';
-            }
-
+        function seleccionarPlan(monto = 24.90, nombre = 'Pase Pro') {
+            planIdActual = 'pro';
+            planMontoActual = 24.90;
+            planNombreActual = 'Pase Pro';
             const btnMp = document.getElementById('btn-pagar-mp');
             if (btnMp) {
-                btnMp.innerHTML = `<i class="fa-solid fa-lock text-xs"></i> <span>Pagar S/ ${monto.toFixed(2)} con Mercado Pago</span>`;
+                btnMp.innerHTML = `<i class="fa-solid fa-lock text-xs"></i> <span>Desbloquear Pase Pro por S/ ${planMontoActual.toFixed(2)} con Mercado Pago</span>`;
             }
         }
 
@@ -1217,19 +1227,102 @@
             }
         }
 
-        async function cargarAuditoria() {
+        var fechaHistorialActiva = "";
+        var FECHAS_HISTORIAL_DISPONIBLES = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19'];
+
+        function navegarFechaHistorial(delta) {
+            const fechas = (FECHAS_HISTORIAL_DISPONIBLES && FECHAS_HISTORIAL_DISPONIBLES.length > 0)
+                ? FECHAS_HISTORIAL_DISPONIBLES
+                : ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19'];
+            let idx = fechas.indexOf(fechaHistorialActiva);
+            if (idx === -1) idx = fechas.length - 1;
+            const nuevoIdx = idx + delta;
+            if (nuevoIdx < 0) {
+                notificar("Estás en la primera jornada registrada del historial.");
+                return;
+            }
+            if (nuevoIdx >= fechas.length) {
+                notificar("Estás en la última jornada concluida del historial.");
+                return;
+            }
+            cargarAuditoria(fechas[nuevoIdx]);
+        }
+        window.navegarFechaHistorial = navegarFechaHistorial;
+
+        async function cargarAuditoria(fechaParam = null) {
+            if (fechaParam !== null) fechaHistorialActiva = fechaParam;
             const cont = document.getElementById('contenedor-auditoria');
             const badge = document.getElementById('auditoria-roi-badge');
+            const displayFecha = document.getElementById('auditoria-fecha-display');
+            const pillsCont = document.getElementById('auditoria-fechas-pills');
+            const resumenCont = document.getElementById('auditoria-resumen-cards');
+
+            if (cont) cont.innerHTML = '<p class="text-slate-400 py-6 text-center"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Consultando historial oficial...</p>';
+
             try {
-                const res = await fetch(`${API_BASE}/api/v1/vip/auditoria`);
+                const url = fechaHistorialActiva
+                    ? `${API_BASE}/api/v1/vip/auditoria?fecha=${encodeURIComponent(fechaHistorialActiva)}`
+                    : `${API_BASE}/api/v1/vip/auditoria`;
+                const res = await fetch(url);
                 const data = await res.json();
                 const m = data.metricas || {};
-                
-                // Actualizar badge con tasa y desglose real
+                const rg = data.resumen_global || {};
+
+                if (data.fechas_disponibles && Array.isArray(data.fechas_disponibles) && data.fechas_disponibles.length > 0) {
+                    FECHAS_HISTORIAL_DISPONIBLES = data.fechas_disponibles;
+                }
+                if (data.fecha_auditada) {
+                    fechaHistorialActiva = data.fecha_auditada;
+                    if (displayFecha) {
+                        const partes = data.fecha_auditada.split('-');
+                        displayFecha.innerText = partes.length === 3 ? `${partes[2]}.${partes[1]}.${partes[0]}` : data.fecha_auditada;
+                    }
+                }
+
+                // Actualizar estado de botones anterior / siguiente
+                const idxAct = FECHAS_HISTORIAL_DISPONIBLES.indexOf(fechaHistorialActiva);
+                const btnPrev = document.getElementById('btn-hist-prev');
+                const btnNext = document.getElementById('btn-hist-next');
+                if (btnPrev) btnPrev.classList.toggle('opacity-40', idxAct <= 0);
+                if (btnNext) btnNext.classList.toggle('opacity-40', idxAct !== -1 && idxAct >= FECHAS_HISTORIAL_DISPONIBLES.length - 1);
+
+                // Renderizar píldoras de acceso directo por fecha
+                if (pillsCont && FECHAS_HISTORIAL_DISPONIBLES.length > 0) {
+                    pillsCont.innerHTML = FECHAS_HISTORIAL_DISPONIBLES.map(f => {
+                        const esAct = (f === fechaHistorialActiva);
+                        const p = f.split('-');
+                        const corto = p.length === 3 ? `${p[2]}/${p[1]}` : f;
+                        return `<button onclick="cargarAuditoria('${f}')" class="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold transition cursor-pointer whitespace-nowrap ${esAct ? 'bg-[#00e676] text-slate-950 font-black shadow-md' : 'bg-cardDark text-slate-400 border border-cardBorder hover:text-white'}">${corto}</button>`;
+                    }).join('');
+                }
+
+                // Actualizar badge superior
                 if (badge) {
                     badge.innerText = (m.total_picks_auditados > 0)
                         ? `${m.tasa_acierto_global} acierto · ${m.ganadas} ganadas y ${m.perdidas} perdidas`
                         : 'Sin picks auditados';
+                }
+
+                // Renderizar tarjetas de resumen de aciertos y pérdidas (Jornada + Global)
+                if (resumenCont) {
+                    resumenCont.innerHTML = `
+                        <div class="bg-baseDark/90 border border-emerald-500/30 p-3 rounded-2xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block uppercase">Aciertos de la Jornada</span>
+                            <span class="text-lg sm:text-xl font-black text-[#00e676] font-mono">✓ ${m.ganadas ?? 0} Ganadas</span>
+                        </div>
+                        <div class="bg-baseDark/90 border border-rose-500/30 p-3 rounded-2xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block uppercase">Pérdidas de la Jornada</span>
+                            <span class="text-lg sm:text-xl font-black text-rose-400 font-mono">✗ ${m.perdidas ?? 0} Perdidas</span>
+                        </div>
+                        <div class="bg-baseDark/90 border border-cyan-500/30 p-3 rounded-2xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block uppercase">Efectividad del Día</span>
+                            <span class="text-lg sm:text-xl font-black text-cyan-400 font-mono">${m.tasa_acierto_global || '0%'}</span>
+                        </div>
+                        <div class="bg-baseDark/90 border border-amber-500/30 p-3 rounded-2xl text-center">
+                            <span class="text-[9px] font-bold text-slate-400 block uppercase">Balance Global Acumulado</span>
+                            <span class="text-xs sm:text-sm font-black text-amber-300 font-mono mt-1 block">${rg.tasa_acierto || m.tasa_acierto_global || '80%'} (${rg.ganadas || m.ganadas || 0}V - ${rg.perdidas || m.perdidas || 0}D)</span>
+                        </div>
+                    `;
                 }
 
                 let html = '';
@@ -1245,7 +1338,7 @@
 
                 const lista = data.historial || [];
                 if (!lista.length) {
-                    cont.innerHTML = html + '<p class="text-slate-400 py-4 text-center">No hay registros finalizados para esta jornada aún.</p>';
+                    cont.innerHTML = html + '<p class="text-slate-400 py-4 text-center">No hay registros finalizados para esta jornada aún. Usa las flechas ◀ ▶ para revisar otros días.</p>';
                     return;
                 }
 
@@ -1757,6 +1850,11 @@
         }
 
         function filtrarTabKeyProbabilities(cat) {
+            if (!verificarEsVip()) {
+                notificar('🔒 Si quieres acceder a las probabilidades clave de Goles, Remates, Córners y Tarjetas, desbloquea el Pase Pro.');
+                abrirVipModal();
+                return;
+            }
             document.querySelectorAll('.oddster-kp-tab').forEach(btn => {
                 const isAct = btn.getAttribute('data-kp-tab') === cat;
                 btn.className = isAct
@@ -1885,43 +1983,47 @@
                 }
             ];
 
+            const esVip = verificarEsVip();
+            const lockIconHtml = !esVip ? ' <i class="fa-solid fa-lock text-amber-400 text-[9px] ml-0.5"></i>' : '';
+
             return `
-                <div class="bg-[#0b0e14] border border-slate-800/90 rounded-2xl p-4 sm:p-5 space-y-5 shadow-2xl">
+                <div class="bg-[#0b0e14] border border-slate-800/90 rounded-2xl p-4 sm:p-5 space-y-5 shadow-2xl relative overflow-hidden">
                     <!-- Barra de Pestañas Interactivas Estilo Oddster (General | Goles | Remates | Córners | Tarjetas) -->
                     <div class="grid grid-cols-5 border-b border-slate-800/90 text-center">
                         <button type="button" onclick="filtrarTabKeyProbabilities('general')" data-kp-tab="general" class="oddster-kp-tab flex flex-col items-center justify-center gap-1.5 pb-2.5 px-2 border-b-2 border-[#00e676] text-[#00e676] font-bold text-xs transition cursor-pointer">
                             <i class="fa-solid fa-chart-simple text-sm"></i>
-                            <span>General</span>
+                            <span>General${lockIconHtml}</span>
                         </button>
                         <button type="button" onclick="filtrarTabKeyProbabilities('goals')" data-kp-tab="goals" class="oddster-kp-tab flex flex-col items-center justify-center gap-1.5 pb-2.5 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold text-xs transition cursor-pointer">
                             <i class="fa-regular fa-futbol text-sm"></i>
-                            <span>Goles</span>
+                            <span>Goles${lockIconHtml}</span>
                         </button>
                         <button type="button" onclick="filtrarTabKeyProbabilities('shots')" data-kp-tab="shots" class="oddster-kp-tab flex flex-col items-center justify-center gap-1.5 pb-2.5 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold text-xs transition cursor-pointer">
                             <i class="fa-solid fa-crosshairs text-sm"></i>
-                            <span>Remates</span>
+                            <span>Remates${lockIconHtml}</span>
                         </button>
                         <button type="button" onclick="filtrarTabKeyProbabilities('corners')" data-kp-tab="corners" class="oddster-kp-tab flex flex-col items-center justify-center gap-1.5 pb-2.5 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold text-xs transition cursor-pointer">
                             <i class="fa-regular fa-flag text-sm"></i>
-                            <span>Córners</span>
+                            <span>Córners${lockIconHtml}</span>
                         </button>
                         <button type="button" onclick="filtrarTabKeyProbabilities('cards')" data-kp-tab="cards" class="oddster-kp-tab flex flex-col items-center justify-center gap-1.5 pb-2.5 px-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 font-semibold text-xs transition cursor-pointer">
                             <i class="fa-regular fa-clone text-sm"></i>
-                            <span>Tarjetas</span>
+                            <span>Tarjetas${lockIconHtml}</span>
                         </button>
                     </div>
 
                     <!-- Cabecera Key Probabilities -->
                     <div class="flex items-center justify-between pt-1">
-                        <h4 class="text-base sm:text-lg font-outfit font-extrabold text-white m-0 tracking-tight">
-                            Probabilidades clave <span class="text-xs font-normal text-slate-400 ml-1">(Key probabilities)</span>
+                        <h4 class="text-base sm:text-lg font-outfit font-extrabold text-white m-0 tracking-tight flex items-center gap-2">
+                            <span>Probabilidades clave</span> <span class="text-xs font-normal text-slate-400">(Goles, Remates, Córners y Tarjetas)</span>
                         </h4>
-                        <span class="text-[10px] bg-emerald-950/90 text-[#00e676] border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-mono font-bold">
-                            MOTOR PREDICXION IA
+                        <span class="text-[10px] ${esVip ? 'bg-emerald-950/90 text-[#00e676] border-emerald-500/40' : 'bg-amber-500/10 text-amber-400 border-amber-500/40'} border px-2.5 py-0.5 rounded-full font-mono font-bold">
+                            ${esVip ? 'PASE PRO ACTIVO' : '🔒 EXCLUSIVO PASE PRO'}
                         </span>
                     </div>
 
-                    <!-- Grilla 2x4 de las 8 Tarjetas de Probabilidades Clave -->
+                    ${esVip ? `
+                    <!-- Grilla 2x4 de las 8 Tarjetas de Probabilidades Clave (Desbloqueada para Pase Pro) -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         ${cards.map(c => `
                             <div data-kp-cat="${c.cat}" class="oddster-kp-card bg-[#141821] border border-slate-800/90 hover:border-emerald-500/40 rounded-2xl p-4 space-y-2.5 shadow-lg transition">
@@ -1943,6 +2045,48 @@
                             </div>
                         `).join('')}
                     </div>
+                    ` : `
+                    <!-- Vista Bloqueada con Candado para Usuarios Gratuitos -->
+                    <div class="relative rounded-2xl overflow-hidden">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 filter blur-[5px] select-none opacity-25 pointer-events-none">
+                            ${cards.map(c => `
+                                <div class="bg-[#141821] border border-slate-800/90 rounded-2xl p-4 space-y-2.5">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xs font-semibold text-slate-400">${c.title}</span>
+                                        <span class="text-[10px] font-mono text-slate-500">${c.subEn}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2.5">
+                                        ${c.icon}
+                                        <span class="text-2xl font-outfit font-black text-white">84%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                                        <div class="bg-[#00d054] h-full rounded-full" style="width: 78%"></div>
+                                    </div>
+                                    <div class="flex items-center justify-between text-xs pt-0.5">
+                                        <span class="text-slate-400">Promedio de liga: <strong class="text-[#84cc16] font-mono ml-1">${c.avgLabel}</strong></span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-[#0b0e14]/85 backdrop-blur-xs rounded-2xl border border-amber-500/30">
+                            <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl mb-3 shadow-lg">
+                                <i class="fa-solid fa-lock"></i>
+                            </div>
+                            <span class="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-0.5 rounded-full mb-2">
+                                Goles • Remates • Córners • Tarjetas
+                            </span>
+                            <h5 class="text-sm sm:text-base font-outfit font-black text-white m-0">
+                                Si quieres acceder a esta información, desbloquea la Membresía Pro / Pase Pro
+                            </h5>
+                            <p class="text-xs text-slate-300 max-w-md mt-1.5 mb-4 leading-relaxed">
+                                Accede a las 8 probabilidades clave del motor (Más de 1.5 y 2.5 goles, Ambos anotan, promedios exactos de remates, tiros a puerta, córners y tarjetas frente a la media de liga).
+                            </p>
+                            <button type="button" onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition shadow-lg shadow-amber-950/50 flex items-center gap-2 cursor-pointer">
+                                <i class="fa-solid fa-crown"></i> <span>Desbloquear Pase Pro (S/ 24.90)</span>
+                            </button>
+                        </div>
+                    </div>
+                    `}
                 </div>
             `;
         }
@@ -1974,14 +2118,22 @@
                 destacados = pool.slice(0, 12);
             }
 
-            const lista12 = destacados.slice(0, 12);
-            if (!lista12.length) {
+            const esVip = verificarEsVip();
+            const listaDestacados = destacados;
+            const badgeAlt = document.getElementById('badge-total-alternativos');
+            if (badgeAlt) {
+                badgeAlt.innerText = esVip
+                    ? `${listaDestacados.length} Partidos Destacados Desbloqueados (Pase Pro)`
+                    : `3 de ${listaDestacados.length} Mercados Libres (Pase Gratuito)`;
+            }
+            if (!listaDestacados.length) {
                 cont.innerHTML = `<div class="text-xs text-slate-500 text-center py-6">No hay partidos destacados disponibles en este momento.</div>`;
                 return;
             }
 
             let html = '';
-            lista12.forEach((item, idx) => {
+            listaDestacados.forEach((item, idx) => {
+                const bloqueadoGratis = (!esVip && idx >= 3);
                 const loc = esc(item.local || '');
                 const vis = esc(item.visitante || '');
                 const stks = item.organizacion_stakazos || {};
@@ -2015,6 +2167,34 @@
                             <span class="text-xs sm:text-sm font-black text-white truncate max-w-[45%] text-right">${vis}</span>
                         </div>
 
+                        ${bloqueadoGratis ? `
+                        <div class="relative rounded-xl overflow-hidden border border-amber-500/30 bg-cardDark/70 p-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 filter blur-sm select-none opacity-25 pointer-events-none">
+                                <div class="bg-cardDark p-3 rounded-xl">
+                                    <div class="text-xs font-black text-white">Mercado Alternativo Reservado</div>
+                                    <div class="text-[10px] text-slate-400 mt-1">Probabilidad estimada: 85% • Cuota @1.55</div>
+                                </div>
+                                <div class="bg-cardDark p-3 rounded-xl">
+                                    <div class="text-xs font-black text-cyan-300">Probabilidades Clave del Partido</div>
+                                    <div class="text-[10px] text-slate-400 mt-1">Goles, Remates, Córners y Tarjetas</div>
+                                </div>
+                            </div>
+                            <div class="absolute inset-0 flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-baseDark/85 backdrop-blur-xs">
+                                <div class="flex items-center gap-3 text-left">
+                                    <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-sm flex-shrink-0">
+                                        <i class="fa-solid fa-lock"></i>
+                                    </div>
+                                    <div>
+                                        <div class="text-xs font-black text-white">Mercado Alternativo #${idx + 1} Bloqueado (Exclusivo Pase Pro)</div>
+                                        <div class="text-[10px] text-slate-300">El Pase Gratuito incluye los primeros 3 mercados alternativos. Desbloquea todos los partidos destacados con el Pase Pro.</div>
+                                    </div>
+                                </div>
+                                <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-[11px] px-3.5 py-2 rounded-xl transition shadow-md flex-shrink-0 cursor-pointer flex items-center gap-1.5">
+                                    <i class="fa-solid fa-crown text-[10px]"></i> <span>Desbloquear Pase Pro</span>
+                                </button>
+                            </div>
+                        </div>
+                        ` : `
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                             <div class="bg-cardDark/80 border border-emerald-900/40 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
                                 <div>
@@ -2027,15 +2207,16 @@
                                 </div>
                                 <div class="flex items-center justify-between pt-2.5 border-t border-cardBorder/40 text-[10px]">
                                     <span class="text-slate-400">Cuota justa del modelo: <strong class="text-accentGreen font-mono">@${cuotaAlt}</strong></span>
-                                    <button onclick="mostrarDetalle('${item.id_partido}')" class="text-[#00e676] hover:underline font-bold cursor-pointer">Ver las 8 probabilidades →</button>
+                                    <button onclick="mostrarDetalle('${item.id_partido}')" class="text-[#00e676] hover:underline font-bold cursor-pointer">Auditar partido →</button>
                                 </div>
                             </div>
 
-                            <div class="bg-cardDark/80 border border-cyan-900/40 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
+                            <div class="bg-cardDark/80 border border-cyan-900/40 rounded-xl p-3.5 flex flex-col justify-between space-y-2 relative overflow-hidden">
                                 <div class="flex items-center justify-between text-[10px] uppercase font-bold text-cyan-400">
                                     <span class="flex items-center gap-1.5"><i class="fa-solid fa-chart-simple"></i> Resumen de Probabilidades Clave</span>
-                                    <span class="font-mono bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-800 font-bold">vs Media Liga</span>
+                                    <span class="font-mono bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-800 font-bold">${esVip ? 'vs Media Liga' : '🔒 Pase Pro'}</span>
                                 </div>
+                                ${esVip ? `
                                 <div class="grid grid-cols-2 gap-2 text-[11px]">
                                     <div class="bg-baseDark/80 p-2 rounded-lg border border-cardBorder/60 flex items-center justify-between">
                                         <span class="text-slate-400">+1.5 goles:</span>
@@ -2054,8 +2235,15 @@
                                         <strong class="text-white font-mono">${m.avg_goals.val} <span class="text-[9px] text-slate-500">(${m.avg_goals.avg})</span></strong>
                                     </div>
                                 </div>
+                                ` : `
+                                <div class="bg-baseDark/90 border border-amber-500/30 rounded-lg p-2.5 flex items-center justify-between gap-2">
+                                    <span class="text-[10px] text-slate-300"><i class="fa-solid fa-lock text-amber-400 mr-1"></i> Goles, Remates, Córners y Tarjetas con Pase Pro</span>
+                                    <button onclick="abrirVipModal()" class="text-[10px] font-black text-amber-400 hover:underline cursor-pointer whitespace-nowrap">Desbloquear →</button>
+                                </div>
+                                `}
                             </div>
                         </div>
+                        `}
                     </div>
                 `;
             });
@@ -2335,25 +2523,36 @@
                     </div>
                 `;
             }
-            destacados.forEach(d => {
+            const esVipCarrusel = verificarEsVip();
+            destacados.forEach((d, idx) => {
                 const pick = d.pronostico_principal || {};
                 const stks = d.organizacion_stakazos || {};
                 const n1 = stks.nivel_1_base || {};
+                const bloqueadoDestacado = (!esVipCarrusel && idx >= 3);
 
                 html += `
-                    <div class="min-w-[270px] max-w-[270px] bg-cardDark border border-cardBorder rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0">
+                    <div class="min-w-[270px] max-w-[270px] bg-cardDark border ${bloqueadoDestacado ? 'border-amber-500/30' : 'border-cardBorder'} rounded-2xl p-4 flex flex-col justify-between shadow-xl flex-shrink-0 relative overflow-hidden">
                         <div>
                             <div class="flex items-center justify-between gap-1.5 mb-2">
-                                <span class="bg-emerald-950 text-accentGreen border border-emerald-800/60 text-[9px] font-black px-2 py-0.5 rounded truncate">PICK: ${pick.seleccion}</span>
-                                <span class="text-[9px] text-slate-500 font-mono">${d.fecha.split(' ')[0]}</span>
+                                ${bloqueadoDestacado
+                                    ? `<span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black px-2 py-0.5 rounded truncate"><i class="fa-solid fa-lock mr-1"></i>DESTACADO #${idx + 1} (PRO)</span>`
+                                    : `<span class="bg-emerald-950 text-accentGreen border border-emerald-800/60 text-[9px] font-black px-2 py-0.5 rounded truncate">PICK: ${pick.seleccion}</span>`
+                                }
+                                <span class="text-[9px] text-slate-500 font-mono">${(d.fecha || '').split(' ')[0]}</span>
                             </div>
                             <div class="font-black text-white text-xs truncate">${d.local}</div>
                             <div class="font-bold text-slate-400 text-xs truncate mt-0.5">${d.visitante}</div>
-                            <div class="mt-2 text-[10px] text-cyan-300 bg-baseDark/80 p-1.5 rounded border border-cardBorder truncate font-mono">${n1.etiqueta ? n1.etiqueta.split(" ")[0] : "🛡️"} ${n1.mercado || 'Mercado Base'}</div>
+                            ${bloqueadoDestacado
+                                ? `<div class="mt-2 text-[10px] text-amber-300/90 bg-baseDark/80 p-1.5 rounded border border-amber-500/30 truncate font-mono">🔒 Desbloquea todos los destacados con Pase Pro</div>`
+                                : `<div class="mt-2 text-[10px] text-cyan-300 bg-baseDark/80 p-1.5 rounded border border-cardBorder truncate font-mono">${n1.etiqueta ? n1.etiqueta.split(" ")[0] : "🛡️"} ${n1.mercado || 'Mercado Base'}</div>`
+                            }
                         </div>
                         <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-cardBorder text-[10px]">
-                            <span class="text-slate-400 font-mono">${d.fecha.split(' ')[1] || ''} UTC</span>
-                            <button onclick="mostrarDetalle('${d.id_partido}')" class="text-accentGreen hover:underline font-bold flex items-center gap-1">AUDITAR <i class="fa-solid fa-arrow-right text-[9px]"></i></button>
+                            <span class="text-slate-400 font-mono">${(d.fecha || '').split(' ')[1] || d.hora_utc || '14:00'} UTC</span>
+                            ${bloqueadoDestacado
+                                ? `<button onclick="abrirVipModal()" class="text-amber-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"><i class="fa-solid fa-crown text-[9px]"></i> PASE PRO</button>`
+                                : `<button onclick="mostrarDetalle('${d.id_partido}')" class="text-accentGreen hover:underline font-bold flex items-center gap-1 cursor-pointer">AUDITAR <i class="fa-solid fa-arrow-right text-[9px]"></i></button>`
+                            }
                         </div>
                     </div>
                 `;
@@ -2892,7 +3091,7 @@
             const esVip = verificarEsVip();
             if (!esVip) {
                 notificar("🔒 La simulación estocástica requiere Membresía PRO o ÉLITE.");
-                abrirVipModal(); seleccionarPlan(16.90, 'Pase Pro'); return;
+                abrirVipModal(); seleccionarPlan(24.90, 'Pase Pro'); return;
             }
             const btn = document.getElementById(`btn-mc-${matchId}`);
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Simulando...`;
@@ -3381,7 +3580,24 @@
                 const res = await fetch(`${API_BASE}/api/v1/bet-builder/quant?perfil=${perfilParlayActivo}`, { headers: await authHeaders() });
                 const data = await res.json();
                 if (!data.success || !data.selecciones || data.selecciones.length === 0) {
-                    if (cont) cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-6">Inicia sesión con el Pase Pro para ver las combinadas, o no hay selecciones disponibles para este perfil.</div>`;
+                    if (cont) {
+                        cont.innerHTML = `
+                            <div class="bg-baseDark/90 border border-amber-500/40 rounded-2xl p-6 text-center space-y-3 shadow-xl">
+                                <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl">
+                                    <i class="fa-solid fa-lock"></i>
+                                </div>
+                                <h4 class="text-sm sm:text-base font-black text-white m-0">Generador de Parlays IA Exclusivo con Pase Pro</h4>
+                                <p class="text-xs text-slate-300 max-w-md mx-auto m-0 leading-relaxed">
+                                    Si quieres acceder al Generador de Combinadas Inteligentes (Duplas, Triplas y Cuartetos Pro con correlación matemática positiva), desbloquea tu Membresía Pro.
+                                </p>
+                                <div class="pt-1">
+                                    <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition shadow-lg inline-flex items-center gap-2 cursor-pointer">
+                                        <i class="fa-solid fa-crown"></i> <span>Desbloquear Pase Pro (S/ 24.90)</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
                     return;
                 }
 
@@ -4105,7 +4321,7 @@
                 <p><strong class="text-white">1. Naturaleza del Servicio (SaaS Estadístico e Informativo):</strong> PredicXion IA es una plataforma tecnológica de software como servicio (SaaS) dedicada exclusivamente al procesamiento matemático de datos históricos de fútbol mediante modelos de Distribución de Poisson, simulaciones Monte Carlo e inteligencia artificial. <strong>PredicXion IA NO es una casa de apuestas, no capta dinero para apuestas, no intermedia jugadas ni opera juegos a distancia bajo la Ley N° 31557 (MINCETUR).</strong></p>
                 <p><strong class="text-white">2. Ausencia de Garantía de Ganancias (Riesgo Estadístico):</strong> Todas las probabilidades, métricas de goles esperados (xG), índices de valor (+EV) y selecciones mostradas constituyen estimaciones estadísticas de carácter informativo y educativo. En el deporte existen variables imprevistas (expulsiones, lesiones, decisiones arbitrales o clima); por tanto, <strong>ningún modelo matemático ni algoritmo garantiza aciertos futuros ni rentabilidades económicas</strong>. El usuario asume la total responsabilidad sobre el uso de esta información.</p>
                 <p><strong class="text-white">3. Restricción Estricta de Mayoría de Edad (+18):</strong> El acceso y suscripción a PredicXion IA están estrictamente restringidos a personas mayores de 18 años con plena capacidad civil.</p>
-                <p><strong class="text-white">4. Suscripciones y Pagos Automatizados vía Mercado Pago:</strong> Las membresías VIP (Pase Pro S/ 16.90/mes y Pase Élite S/ 33.90/mes (15% OFF lanzamiento)) se procesan exclusivamente a través de la pasarela segura de Mercado Pago Perú en Soles (PEN). Al confirmarse el pago, el sistema activa automáticamente el acceso por 30 días calendario.</p>
+                <p><strong class="text-white">4. Suscripciones y Pagos Automatizados vía Mercado Pago:</strong> La membresía VIP (Pase Pro Todo Incluido S/ 24.90/mes con 15% OFF de lanzamiento, precio regular S/ 29.90/mes) se procesan exclusivamente a través de la pasarela segura de Mercado Pago Perú en Soles (PEN). Al confirmarse el pago, el sistema activa automáticamente el acceso por 30 días calendario.</p>
             </div>
 
             <div id="contenido-leg-privacidad" class="hidden overflow-y-auto space-y-3 text-xs text-slate-300 leading-relaxed pr-2">
