@@ -13313,11 +13313,12 @@ def get_active_calendar_window():
 
     op_date = get_current_operational_date()
     if op_date < "2026-11-01":
-        # En los días finales de Octubre mantiene Octubre activo y ya deja preparado el bloque 1 Nov - 31 Dic
+        # Mantiene todos los partidos de Octubre y Noviembre activos (incluyendo UEFA Nations League y todas las ligas)
+        # y el 1 de Noviembre rota automáticamente el bloque bimestral hasta el 31 de Diciembre
         _CURRENT_ACTIVE_WINDOW = {
             "start_date": "2026-10-12",
-            "end_date": "2026-10-31",
-            "fase_nombre": "Octubre 2026 (Rotación automática el 01 Nov al 31 Dic 2026)",
+            "end_date": "2026-11-30",
+            "fase_nombre": "Fase 1: 12 Octubre a 30 Noviembre 2026 (538 partidos)",
             "proxima_ventana": "01 Nov 2026 al 31 Dic 2026"
         }
     elif op_date <= "2026-12-31":
