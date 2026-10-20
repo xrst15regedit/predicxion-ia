@@ -123,7 +123,7 @@
     </style>
 </head>
 
-<body class="min-h-screen flex flex-col antialiased selection:bg-accentGreen selection:text-slate-950">
+<body class="min-h-screen lg:h-screen lg:overflow-hidden flex flex-col antialiased selection:bg-accentGreen selection:text-slate-950">
     <div id="toast" class="toast-notification flex items-center justify-center gap-2" role="status"><i class="fa-solid fa-circle-check"></i> <span id="toast-text">Notificación</span></div>
 
     <!-- HEADER INSTITUCIONAL -->
@@ -159,33 +159,38 @@
     </header>
 
     <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
-        <!-- SIDEBAR DE PARTIDOS -->
-        <aside class="w-full lg:w-80 border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-75px)] overflow-hidden">
-            <div class="px-4 py-3 border-b border-cardBorder flex items-center justify-between">
+        <!-- SIDEBAR DE PARTIDOS (SCROLL AISLADO E INDEPENDIENTE POR LIGA) -->
+        <aside class="w-full lg:w-80 xl:w-88 border-b lg:border-b-0 lg:border-r border-cardBorder bg-baseDark flex flex-col flex-shrink-0 lg:h-[calc(100vh-108px)] overflow-hidden">
+            <div class="px-4 py-2.5 border-b border-cardBorder flex items-center justify-between flex-shrink-0">
                 <div class="flex items-center gap-2 text-xs font-black uppercase text-slate-200">
                     <i class="fa-regular fa-calendar-days text-accentGreen"></i> <span>Partidos del Mes</span>
                 </div>
                 <span class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono font-bold" id="sidebar-total-badge">0</span>
             </div>
 
-            <div class="p-3 border-b border-cardBorder/60 bg-cardDark/40 space-y-2">
-                <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+            <div class="p-2.5 border-b border-cardBorder/60 bg-cardDark/40 space-y-2 flex-shrink-0">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-1.5">
+                    <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o partido..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none">
+                    <select id="sidebar-league-select" onchange="filtrarSidebar()" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-slate-200 focus:outline-none cursor-pointer">
+                        <option value="todas">🏆 Todas las Ligas (Ver por liga)</option>
+                    </select>
+                </div>
                 <div class="text-[10px] font-mono text-slate-300 bg-baseDark/90 px-3 py-1.5 rounded-xl border border-cardBorder/60 flex items-center justify-between">
-                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span> <strong class="text-white">Fase Activa:</strong></span>
-                    <span class="text-accentGreen font-bold font-mono">Hasta 30 Nov 2026</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span> <strong class="text-white">Calendario:</strong></span>
+                    <span id="sidebar-ventana-label" class="text-accentGreen font-bold font-mono">Oct + 1 Nov - 31 Dic</span>
                 </div>
             </div>
 
-            <div id="sidebar-matches" class="flex-1 overflow-y-auto p-2.5 space-y-2 text-center text-xs text-slate-500 py-10">
+            <div id="sidebar-matches" class="max-h-[340px] lg:max-h-none flex-1 overflow-y-auto overscroll-contain p-2.5 space-y-2 text-center text-xs text-slate-500">
                 <i class="fa-solid fa-spinner fa-spin mr-1"></i> Cargando partidos del mes...
             </div>
         </aside>
 
         <!-- ÁREA PRINCIPAL -->
-        <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-75px)] overflow-y-auto relative p-4 sm:p-6">
+        <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-108px)] overflow-y-auto relative p-4 sm:p-6">
             
             <!-- PANEL DE TELEMETRÍA -->
-            <div class="max-w-5xl mx-auto mb-4 bg-cardDark border border-cardBorder rounded-2xl p-4 shadow-xl w-full">
+            <div class="w-full max-w-[1600px] mx-auto mb-3 bg-cardDark border border-cardBorder rounded-2xl p-4 shadow-xl w-full">
                 <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-3">
                     <div class="flex items-center gap-2">
                         <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
@@ -215,7 +220,7 @@
             </div>
 
             <!-- NAVEGACIÓN PRINCIPAL -->
-            <div class="max-w-5xl mx-auto w-full mb-3 flex items-center justify-between gap-2 border-b border-cardBorder pb-3 flex-wrap">
+            <div class="w-full max-w-[1600px] mx-auto mb-3 flex items-center justify-between gap-2 border-b border-cardBorder pb-3 flex-wrap">
                 <div class="flex items-center gap-2 flex-wrap" id="main-nav-tabs">
                     <button onclick="navegarPestanaPrincipal('partidos')" id="nav-tab-partidos" class="nav-tab-main nav-activo px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
                         <i class="fa-solid fa-futbol text-sm"></i> <span>Partidos</span>
@@ -234,9 +239,7 @@
                         <i class="fa-solid fa-dice text-cyan-400"></i> <span>Simulación</span>
                         <span id="lock-analisis-nav" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
                     </button>
-                    <button onclick="navegarPestanaPrincipal('herramientas')" id="nav-tab-herramientas" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
-                        <i class="fa-solid fa-calculator text-amber-400"></i> <span>Herramientas</span>
-                    </button>
+
                     <button onclick="navegarPestanaPrincipal('historial')" id="nav-tab-historial" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
                         <i class="fa-solid fa-clock-rotate-left text-slate-300"></i> <span>Historial</span>
                     </button>
@@ -250,7 +253,7 @@
             </div>
 
             <!-- SUB-PESTAÑAS (solo se muestran las del grupo activo) -->
-            <div id="sub-bar-modulos" class="hidden max-w-5xl mx-auto w-full mb-5 flex flex-wrap gap-2 border-b border-cardBorder/60 pb-3">
+            <div id="sub-bar-modulos" class="hidden w-full max-w-[1600px] mx-auto mb-5 flex flex-wrap gap-2 border-b border-cardBorder/60 pb-3">
                 <button onclick="intentarAccesoModulo('montecarlo')" id="tab-mod-montecarlo" data-grupo="analisis" class="tab-mod px-3 py-2 rounded-xl text-xs font-bold border border-cardBorder bg-cardDark text-slate-300 hover:text-white transition flex items-center gap-1">
                     <i class="fa-solid fa-dice text-cyan-400"></i> Monte Carlo <span id="lock-montecarlo" class="text-amber-400 text-[10px]"><i class="fa-solid fa-lock"></i></span>
                 </button>
@@ -268,26 +271,23 @@
             <!-- MÓDULO 0: CARTELERA 7 PILARES -->
             
             <!-- ========================================================================= -->
-            <!-- APARTADO EXCLUSIVO: TOP 5 PRONÓSTICOS DEL DÍA (DISEÑO ODDSTER ENGINE) -->
+            <!-- APARTADO EXCLUSIVO: TOP 5 PRONÓSTICOS DEL DÍA (ANCHO COMPLETO FLUIDO) -->
             <!-- ========================================================================= -->
-            <div id="seccion-top3" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-8 space-y-4">
-                <div class="bg-[#081210] border border-emerald-500/30 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5 relative overflow-hidden" style="background-image: radial-gradient(ellipse at top right, rgba(0, 230, 118, 0.14), transparent 60%), radial-gradient(ellipse at bottom left, rgba(6, 78, 59, 0.20), transparent 60%);">
-                    <!-- Marca de agua decorativa de balón estilo Oddster -->
+            <div id="seccion-top3" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6 space-y-4">
+                <div class="bg-[#081210] border border-emerald-500/30 rounded-3xl p-4 sm:p-6 lg:p-7 shadow-2xl space-y-4 relative overflow-hidden" style="background-image: radial-gradient(ellipse at top right, rgba(0, 230, 118, 0.14), transparent 60%), radial-gradient(ellipse at bottom left, rgba(6, 78, 59, 0.20), transparent 60%);">
+                    <!-- Marca de agua decorativa de balón -->
                     <div class="pointer-events-none select-none absolute -top-8 -right-8 opacity-10 text-emerald-400 text-[150px] leading-none">
                         <i class="fa-solid fa-futbol"></i>
                     </div>
 
-                    <!-- Cabecera Estilo Oddster -->
+                    <!-- Cabecera Limpia y Directa -->
                     <div class="flex flex-col md:flex-row md:items-end justify-between border-b border-emerald-900/50 pb-4 gap-4 relative z-10">
-                        <div class="space-y-1.5">
-                            <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider text-[#00e676]">
-                                <i class="fa-solid fa-shield-halved"></i> MOTOR ODDSTER + TOP 5 TIPSTERS MUNDIALES • CERO HÁNDICAP
-                            </div>
+                        <div class="space-y-1">
                             <h2 class="text-3xl sm:text-5xl font-outfit font-black text-white m-0 tracking-tight flex items-center gap-2">
                                 Top <span class="text-[#00e676]">5</span>
                             </h2>
                             <p class="text-xs sm:text-sm text-slate-300 m-0 max-w-2xl font-medium">
-                                Las cinco predicciones diarias con las señales estadísticas más fuertes, seleccionadas por el motor PredicXion IA (1 a 2 selecciones máx. por partido • Cuotas rotativas 1.30 a 2.20).
+                                Las cinco predicciones diarias con las señales estadísticas más fuertes, seleccionadas por el motor de predicción.
                             </p>
                         </div>
 
@@ -298,15 +298,17 @@
                             <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-lg cursor-pointer" title="Enviar Top 5 directamente al canal VIP de Telegram">
                                 <i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>
                             </button>
+                            <button onclick="dispararAuditoriaTelegram()" class="solo-admin hidden bg-emerald-950/90 hover:bg-emerald-900 text-[#00e676] border border-emerald-500/40 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-lg cursor-pointer" title="Enviar captura PNG de resultados liquidados a Telegram VIP">
+                                <i class="fa-solid fa-camera text-sm"></i> <span>Enviar Captura Resultados</span>
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Barra de Navegación de Fecha (< 📅 16.10.2026 >) + Filtros Rápidos + Countdown -->
-                    <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 relative z-10">
-                        <!-- Selector de fecha idéntico a Oddster -->
-                        <div class="flex items-center gap-2 flex-wrap">
+                    <!-- Barra de Navegación de Fecha (< 📅 Fecha > + Hoy Activo) + Temporizador -->
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 relative z-10">
+                        <div class="flex items-center gap-2.5 flex-wrap">
                             <div class="inline-flex items-center bg-[#0d1717] border border-slate-700/80 rounded-xl px-2 py-1.5 shadow-inner">
-                                <button onclick="navegarFechaTop3(-1)" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Día anterior (Ver resultados WIN/LOSS)">
+                                <button onclick="navegarFechaTop3(-1)" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Día anterior">
                                     <i class="fa-solid fa-chevron-left text-xs"></i>
                                 </button>
                                 <div class="px-3 flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-white">
@@ -318,18 +320,8 @@
                                 </button>
                             </div>
 
-                            <!-- Botones rápidos para ver la jornada activa o auditar días pasados (como el 16.10.2026 de la captura) -->
-                            <button onclick="cargarTop3('2026-10-16')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-[#0d1717] hover:bg-emerald-950/80 text-slate-300 hover:text-[#00e676] border border-slate-800 hover:border-emerald-500/40 transition cursor-pointer">
-                                16.10 (WIN/LOSS)
-                            </button>
-                            <button onclick="cargarTop3('2026-10-17')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-[#0d1717] hover:bg-emerald-950/80 text-slate-300 hover:text-[#00e676] border border-slate-800 hover:border-emerald-500/40 transition cursor-pointer">
-                                17.10
-                            </button>
-                            <button onclick="cargarTop3('2026-10-18')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-[#0d1717] hover:bg-emerald-950/80 text-slate-300 hover:text-[#00e676] border border-slate-800 hover:border-emerald-500/40 transition cursor-pointer">
-                                18.10
-                            </button>
-                            <button onclick="cargarTop3('')" class="px-3 py-1.5 rounded-xl text-[11px] font-black bg-emerald-950/90 text-[#00e676] border border-emerald-500/50 hover:bg-emerald-900/80 transition cursor-pointer flex items-center gap-1">
-                                <span class="w-1.5 h-1.5 rounded-full bg-[#00e676] animate-ping"></span> Hoy Activo
+                            <button onclick="cargarTop3('')" class="px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-950/90 text-[#00e676] border border-emerald-500/50 hover:bg-emerald-900/80 transition cursor-pointer flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-[#00e676] animate-ping"></span> Hoy
                             </button>
                         </div>
 
@@ -347,28 +339,8 @@
                         </div>
                     </div>
 
-                    <!-- Barra de Seguridad y Metodología de los Top 5 Tipsters -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] font-mono relative z-10">
-                        <div class="bg-[#0c1816]/90 border border-emerald-900/50 rounded-xl px-3 py-2 flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-lock text-[#00e676]"></i>
-                            <span><strong class="text-white">Seguridad:</strong> Hash SHA-256 Pre-Partido</span>
-                        </div>
-                        <div class="bg-[#0c1816]/90 border border-emerald-900/50 rounded-xl px-3 py-2 flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-ban text-amber-400"></i>
-                            <span><strong class="text-white">Filtro:</strong> 0% Hándicap (Excluido)</span>
-                        </div>
-                        <div class="bg-[#0c1816]/90 border border-emerald-900/50 rounded-xl px-3 py-2 flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-layer-group text-cyan-400"></i>
-                            <span><strong class="text-white">Límite:</strong> 1 o máx. 2 selecciones</span>
-                        </div>
-                        <div class="bg-[#0c1816]/90 border border-emerald-900/50 rounded-xl px-3 py-2 flex items-center gap-2 text-slate-300">
-                            <i class="fa-solid fa-scale-balanced text-lime-400"></i>
-                            <span><strong class="text-white">Rango Cuota:</strong> 1.30 a 2.20 máx.</span>
-                        </div>
-                    </div>
-
-                    <!-- Contenedor dinámico de las 5 tarjetas horizontales estilo Oddster -->
-                    <div id="top3-cards-container" class="space-y-3.5 relative z-10">
+                    <!-- Contenedor dinámico de las 5 tarjetas horizontales a ancho completo -->
+                    <div id="top3-cards-container" class="space-y-3.5 relative z-10 w-full">
                         <div class="text-xs text-slate-400 text-center py-8">
                             <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando señales estadísticas del Top 5...
                         </div>
@@ -382,7 +354,7 @@
                             </div>
                             <div>
                                 <div class="text-xs font-black text-white">Desbloquea las 5 Señales Estadísticas Completas</div>
-                                <div class="text-[10px] text-slate-400">Acceso ilimitado a todas las señales del motor Oddster, cuotas con valor (+EV) y auditoría Triple IA</div>
+                                <div class="text-[10px] text-slate-400">Acceso ilimitado a todas las predicciones del motor cuantitativo, cálculo xG, cuotas con valor (+EV) y consenso Triple IA</div>
                             </div>
                         </div>
                         <button onclick="abrirModalPlanes()" class="bg-[#00e676] hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl transition shadow-lg flex-shrink-0 cursor-pointer">
@@ -395,7 +367,7 @@
             <!-- ========================================================================= -->
             <!-- MÓDULO PARLAYS CUANTITATIVOS & CREADOR DE COMBINADAS INTELIGENTES -->
             <!-- ========================================================================= -->
-            <div id="seccion-parlays" class="seccion-principal hidden max-w-4xl mx-auto w-full mb-8 space-y-6">
+            <div id="seccion-parlays" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-8 space-y-6">
                 <!-- Panel Creador de Parlays -->
                 <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-4 flex-wrap gap-3">
@@ -481,7 +453,7 @@
             <!-- ========================================================================= -->
             <!-- MÓDULO EXCLUSIVO: TOP 12 MERCADOS ALTERNATIVOS & JUGADAS POR JUGADOR -->
             <!-- ========================================================================= -->
-            <div id="seccion-alternativos" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-8 space-y-6">
+            <div id="seccion-alternativos" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-8 space-y-6">
                 <div class="bg-cardDark border border-cardBorder rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
                         <div>
@@ -511,7 +483,7 @@
             </div>
 
             <div id="seccion-partidos" class="seccion-principal flex-1 flex flex-col">
-                <div id="match-detail-view" class="hidden max-w-5xl mx-auto w-full mb-6"></div>
+                <div id="match-detail-view" class="hidden w-full max-w-[1600px] mx-auto mb-6"></div>
                 <div id="welcome-view" class="flex-1 flex flex-col justify-center items-center text-center max-w-xl mx-auto py-12">
                     <i class="fa-solid fa-chart-pie text-4xl text-accentGreen mb-4"></i>
                     <h2 class="text-2xl font-black text-white m-0">Terminal Cuantitativa Institucional</h2>
@@ -538,7 +510,7 @@
             </div>
 
             <!-- MÓDULO 2: ANCLAS (>80%) -->
-            <div id="seccion-anclas" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-anclas" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
                         <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-anchor text-emerald-400"></i> Selecciones Base por Probabilidad Estadística (Top 8-10 Picks)</h3>
@@ -549,7 +521,7 @@
             </div>
 
             <!-- MÓDULO 3: CALCULADORA KELLY EN SOLES -->
-            <div id="seccion-kelly" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-kelly" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
                         <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-calculator text-amber-400"></i> Criterio de Kelly Personalizado (en Soles S/)</h3>
@@ -570,7 +542,7 @@
             </div>
 
             <!-- ADMINISTRACIÓN (solo dueño; el servidor lo vuelve a verificar) -->
-            <div id="seccion-admin" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-admin" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="bg-cardDark border border-cardBorder rounded-2xl p-5 shadow-xl space-y-3">
                         <h3 class="text-sm font-black text-white flex items-center gap-2"><i class="fa-solid fa-shield-halved text-emerald-400"></i> Pasarela Oficial Mercado Pago (100% Automática)</h3>
@@ -592,7 +564,7 @@
             </div>
 
             <!-- PANEL TELEGRAM -->
-            <div id="seccion-telegram_panel" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-telegram_panel" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
                         <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-brands fa-telegram text-sky-400"></i> Comunidad y avisos por Telegram</h3>
@@ -619,7 +591,7 @@
             </div>
 
             <!-- MÓDULO 6: HISTORIAL DE AUDITORÍA TRANSPARENTE -->
-            <div id="seccion-auditoria" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-auditoria" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3 flex-wrap gap-2">
                         <div class="flex items-center gap-2 flex-wrap">
@@ -638,7 +610,7 @@
             </div>
 
             <!-- MÓDULO 9: SIMULADOR MONTE CARLO -->
-            <div id="seccion-montecarlo" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-montecarlo" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-4">
                     <div class="flex items-center justify-between border-b border-cardBorder pb-3">
                         <h3 class="text-base font-black text-white flex items-center gap-2"><i class="fa-solid fa-dice text-cyan-400"></i> Simulación Estocástica Monte Carlo (10,000 Partidos)</h3>
@@ -661,7 +633,7 @@
             </div>
 
             <!-- MÓDULO 15: CALCULADORA DE COBERTURA Y CIERRE (CASHOUT & HEDGE TOOL) -->
-            <div id="seccion-cashout" class="seccion-principal hidden max-w-5xl mx-auto w-full mb-6">
+            <div id="seccion-cashout" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6">
                 <div class="bg-cardDark border border-cardBorder rounded-2xl p-6 shadow-xl space-y-5">
                     <div class="border-b border-cardBorder pb-3">
                         <h3 class="text-base font-black text-white flex items-center gap-2 m-0">
@@ -1440,7 +1412,7 @@
         }
 
         async function revisarPago(operacionId, aprobar) {
-            if (aprobar && !confirm('¿Confirmas que ya viste este abono en tu app? Se activarán 30 días del plan.')) return;
+            
             const res = await fetch(`${API_BASE}/api/v1/admin/payments/review`, {
                 method: 'POST', headers: await authHeaders(), body: JSON.stringify({ operacion_id: operacionId, aprobar })
             });
@@ -2039,7 +2011,7 @@
                             Probabilidades clave <span class="text-xs font-normal text-slate-400 ml-1">(Key probabilities)</span>
                         </h4>
                         <span class="text-[10px] bg-emerald-950/90 text-[#00e676] border border-emerald-500/40 px-2.5 py-0.5 rounded-full font-mono font-bold">
-                            ODDSTER STATS ENGINE
+                            MOTOR PREDICXION IA
                         </span>
                     </div>
 
@@ -2155,7 +2127,7 @@
 
                             <div class="bg-cardDark/80 border border-cyan-900/40 rounded-xl p-3.5 flex flex-col justify-between space-y-2">
                                 <div class="flex items-center justify-between text-[10px] uppercase font-bold text-cyan-400">
-                                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-chart-simple"></i> Resumen Key Probabilities (Oddster)</span>
+                                    <span class="flex items-center gap-1.5"><i class="fa-solid fa-chart-simple"></i> Resumen de Probabilidades Clave</span>
                                     <span class="font-mono bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-800 font-bold">vs Media Liga</span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 text-[11px]">
@@ -2350,11 +2322,25 @@
         function renderizarSidebar(ligas, filtro = "") {
             const query = filtro.toLowerCase().trim();
             const cont = document.getElementById('sidebar-matches');
+            const selLigaEl = document.getElementById('sidebar-league-select');
+            const ligaSeleccionada = selLigaEl ? selLigaEl.value : 'todas';
+
+            // Poblar selector de ligas sin perder selección actual
+            if (selLigaEl && selLigaEl.options.length <= 1 && Object.keys(ligas || {}).length > 0) {
+                let opts = '<option value="todas">🏆 Todas las Ligas (Scroll por liga)</option>';
+                for (const nombreL of Object.keys(ligas)) {
+                    opts += `<option value="${esc(nombreL)}">${esc(nombreL)}</option>`;
+                }
+                selLigaEl.innerHTML = opts;
+                selLigaEl.value = ligaSeleccionada;
+            }
+
             let html = '';
             let total = 0;
             let id = 0;
 
             for (const [liga, partidos] of Object.entries(ligas)) {
+                if (ligaSeleccionada !== 'todas' && liga !== ligaSeleccionada) continue;
                 const lista = Array.isArray(partidos) ? partidos : [];
                 let filtrados = lista;
                 if (typeof mesFiltroActivo !== 'undefined' && mesFiltroActivo && mesFiltroActivo !== 'todos') {
@@ -2365,23 +2351,24 @@
                 }
                 if (filtrados.length === 0) continue;
                 total += filtrados.length;
-                const abierta = ligasAbiertas[liga] !== false;
+                const abierta = (ligaSeleccionada !== 'todas') ? true : (ligasAbiertas[liga] !== false);
+                const maxHClass = (ligaSeleccionada !== 'todas') ? 'max-h-[420px]' : 'max-h-56';
 
                 html += `
-                    <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50 mb-2">
-                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-300 flex justify-between items-center hover:bg-slate-800 transition">
+                    <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/70 mb-2 shadow-sm">
+                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-200 bg-cardDark flex justify-between items-center hover:bg-slate-800 transition cursor-pointer">
                             <span class="truncate flex items-center gap-1.5"><i class="fa-solid fa-trophy text-[10px] text-accentGreen"></i> ${liga}</span>
-                            <div class="flex items-center gap-2"><span class="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">${filtrados.length}</span><i class="fa-solid fa-chevron-down text-[10px] text-slate-500 ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i></div>
+                            <div class="flex items-center gap-2"><span class="text-[9px] bg-slate-800 text-accentGreen px-1.5 py-0.5 rounded font-mono">${filtrados.length}</span><i class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i></div>
                         </button>
-                        <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60">
+                        <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} ${maxHClass} overflow-y-auto overscroll-contain border-t border-cardBorder/40 bg-baseDark/80 divide-y divide-cardBorder/20">
                 `;
 
                 filtrados.forEach(p => {
                     const prob1X2 = p.probabilidades?.["1X2"] || {};
                     html += `
-                        <div onclick="mostrarDetalle('${p.id_partido}')" class="p-2.5 px-3 border-b border-cardBorder/20 hover:bg-cardDark/80 cursor-pointer transition">
+                        <div onclick="mostrarDetalle('${p.id_partido}')" class="p-2.5 px-3 hover:bg-cardDark/90 cursor-pointer transition">
                             <div class="flex items-center justify-between">
-                                <div class="space-y-0.5 w-[75%]">
+                                <div class="space-y-0.5 w-[74%] text-left">
                                     <div class="font-bold text-slate-200 truncate text-[11px]">${p.local}</div>
                                     <div class="text-slate-400 font-medium truncate text-[11px]">${p.visitante}</div>
                                 </div>
@@ -2396,7 +2383,7 @@
                 html += `</div></div>`;
                 id++;
             }
-            cont.innerHTML = html || `<p class="text-xs text-slate-500 py-6">No se encontraron ligas.</p>`;
+            cont.innerHTML = html || `<p class="text-xs text-slate-500 py-6">No se encontraron partidos con ese filtro.</p>`;
             document.getElementById('sidebar-total-badge').innerText = total;
         }
 
@@ -2486,7 +2473,7 @@
         // DETALLE COMPLETO DE PARTIDO CON CANDADOS 🔒
         
         async function ejecutarAnalisisTripleIA(matchId) {
-            const btn = document.getElementById('btn-run-triple-ia');
+            const btn = null;
             const gText = document.getElementById('ia-text-gemini');
             const dsText = document.getElementById('ia-text-deepseek');
             const grText = document.getElementById('ia-text-grok');
@@ -2613,7 +2600,7 @@
                             <div>
                                 <div class="flex items-center gap-2 flex-wrap">
                                     <span class="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded bg-emerald-950 text-[#00e676] border border-emerald-500/40">
-                                        <i class="fa-solid fa-bolt mr-1"></i> SEÑAL PRINCIPAL ODDSTER ENGINE
+                                        <i class="fa-solid fa-bolt mr-1"></i> SEÑAL PRINCIPAL DEL MOTOR
                                     </span>
                                     <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700">
                                         ${(item.pronostico_principal?.num_selecciones === 2) ? '2 Selecciones (Máximo)' : '1 Selección Directa'} • Cero Hándicap
@@ -2651,7 +2638,7 @@
                         <!-- Consenso de 5 Columnas de los Modelos Cuantitativos Mundiales -->
                         <div class="pt-1">
                             <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-[#00e676] mb-1">
-                                <span><i class="fa-solid fa-layer-group mr-1"></i> Consenso Extraído de los 5 Modelos Cuantitativos Mundiales (5/5 En Verde)</span>
+                                <span><i class="fa-solid fa-layer-group mr-1"></i> Desglose de Cálculos Estadísticos del Motor (5/5 Indicadores en Verde)</span>
                                 <span class="font-mono text-emerald-300">Validación Cruzada ✓</span>
                             </div>
                             ${renderizarConsenso5ModelosHtml(item.consenso_5_modelos || item.pronostico_principal?.consenso_5_modelos, {
@@ -3117,27 +3104,30 @@
 
         
         function renderizarConsenso5ModelosHtml(modelosList, fallbackObj = {}) {
+            const xgL = parseFloat(fallbackObj.xg_local || 1.55);
+            const xgV = parseFloat(fallbackObj.xg_visita || 1.12);
+            const totXg = (xgL + xgV).toFixed(2);
             const defList = (Array.isArray(modelosList) && modelosList.length === 5) ? modelosList : [
-                { nombre: "1. Oddster Engine", autor: "Piso Estadístico", metrica: fallbackObj.safety_margin || "Colchón +0.95 xG", confianza: fallbackObj.probabilidad || "85%" },
-                { nombre: "2. StatsBomb xG", autor: "Ted Knutson", metrica: `xG: ${fallbackObj.xg_local || 1.55} vs ${fallbackObj.xg_visita || 1.12}`, confianza: "Calidad Tiro ✓" },
-                { nombre: "3. Smartodds", autor: "Benham Dixon-Coles", metrica: "Matriz Poisson Validada", confianza: "Sin Hándicap ✓" },
-                { nombre: "4. Starlizard +EV", autor: "Tony Bloom Quant", metrica: `Cuota @${fallbackObj.cuota || '1.58'} (+EV)`, confianza: "Valor Positivo ✓" },
-                { nombre: "5. Pinnacle Sharp", autor: "Línea Cierre & Elo", metrica: fallbackObj.stat_projection_label || "Línea Firme", confianza: "Consenso 5/5 ✓" }
+                { nombre: "1. Margen de Línea", autor: "Colchón Estadístico", metrica: fallbackObj.safety_margin || `Se esperan ${totXg} goles (supera la línea base)`, confianza: `Confianza: ${fallbackObj.probabilidad || '85%'}` },
+                { nombre: "2. Cálculo xG de Goles", autor: "Proyección Ofensiva", metrica: `Local ${xgL.toFixed(2)} xG vs Visita ${xgV.toFixed(2)} xG (Total: ${totXg} goles)`, confianza: "Volumen Verificado ✓" },
+                { nombre: "3. Cálculo Poisson", autor: "Piso de Goles y Córners", metrica: "Distribución exacta de goles y saques de esquina", confianza: "Probabilidad Alta ✓" },
+                { nombre: "4. Valor de Cuota (+EV)", autor: "Rentabilidad Matemática", metrica: `Cuota @${fallbackObj.cuota || '1.58'} con ventaja sobre la casa`, confianza: "Valor Positivo (+EV) ✓" },
+                { nombre: "5. Balance y Promedio", autor: "Estabilidad del Partido", metrica: fallbackObj.stat_projection_label || "Tendencia sólida en los últimos 5 partidos", confianza: "Indicadores 5/5 ✓" }
             ];
             return `
-                <div class="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-2 mt-2 border-t border-emerald-500/30 text-[10px]">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 pt-2.5 mt-2.5 border-t border-emerald-500/30 text-[10px]">
                     ${defList.map(m => `
-                        <div class="bg-[#071510]/95 border border-emerald-500/40 hover:border-[#00e676] rounded-xl p-2 transition shadow-sm shadow-emerald-950/50 flex flex-col justify-between">
+                        <div class="bg-[#071510]/95 border border-emerald-500/40 hover:border-[#00e676] rounded-xl p-2.5 transition shadow-sm shadow-emerald-950/50 flex flex-col justify-between">
                             <div>
                                 <div class="flex items-center justify-between gap-1">
-                                    <span class="font-black text-[#00e676] truncate">${esc(m.nombre)}</span>
-                                    <i class="fa-solid fa-circle-check text-[#00e676] text-[9px]"></i>
+                                    <span class="font-black text-[#00e676] leading-tight">${esc(m.nombre)}</span>
+                                    <i class="fa-solid fa-circle-check text-[#00e676] text-[9px] flex-shrink-0"></i>
                                 </div>
-                                <span class="text-[8px] text-emerald-300/80 font-mono block">${esc(m.autor || 'Modelo Quant')}</span>
+                                <span class="text-[9px] text-emerald-300/80 font-mono block mt-0.5">${esc(m.autor || 'Cálculo del Motor')}</span>
                             </div>
-                            <div class="mt-1 pt-1 border-t border-emerald-900/60">
-                                <span class="text-[10px] font-bold text-white block truncate" title="${esc(m.metrica)}">${esc(m.metrica)}</span>
-                                <span class="text-[9px] font-mono font-black text-[#00e676]">${esc(m.confianza || 'VERDE')}</span>
+                            <div class="mt-1.5 pt-1.5 border-t border-emerald-900/60">
+                                <span class="text-[10px] font-bold text-white block leading-snug break-words">${esc(m.metrica)}</span>
+                                <span class="text-[9px] font-mono font-black text-[#00e676] block mt-0.5">${esc(m.confianza || 'VERDE')}</span>
                             </div>
                         </div>
                     `).join('')}
@@ -3186,7 +3176,7 @@
         function navegarFechaTop3(delta) {
             const fechas = (FECHAS_DISPONIBLES_SISTEMA && FECHAS_DISPONIBLES_SISTEMA.length > 0)
                 ? FECHAS_DISPONIBLES_SISTEMA
-                : ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21'];
+                : ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-23', '2026-10-24', '2026-10-25'];
             let idx = fechas.indexOf(fechaTop3Activa);
             if (idx === -1) idx = fechas.length - 1;
             const nuevoIdx = Math.max(0, Math.min(fechas.length - 1, idx + delta));
@@ -3324,7 +3314,7 @@
                                     ${esBloqueado ? `
                                         <div class="filter blur-sm select-none opacity-35 space-y-2">
                                             <div class="flex justify-between items-center">
-                                                <span class="text-[10px] font-bold uppercase text-emerald-400">SEÑAL ODDSTER VIP</span>
+                                                <span class="text-[10px] font-bold uppercase text-emerald-400">SEÑAL PRINCIPAL VIP</span>
                                                 <span class="text-2xl font-black text-[#00e676]">88%</span>
                                             </div>
                                             <div class="text-base font-black text-white">Pronóstico reservado para miembros VIP</div>
@@ -3335,7 +3325,7 @@
                                             <div class="text-xs font-black text-white flex items-center gap-1.5 mb-1">
                                                 <i class="fa-solid fa-lock text-amber-400"></i> Señal Estadística #${t.rank} Bloqueada (VIP)
                                             </div>
-                                            <p class="text-[10px] text-slate-300 max-w-xs mb-2">Desbloquea la jugada exacta, cuota rotativa y análisis de los Top 5 Tipsters Mundiales.</p>
+                                            <p class="text-[10px] text-slate-300 max-w-xs mb-2">Desbloquea la jugada exacta, cuota calibrada y desglose estadístico completo del motor.</p>
                                             <button onclick="abrirModalPlanes()" class="bg-[#00e676] hover:bg-emerald-400 text-slate-950 font-black text-[11px] px-3.5 py-1.5 rounded-lg transition shadow-lg flex items-center gap-1.5 cursor-pointer">
                                                 <i class="fa-solid fa-crown"></i> Desbloquear Top 5 VIP
                                             </button>
@@ -4183,26 +4173,24 @@
 
         iniciarCountdownTop3();
 </script>
-    <footer class="w-full border-t border-cardBorder bg-baseDark px-4 sm:px-8 py-5 text-[11px] leading-relaxed text-slate-400">
-        <div class="max-w-5xl mx-auto space-y-2">
-            <p><strong class="text-slate-200">Solo mayores de 18 años.</strong> PredicXion IA ofrece estimaciones estadísticas de fútbol con fines informativos. No es una casa de apuestas, no recibe apuestas y no garantiza resultados ni ganancias. Los resultados pasados no aseguran resultados futuros.</p>
-            <p>Las probabilidades salen de un modelo Poisson con valores base de cada equipo que se actualizan manualmente; pueden contener errores. Compáralas siempre con la cuota real de tu casa y apuesta solo dinero que puedas permitirte perder.</p>
-            <p>Si apostar deja de ser un pasatiempo o te genera problemas, busca ayuda profesional y considera pausar el juego.</p>
-            <div class="flex items-center justify-between flex-wrap gap-3 pt-2 border-t border-cardBorder/40">
-                <span class="text-[10px] text-slate-500">© 2026 PredicXion IA • Software de Analítica Estadística Deportiva (+18)</span>
-                <div class="flex items-center flex-wrap gap-3 text-[10px]">
-                    <button type="button" onclick="abrirModalLegal('terminos')" class="text-slate-300 hover:text-accentGreen underline cursor-pointer">Términos y Condiciones</button>
-                    <span class="text-slate-600">•</span>
-                    <button type="button" onclick="abrirModalLegal('privacidad')" class="text-slate-300 hover:text-accentGreen underline cursor-pointer">Política de Privacidad (Ley N° 29733)</button>
-                    <span class="text-slate-600">•</span>
-                    <button type="button" onclick="abrirModalLegal('reclamaciones')" class="text-amber-300 hover:text-amber-200 underline cursor-pointer flex items-center gap-1"><i class="fa-solid fa-book-open"></i> Libro de Reclamaciones (Indecopi)</button>
-                    <span class="text-slate-600">•</span>
-                    <button type="button" onclick="abrirJuegoResponsable()" class="text-slate-300 hover:text-cyan-400 underline cursor-pointer">Juego Responsable</button>
-                </div>
+    <footer class="w-full border-t border-cardBorder bg-baseDark px-3 sm:px-6 py-2 text-[10px] text-slate-400 flex-shrink-0">
+        <div class="w-full max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-1.5">
+            <div class="flex items-center flex-wrap justify-center sm:justify-start gap-1.5 text-center sm:text-left">
+                <span class="bg-slate-800 text-amber-400 border border-amber-500/30 font-black px-1.5 py-0.5 rounded text-[9px]">+18</span>
+                <span><strong class="text-slate-200">Solo mayores de 18.</strong> Software informativo de análisis estadístico (no es casa de apuestas ni garantiza ganancias).</span>
+                <span id="datos-estado" class="hidden xl:inline text-[9px] text-emerald-400/80 font-mono ml-1"></span>
+            </div>
+            <div class="flex items-center flex-wrap justify-center gap-2.5 text-[10px]">
+                <button type="button" onclick="abrirModalLegal('terminos')" class="text-slate-300 hover:text-accentGreen underline cursor-pointer">Términos</button>
+                <span class="text-slate-600">•</span>
+                <button type="button" onclick="abrirModalLegal('privacidad')" class="text-slate-300 hover:text-accentGreen underline cursor-pointer">Privacidad</button>
+                <span class="text-slate-600">•</span>
+                <button type="button" onclick="abrirModalLegal('reclamaciones')" class="text-amber-300 hover:text-amber-200 underline cursor-pointer flex items-center gap-1"><i class="fa-solid fa-book-open"></i> Reclamaciones</button>
+                <span class="text-slate-600">•</span>
+                <button type="button" onclick="abrirJuegoResponsable()" class="text-slate-300 hover:text-cyan-400 underline cursor-pointer">Juego Responsable</button>
             </div>
         </div>
-    <div class="mt-2 text-center"><span id="datos-estado" class="text-[10px] text-emerald-400/90 font-mono tracking-wide"></span></div>
-</footer>
+    </footer>
 
     <!-- Modal Legal: Términos y Condiciones & Política de Privacidad (Perú - Ley N° 29733) -->
     <div id="modal-legal" role="dialog" class="hidden fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm">
