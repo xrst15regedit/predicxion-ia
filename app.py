@@ -11810,7 +11810,7 @@ class SportsAnalyticsEngine:
 
         stakazos = {
             "nivel_1_base": {
-                "etiqueta": f"{n1_icono} Nivel 1 (Señal Base Oddster)",
+                "etiqueta": f"{n1_icono} Nivel 1 (Señal Base Principal)",
                 "mercado": n1_mercado,
                 "probabilidad": n1_prob,
                 "rol": "1 selección de piso/techo estadístico firme."
@@ -11847,11 +11847,11 @@ class SportsAnalyticsEngine:
         # =========================================================================
         num_selecciones = 1
         tipo_mercado_code = "GOALS"
-        tipster_model_name = "Oddster Signal Engine • Piso Estadístico"
-        stat_projection_label = f"Proy. goles: {suma_xg} xG"
-        safety_margin_label = f"+{round(max(0.4, suma_xg - 1.5), 2)} xG sobre línea"
+        tipster_model_name = "Motor PredicXion IA • Piso Estadístico"
+        stat_projection_label = f"Proyección: {suma_xg} goles esperados"
+        safety_margin_label = f"Se esperan {suma_xg} goles (supera por +{round(max(0.4, suma_xg - 1.5), 2)} la línea de 1.5)"
 
-        # Caso A: Señal ultra-fuerte en TARJETAS (Under 5.5 o Over 3.5/4.5) — Estilo Oddster #1
+        # Caso A: Señal ultra-fuerte en TARJETAS (Under 5.5 o Over 3.5/4.5)
         if tarjetas_esperadas <= 3.45 or (estilo_partido == 0 and tarjetas_esperadas <= 3.75):
             mercado_sugerido = "Menos de 5.5 tarjetas"
             conf_val = int(round(min(92.0, max(76.0, 96.0 - tarjetas_esperadas * 3.8))))
@@ -11859,9 +11859,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"El promedio combinado de tarjetas ({tarjetas_esperadas:.2f}) está por debajo de 5.5. El contexto del partido no justifica una línea alta."
             num_selecciones = 1
             tipo_mercado_code = "CARDS"
-            tipster_model_name = "Oddster Signal Engine • Control de Línea Arbitral"
-            stat_projection_label = f"Proy. tarjetas: {tarjetas_esperadas:.1f}"
-            safety_margin_label = f"+{round(5.5 - tarjetas_esperadas, 2)} tarjetas de colchón"
+            tipster_model_name = "Motor PredicXion IA • Control de Línea Arbitral"
+            stat_projection_label = f"Promedio: {tarjetas_esperadas:.1f} tarjetas"
+            safety_margin_label = f"Promedian {tarjetas_esperadas:.1f} tarjetas ({round(5.5 - tarjetas_esperadas, 1)} debajo del límite 5.5)"
 
         elif tarjetas_esperadas >= 5.05 or (tarjetas_esperadas >= 4.35 and diferencia_xg <= 0.40 and estilo_partido == 1):
             linea_t = "4.5" if tarjetas_esperadas >= 4.85 else "3.5"
@@ -11871,9 +11871,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"El promedio combinado de tarjetas ({tarjetas_esperadas:.2f}) supera la línea de {linea_t}. Duelo de alta fricción táctica e intensidad en mediocampo."
             num_selecciones = 1
             tipo_mercado_code = "CARDS"
-            tipster_model_name = "Pinnacle Sharp Model • Índice de Fricción H2H"
-            stat_projection_label = f"Proy. tarjetas: {tarjetas_esperadas:.1f}"
-            safety_margin_label = f"+{round(tarjetas_esperadas - float(linea_t), 2)} sobre línea"
+            tipster_model_name = "Motor PredicXion IA • Índice de Fricción H2H"
+            stat_projection_label = f"Promedio: {tarjetas_esperadas:.1f} tarjetas"
+            safety_margin_label = f"Promedian {tarjetas_esperadas:.1f} tarjetas (supera por +{round(tarjetas_esperadas - float(linea_t), 1)} la línea {linea_t})"
 
         # Caso B: GANADOR CON GOLES (2 selecciones máx.) cuando el favorito domina con claridad
         elif (p_max_win >= 56.0 and diferencia_xg >= 0.65 and fav_xg >= 1.75 and opp_xg <= 1.15) or (p_max_win >= 68.0 and fav_xg >= 1.95):
@@ -11883,9 +11883,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"{fav_team} domina el cruce ofensivo ({fav_xg} xG vs {opp_xg} xG; racha {racha_fav}). Combinar ganador y +1.5 goles maximiza la cuota con respaldo estadístico."
             num_selecciones = 2
             tipo_mercado_code = "WINNER"
-            tipster_model_name = "Tony Bloom (Starlizard) • Supremacía xG + Goles"
-            stat_projection_label = f"xG: {lh} vs {la}"
-            safety_margin_label = f"2 Selecciones • +{diferencia_xg} diff xG"
+            tipster_model_name = "Motor PredicXion IA • Supremacía xG + Goles"
+            stat_projection_label = f"Goles esp.: {lh} vs {la} xG"
+            safety_margin_label = f"Ventaja de +{diferencia_xg} goles esperados y total de {suma_xg} goles"
 
         # Caso C: Señal fuerte en CÓRNERS (Más de 8.5 / 9.5 o Menos de 10.5)
         elif corners_estimados >= 10.8 and (estilo_partido in (0, 2) or (fav_is_away and pts_h >= 9)):
@@ -11896,9 +11896,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"El flujo ofensivo por bandas proyecta {corners_estimados:.1f} córners combinados, superando con margen el piso estadístico de {linea_c}."
             num_selecciones = 1
             tipo_mercado_code = "CORNERS"
-            tipster_model_name = "Tony Bloom (Starlizard) • Volumen de Bandas"
-            stat_projection_label = f"Proy. córners: {corners_estimados:.1f}"
-            safety_margin_label = f"+{round(corners_estimados - float(linea_c), 1)} córners de margen"
+            tipster_model_name = "Motor PredicXion IA • Volumen de Bandas"
+            stat_projection_label = f"Promedio: {corners_estimados:.1f} córners"
+            safety_margin_label = f"Promedian {corners_estimados:.1f} córners (supera por +{round(corners_estimados - float(linea_c), 1)} la línea {linea_c})"
 
         elif corners_estimados <= 8.3 and estilo_partido == 3:
             conf_val = int(round(min(87.0, max(73.0, prob_corners_under_105))))
@@ -11907,9 +11907,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"El promedio combinado de córners ({corners_estimados:.1f}) está muy por debajo de 10.5. Ambos equipos priorizan posesión interior sin desborde."
             num_selecciones = 1
             tipo_mercado_code = "CORNERS"
-            tipster_model_name = "Oddster Signal Engine • Techo de Córners"
-            stat_projection_label = f"Proy. córners: {corners_estimados:.1f}"
-            safety_margin_label = f"+{round(10.5 - corners_estimados, 1)} córners bajo techo"
+            tipster_model_name = "Motor PredicXion IA • Techo de Córners"
+            stat_projection_label = f"Promedio: {corners_estimados:.1f} córners"
+            safety_margin_label = f"Promedian {corners_estimados:.1f} córners ({round(10.5 - corners_estimados, 1)} debajo del tope 10.5)"
 
         # Caso D: AMBOS EQUIPOS ANOTAN (BTTS) cuando ambos ataques son incisivos y parejos
         elif lh >= 1.32 and la >= 1.26 and diferencia_xg <= 0.45 and pBtts["yes"] >= 58.0:
@@ -11919,9 +11919,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"Ambos ataques registran alta tasa de conversión ({lh} xG {home} vs {la} xG {away}). El modelo proyecta goles en ambas porterías sin exponerse al 1X2."
             num_selecciones = 1
             tipo_mercado_code = "BTTS"
-            tipster_model_name = "Ted Knutson (StatsBomb) • Calidad de Tiro & BTTS"
-            stat_projection_label = f"BTTS Proy: {conf_val}% ({suma_xg} xG)"
-            safety_margin_label = f"Ambos promedian >1.25 xG"
+            tipster_model_name = "Motor PredicXion IA • Gol en Ambas Áreas"
+            stat_projection_label = f"Ambos anotan: {conf_val}% ({suma_xg} xG)"
+            safety_margin_label = f"Ambos equipos superan 1.25 goles esperados ({lh} y {la} xG)"
 
         # Caso E: GOLES (Más de 2.5 goles / Más de 1.5 goles / Menos de 3.5 goles)
         elif lh >= 1.22 and la >= 1.20 and suma_xg >= 2.92 and pGoles["over"] >= 57.0:
@@ -11931,9 +11931,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"El techo ofensivo proyecta {suma_xg} goles esperados ({lh} vs {la} xG). Ritmo abierto de transiciones que respalda superar los 2.5 goles."
             num_selecciones = 1
             tipo_mercado_code = "GOALS"
-            tipster_model_name = "Ted Knutson (StatsBomb) • Alto Volumen Ofensivo"
-            stat_projection_label = f"Proy. goles: {suma_xg} xG"
-            safety_margin_label = f"+{round(suma_xg - 2.5, 2)} xG sobre línea 2.5"
+            tipster_model_name = "Motor PredicXion IA • Alto Volumen Ofensivo"
+            stat_projection_label = f"Proyección: {suma_xg} goles esp."
+            safety_margin_label = f"Se esperan {suma_xg} goles (supera por +{round(suma_xg - 2.5, 2)} la línea de 2.5)"
 
         elif es_duelo_rocoso and suma_xg <= 2.18:
             conf_val = int(round(min(88.0, max(73.0, prob_under_35_pct))))
@@ -11942,9 +11942,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"La proyección total es baja ({suma_xg} xG combinados). Dos bloques defensivos compactos donde el contexto táctico no justifica una línea alta de goles."
             num_selecciones = 1
             tipo_mercado_code = "GOALS"
-            tipster_model_name = "Matthew Benham (Smartodds) • Matriz Dixon-Coles"
-            stat_projection_label = f"Proy. goles: {suma_xg} xG"
-            safety_margin_label = f"+{round(3.5 - suma_xg, 2)} goles bajo techo"
+            tipster_model_name = "Motor PredicXion IA • Control Defensivo"
+            stat_projection_label = f"Proyección: {suma_xg} goles esp."
+            safety_margin_label = f"Se esperan {suma_xg} goles ({round(3.5 - suma_xg, 2)} debajo del tope de 3.5)"
 
         # Caso F: DOBLE OPORTUNIDAD + MÁS DE 1.5 GOLES (2 selecciones máx.) cuando hay ventaja local/visitante y piso de goles
         elif p_do_fav >= 74.0 and pGoles15["over"] >= 75.0 and diferencia_xg >= 0.35 and (estilo_partido in (1, 2, 4)):
@@ -11954,11 +11954,11 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"{fav_team} es más estable en el cruce estadístico ({fav_xg} vs {opp_xg} xG) y el piso de goles ({suma_xg} xG) acompaña. Combinada de 2 selecciones con cobertura de empate."
             num_selecciones = 2
             tipo_mercado_code = "WINNER"
-            tipster_model_name = "Pinnacle Sharp & ClubElo • Doble Oportunidad + Piso xG"
+            tipster_model_name = "Motor PredicXion IA • Doble Oportunidad + Goles"
             stat_projection_label = f"Estabilidad {do_code_fav}: {p_do_fav}%"
-            safety_margin_label = "2 Selecciones • Empate cubierto"
+            safety_margin_label = f"Cubre victoria o empate ({p_do_fav}%) con {suma_xg} goles esp."
 
-        # Caso G: MÁS DE 1.5 GOLES (Piso firme estilo Oddster #2: "The goal floor looks steady. Over 1.5 follows the projection without forcing 2.5.")
+        # Caso G: MÁS DE 1.5 GOLES
         elif suma_xg >= 2.42 and pGoles15["over"] >= 75.0 and (estilo_partido in (0, 3, 5) or fav_is_away):
             conf_val = int(round(min(87.0, max(70.0, pGoles15["over"]))))
             mercado_sugerido = "Más de 1.5 goles"
@@ -11966,11 +11966,11 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"El piso de goles luce estable ({suma_xg} xG proyectados). Más de 1.5 goles sigue la proyección matemática sin forzar la línea de 2.5."
             num_selecciones = 1
             tipo_mercado_code = "GOALS"
-            tipster_model_name = "Oddster Signal Engine • Piso de Goles Seguro"
-            stat_projection_label = f"Proy. goles: {suma_xg} xG"
-            safety_margin_label = f"+{round(suma_xg - 1.5, 2)} xG sobre piso 1.5"
+            tipster_model_name = "Motor PredicXion IA • Piso de Goles Seguro"
+            stat_projection_label = f"Proyección: {suma_xg} goles esp."
+            safety_margin_label = f"Se esperan {suma_xg} goles (supera por +{round(suma_xg - 1.5, 2)} la línea de 1.5)"
 
-        # Caso H: DOBLE OPORTUNIDAD DIRECTA (1 selección — Estilo Oddster #3: "Frosinone wins or draws")
+        # Caso H: DOBLE OPORTUNIDAD DIRECTA
         else:
             fav_do = home if p1X >= pX2 else away
             do_code = '1X' if p1X >= pX2 else 'X2'
@@ -11980,9 +11980,9 @@ class SportsAnalyticsEngine:
             justificacion_quant = f"{fav_do} luce más estable en el cruce estadístico ({lh} vs {la} xG). La doble oportunidad ({do_code}) evita forzar una victoria directa."
             num_selecciones = 1
             tipo_mercado_code = "WINNER"
-            tipster_model_name = "Oddster Signal Engine • Cobertura de Varianza"
+            tipster_model_name = "Motor PredicXion IA • Cobertura de Empate"
             stat_projection_label = f"Señal {do_code}: {conf_val}%"
-            safety_margin_label = "1 Selección • Empate protegido"
+            safety_margin_label = f"Cubre victoria de {fav_do} o empate ({conf_val}% prob.)"
 
         cuota_calibrada = cls._calcular_cuota_rotativa_calibrada(conf_val, num_selecciones, match_hash, tipo_mercado_code)
         signal_hash = "ODD-" + hashlib.sha256(f"oddster_lock_{fecha_partido}_{home}_{away}_{mercado_sugerido}".encode("utf-8")).hexdigest()[:8].upper()
@@ -12165,50 +12165,54 @@ class SportsAnalyticsEngine:
 
 
 def _extraer_consenso_5_modelos(home: str, away: str, lh: float, la: float, corners_est: float, tarjetas_esp: float, p1X: float, pX2: float, pGoles15_over: float, pBtts_yes: float, cuota_cal: float, safety_margin: str, conf_val: int) -> list:
-    """Extrae las métricas específicas de cada uno de los 5 Modelos Cuantitativos Mundiales para un partido."""
+    """Extrae los 5 indicadores de cálculo del motor con explicación clara en español (sin nombres de terceros)."""
     suma_xg = round(lh + la, 2)
     edge_ev = round(max(4.2, min(14.8, (conf_val / 100.0 * cuota_cal - 1.0) * 100.0 + 6.5)), 1)
-    fav_do_label = f"1X: {p1X}%" if p1X >= pX2 else f"X2: {pX2}%"
+    fav_do_label = f"1X ({p1X}%)" if p1X >= pX2 else f"X2 ({pX2}%)"
+    explicacion_margen = safety_margin or f"Se esperan {suma_xg} goles (supera por +{round(max(0.4, suma_xg - 1.5), 2)} la línea de 1.5)"
+    # Si viene un texto corto antiguo como '+0.9 sobre línea', convertirlo en explicación clara
+    if "sobre línea" in explicacion_margen and "Se esperan" not in explicacion_margen and "Promedian" not in explicacion_margen:
+        explicacion_margen = f"Se esperan {suma_xg} goles ({explicacion_margen} pedida)"
     return [
         {
-            "id": "oddster",
-            "nombre": "1. Oddster Engine",
-            "autor": "Piso/Techo Estadístico",
-            "metrica": safety_margin or f"Colchón +{round(max(0.4, suma_xg - 1.5), 2)} xG",
+            "id": "margen_linea",
+            "nombre": "1. Margen de Línea",
+            "autor": "Colchón Estadístico",
+            "metrica": explicacion_margen,
             "estado": "VERDE",
-            "confianza": f"{conf_val}%"
+            "confianza": f"Confianza: {conf_val}%"
         },
         {
-            "id": "statsbomb",
-            "nombre": "2. StatsBomb xG",
-            "autor": "Ted Knutson Model",
-            "metrica": f"xG: {lh:.2f} vs {la:.2f} ({suma_xg} tot)",
+            "id": "calculo_xg",
+            "nombre": "2. Cálculo xG de Goles",
+            "autor": "Proyección Ofensiva",
+            "metrica": f"Local {lh:.2f} xG vs Visita {la:.2f} xG (Total: {suma_xg} goles)",
             "estado": "VERDE",
-            "confianza": f"{min(94, conf_val + 2)}%"
+            "confianza": f"Efectividad: {min(94, conf_val + 2)}%"
         },
         {
-            "id": "smartodds",
-            "nombre": "3. Smartodds",
-            "autor": "Benham Dixon-Coles",
-            "metrica": f"+1.5G: {round(pGoles15_over, 1)}% · Córners: {corners_est:.1f}",
+            "id": "calculo_poisson",
+            "nombre": "3. Cálculo Poisson",
+            "autor": "Piso de Goles y Córners",
+            "metrica": f"Más de 1.5 goles: {round(pGoles15_over, 1)}% · Córners prom: {corners_est:.1f}",
             "estado": "VERDE",
-            "confianza": f"{max(74, conf_val - 1)}%"
+            "confianza": f"Probabilidad: {max(74, conf_val - 1)}%"
         },
         {
-            "id": "starlizard",
-            "nombre": "4. Starlizard +EV",
-            "autor": "Tony Bloom Quant",
-            "metrica": f"Cuota @{cuota_cal:.2f} (+{edge_ev}% EV)",
+            "id": "valor_cuota",
+            "nombre": "4. Valor de Cuota (+EV)",
+            "autor": "Rentabilidad Matemática",
+            "metrica": f"Cuota @{cuota_cal:.2f} (Ventaja +{edge_ev}% sobre la casa)",
             "estado": "VERDE",
-            "confianza": f"+{edge_ev}% EV"
+            "confianza": f"Valor +{edge_ev}% EV"
         },
         {
-            "id": "pinnacle",
-            "nombre": "5. Pinnacle Sharp",
-            "autor": "Línea Cierre & Elo",
-            "metrica": f"{fav_do_label} · Tarj: {tarjetas_esp:.1f}",
+            "id": "balance_promedio",
+            "nombre": "5. Balance y Promedio",
+            "autor": "Estabilidad del Partido",
+            "metrica": f"Doble oport. {fav_do_label} · Tarjetas prom: {tarjetas_esp:.1f}",
             "estado": "VERDE",
-            "confianza": "Línea Firme"
+            "confianza": "Tendencia Firme ✓"
         }
     ]
 
@@ -12312,10 +12316,10 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
                 "confidence_pct": conf_v,
                 "cuota_justa": float(h.get("cuota", 1.55)),
                 "cuota": str(h.get("cuota", "1.55")),
-                "justificacion": h.get("justificacion") or "Señal estadística validada por el motor Oddster y consenso de tipsters.",
-                "tipster_model": h.get("tipster_model") or "Oddster Signal Engine • Señal Verificada",
+                "justificacion": h.get("justificacion") or "Señal estadística validada por el motor de predicción.",
+                "tipster_model": "Motor PredicXion IA • Señal Verificada",
                 "stat_projection_label": h.get("stat_projection_label") or "Línea estadística verificada",
-                "safety_margin": h.get("safety_margin") or f"{num_s} Selección(es) • Margen positivo",
+                "safety_margin": h.get("safety_margin") or f"Se esperan {round(float(h.get('xg_local', 1.58)) + float(h.get('xg_visita', 1.12)), 2)} goles en el partido",
                 "signal_hash": sig_hash,
                 "xg_local": h.get("xg_local", 1.55),
                 "xg_visita": h.get("xg_visita", 1.15),
@@ -12365,7 +12369,7 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
             "cuota_justa": odd_val,
             "cuota": f"{odd_val:.2f}",
             "justificacion": p_princ.get("justificacion", "Proyección cuantitativa fundamentada en piso estadístico xG."),
-            "tipster_model": p_princ.get("tipster_model", "Oddster Signal Engine"),
+            "tipster_model": p_princ.get("tipster_model", "Motor PredicXion IA"),
             "stat_projection_label": p_princ.get("stat_projection_label", "Proyección verificada"),
             "safety_margin": p_princ.get("safety_margin", "Margen positivo"),
             "signal_hash": p_princ.get("signal_hash", "ODD-VERIFIED"),
@@ -12521,8 +12525,8 @@ NATIONS_LEAGUE_FIXTURES = build_all_unl_fixtures()
 
 _CURRENT_ACTIVE_WINDOW = {
     "start_date": os.getenv("CALENDAR_WINDOW_START", "2026-10-12"),
-    "end_date": os.getenv("CALENDAR_WINDOW_END", "2026-11-30"),
-    "fase_nombre": "Fase 1 (12 Octubre - 30 Noviembre 2026)"
+    "end_date": os.getenv("CALENDAR_WINDOW_END", "2026-12-31"),
+    "fase_nombre": "Ventana Activa: Octubre + Bimestre 01 Nov al 31 Dic 2026"
 }
 
 OFFICIAL_ACTIVE_MATCHES_RAW = [
@@ -13064,6 +13068,235 @@ OFFICIAL_ACTIVE_MATCHES_RAW = [
     ("sa-2026-j13-cag-ac _1134", "Cagliari", "AC Milan", "2026-11-30T14:45:00Z", "Jornada 13", "Serie A", "SA"),
     ("ppl-2026-j12-ben-fam_1673", "Benfica", "Famalicão", "2026-11-30T15:15:00Z", "Jornada 12", "Primeira Liga", "PPL"),
     ("ppl-2026-j12-cas-spo_1674", "Casa Pia", "Sporting Braga", "2026-11-30T15:15:00Z", "Jornada 12", "Primeira Liga", "PPL"),
+    ("pl-2026-j13-ast-eve_542", "Aston Villa", "Everton", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-bou-bri_543", "Bournemouth", "Brighton", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-bre-ars_544", "Brentford", "Arsenal", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-che-cry_545", "Chelsea", "Crystal Palace", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-cov-ips_546", "Coventry", "Ipswich", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-hul-not_547", "Hull", "Nottingham Forest", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-liv-sun_548", "Liverpool", "Sunderland", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-man-lee_549", "Manchester City", "Leeds United", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-new-man_550", "Newcastle", "Manchester United", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("pl-2026-j13-tot-ful_551", "Tottenham", "Fulham", "2026-12-02T15:00:00Z", "Jornada 13", "Premier League", "PL"),
+    ("bsa-2026-j38-atl-são_1947", "Atlético Paranaense", "São Paulo", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-bah-atl_1948", "Bahia", "Atlético Mineiro", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-cru-int_1950", "Cruzeiro", "Internacional", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-fla-cha_1951", "Flamengo", "Chapecoense", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-gre-mir_1952", "Gremio", "Mirassol", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-pal-cor_1953", "Palmeiras", "Coritiba", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-red-flu_1949", "Red Bull Bragantino", "Fluminense", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-rem-cor_1954", "Remo", "Corinthians", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-san-bot_1955", "Santos", "Botafogo", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j38-vas-vit_1956", "Vasco", "Vitória BA", "2026-12-02T16:00:00Z", "Jornada 38", "Campeonato Brasileiro Série A", "BSA"),
+    ("sa-2026-j14-bol-rom_1135", "Bolonia", "Roma", "2026-12-04T14:45:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-mon-com_1136", "Monza", "Como", "2026-12-05T09:00:00Z", "Jornada 14", "Serie A", "SA"),
+    ("bl1-2026-j12-aug-col_856", "Augsburgo", "Colonia", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-bay-bor_857", "Bayer Leverkusen", "Borussia M'gladbach", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-bay-pad_858", "Bayern Múnich", "Paderborn", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-ein-wer_859", "Eintracht Frankfurt", "Werder Bremen", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-elv-stu_860", "Elversberg", "Stuttgart", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-fri-hof_861", "Friburgo", "Hoffenheim", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-rb -mai_862", "RB Leipzig", "Mainz", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-sch-bor_863", "Schalke", "Borussia Dortmund", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("bl1-2026-j12-uni-ham_864", "Union Berlin", "Hamburgo", "2026-12-05T09:30:00Z", "Jornada 12", "Bundesliga", "BL1"),
+    ("pl-2026-j14-ast-cry_552", "Aston Villa", "Crystal Palace", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-bou-hul_553", "Bournemouth", "Hull", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-bre-man_554", "Brentford", "Manchester City", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-che-liv_555", "Chelsea", "Liverpool", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-eve-ful_556", "Everton", "Fulham", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-lee-ips_557", "Leeds United", "Ipswich", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-man-cov_558", "Manchester United", "Coventry", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-new-sun_559", "Newcastle", "Sunderland", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-not-bri_560", "Nottingham Forest", "Brighton", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("pl-2026-j14-tot-ars_561", "Tottenham", "Arsenal", "2026-12-05T10:00:00Z", "Jornada 14", "Premier League", "PL"),
+    ("fl1-2026-j13-est-lor_1439", "Estrasburgo", "Lorient", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-len-le _1440", "Lens", "Le Havre", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-lil-aux_1441", "Lille", "Auxerre", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-mar-niz_1442", "Marsella", "Niza", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-món-ang_1443", "Mónaco", "Angers", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-par-le _1444", "París FC", "Le Mans", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-ren-bre_1445", "Rennes", "Brest", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-tou-psg_1446", "Toulouse", "PSG", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("fl1-2026-j13-tro-lyo_1447", "Troyes", "Lyon", "2026-12-05T11:00:00Z", "Jornada 13", "Ligue 1", "FL1"),
+    ("sa-2026-j14-fro-int_1137", "Frosinone", "Inter", "2026-12-05T12:00:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-náp-lec_1138", "Nápoles", "Lecce", "2026-12-05T14:45:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-gen-tor_1139", "Genoa", "Torino", "2026-12-06T06:30:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-laz-ata_1140", "Lazio", "Atalanta", "2026-12-06T09:00:00Z", "Jornada 14", "Serie A", "SA"),
+    ("pd-2026-j15-ala-esp_241", "Alavés", "Espanyol", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-ath-rea_242", "Athletic Club", "Real Madrid", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-atl-rea_243", "Atlético de Madrid", "Real Betis", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-bar-cel_244", "Barcelona", "Celta de Vigo", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-get-val_245", "Getafe", "Valencia", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-osa-elc_246", "Osasuna", "Elche", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-rac-dep_247", "Racing de Santander", "Deportivo de La Coruña", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-ray-lev_248", "Rayo Vallecano", "Levante", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-sev-mál_249", "Sevilla", "Málaga CF", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j15-vil-rea_250", "Villarreal", "Real Sociedad", "2026-12-06T11:00:00Z", "Jornada 15", "LaLiga EA Sports", "PD"),
+    ("ppl-2026-j13-alv-mor_1675", "Alverca", "Moreirense", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-est-vit_1676", "Estoril", "Vitória de Guimarães", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-est-gil_1677", "Estrela", "Gil Vicente", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-fam-aca_1678", "Famalicão", "Academico Viseu", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-nac-ben_1679", "Nacional", "Benfica", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-rio-cas_1680", "Rio Ave", "Casa Pia", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-san-por_1681", "Santa Clara", "Porto", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-spo-aro_1682", "Sporting Braga", "Arouca", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("ppl-2026-j13-spo-mar_1683", "Sporting CP", "Marítimo", "2026-12-06T11:00:00Z", "Jornada 13", "Primeira Liga", "PPL"),
+    ("sa-2026-j14-juv-udi_1141", "Juventus", "Udinese", "2026-12-06T12:00:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-ac -par_1142", "AC Milan", "Parma", "2026-12-06T14:45:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-ven-sas_1143", "Venezia", "Sassuolo", "2026-12-07T12:30:00Z", "Jornada 14", "Serie A", "SA"),
+    ("sa-2026-j14-fio-cag_1144", "Fiorentina", "Cagliari", "2026-12-07T14:45:00Z", "Jornada 14", "Serie A", "SA"),
+    ("ucl-2026-j6-vik-fey_125", "Viking", "Feyenoord", "2026-12-08T12:45:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-vil-sab_126", "Villarreal", "Sabah Baku", "2026-12-08T12:45:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-aek-gal_127", "AEK", "Galatasaray", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-ast-psg_128", "Aston Villa", "PSG", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-bar-man_129", "Barcelona", "Manchester City", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-bay-sla_130", "Bayern Múnich", "Slavia Praga", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-man-rb _131", "Manchester United", "RB Leipzig", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-náp-clu_132", "Nápoles", "Club Brujas", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-rom-spo_133", "Roma", "Sporting CP", "2026-12-08T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-rea-com_134", "Real Betis", "Como", "2026-12-09T12:45:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-slo-sha_135", "Slovan Bratislava", "Shakhtar", "2026-12-09T12:45:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-ars-rea_136", "Arsenal", "Real Madrid", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-bor-int_137", "Borussia Dortmund", "Inter", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-las-fen_138", "LASK", "Fenerbahçe", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-len-bod_139", "Lens", "Bodo/Glimt", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-liv-por_140", "Liverpool", "Porto", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-psv-atl_141", "PSV", "Atlético de Madrid", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("ucl-2026-j6-stu-lil_142", "Stuttgart", "Lille", "2026-12-09T15:00:00Z", "Jornada 6", "UEFA Champions League", "UCL"),
+    ("sa-2026-j15-udi-fro_1145", "Udinese", "Frosinone", "2026-12-11T14:45:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j15-cag-ven_1146", "Cagliari", "Venezia", "2026-12-12T09:00:00Z", "Jornada 15", "Serie A", "SA"),
+    ("bl1-2026-j13-bor-aug_865", "Borussia Dortmund", "Augsburgo", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-bor-ein_866", "Borussia M'gladbach", "Eintracht Frankfurt", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-col-rb _867", "Colonia", "RB Leipzig", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-ham-sch_868", "Hamburgo", "Schalke", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-hof-bay_869", "Hoffenheim", "Bayern Múnich", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-mai-fri_870", "Mainz", "Friburgo", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-pad-elv_871", "Paderborn", "Elversberg", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-stu-uni_872", "Stuttgart", "Union Berlin", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("bl1-2026-j13-wer-bay_873", "Werder Bremen", "Bayer Leverkusen", "2026-12-12T09:30:00Z", "Jornada 13", "Bundesliga", "BL1"),
+    ("pl-2026-j15-ars-bou_562", "Arsenal", "Bournemouth", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-bri-eve_563", "Brighton", "Everton", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-cov-ast_564", "Coventry", "Aston Villa", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-cry-man_565", "Crystal Palace", "Manchester United", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-ful-bre_566", "Fulham", "Brentford", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-hul-tot_567", "Hull", "Tottenham", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-ips-new_568", "Ipswich", "Newcastle", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-liv-lee_569", "Liverpool", "Leeds United", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-man-che_570", "Manchester City", "Chelsea", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("pl-2026-j15-sun-not_571", "Sunderland", "Nottingham Forest", "2026-12-12T10:00:00Z", "Jornada 15", "Premier League", "PL"),
+    ("fl1-2026-j14-ang-est_1448", "Angers", "Estrasburgo", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-aux-tou_1449", "Auxerre", "Toulouse", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-bre-tro_1450", "Brest", "Troyes", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-le -le _1451", "Le Havre", "Le Mans", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-lor-lil_1452", "Lorient", "Lille", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-niz-len_1453", "Niza", "Lens", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-psg-par_1454", "PSG", "París FC", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("fl1-2026-j14-ren-món_1455", "Rennes", "Mónaco", "2026-12-12T11:00:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("sa-2026-j15-lec-sas_1147", "Lecce", "Sassuolo", "2026-12-12T12:00:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j15-com-bol_1148", "Como", "Bolonia", "2026-12-12T14:45:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j15-laz-rom_1149", "Lazio", "Roma", "2026-12-13T06:30:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j15-int-tor_1150", "Inter", "Torino", "2026-12-13T09:00:00Z", "Jornada 15", "Serie A", "SA"),
+    ("pd-2026-j16-atl-val_251", "Atlético de Madrid", "Valencia", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-dep-ath_252", "Deportivo de La Coruña", "Athletic Club", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-elc-sev_253", "Elche", "Sevilla", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-esp-cel_254", "Espanyol", "Celta de Vigo", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-lev-ala_255", "Levante", "Alavés", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-mál-bar_256", "Málaga CF", "Barcelona", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-rea-rac_257", "Real Betis", "Racing de Santander", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-rea-osa_258", "Real Madrid", "Osasuna", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-rea-get_259", "Real Sociedad", "Getafe", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j16-vil-ray_260", "Villarreal", "Rayo Vallecano", "2026-12-13T11:00:00Z", "Jornada 16", "LaLiga EA Sports", "PD"),
+    ("ppl-2026-j14-aca-aro_1684", "Academico Viseu", "Arouca", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-ben-spo_1685", "Benfica", "Sporting Braga", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-cas-nac_1686", "Casa Pia", "Nacional", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-est-san_1687", "Estoril", "Santa Clara", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-gil-spo_1688", "Gil Vicente", "Sporting CP", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-mar-rio_1689", "Marítimo", "Rio Ave", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-mor-fam_1690", "Moreirense", "Famalicão", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-por-est_1691", "Porto", "Estrela", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("ppl-2026-j14-vit-alv_1692", "Vitória de Guimarães", "Alverca", "2026-12-13T11:00:00Z", "Jornada 14", "Primeira Liga", "PPL"),
+    ("sa-2026-j15-par-fio_1151", "Parma", "Fiorentina", "2026-12-13T12:00:00Z", "Jornada 15", "Serie A", "SA"),
+    ("fl1-2026-j14-lyo-mar_1456", "Lyon", "Marsella", "2026-12-13T14:45:00Z", "Jornada 14", "Ligue 1", "FL1"),
+    ("sa-2026-j15-náp-ac _1152", "Nápoles", "AC Milan", "2026-12-13T14:45:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j15-ata-gen_1153", "Atalanta", "Genoa", "2026-12-14T12:30:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j15-juv-mon_1154", "Juventus", "Monza", "2026-12-14T14:45:00Z", "Jornada 15", "Serie A", "SA"),
+    ("sa-2026-j16-fro-laz_1155", "Frosinone", "Lazio", "2026-12-18T12:30:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-lec-int_1156", "Lecce", "Inter", "2026-12-18T14:45:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-sas-par_1157", "Sassuolo", "Parma", "2026-12-19T09:00:00Z", "Jornada 16", "Serie A", "SA"),
+    ("bl1-2026-j14-aug-pad_874", "Augsburgo", "Paderborn", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-bay-ein_875", "Bayer Leverkusen", "Eintracht Frankfurt", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-bay-wer_876", "Bayern Múnich", "Werder Bremen", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-elv-ham_877", "Elversberg", "Hamburgo", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-fri-stu_878", "Friburgo", "Stuttgart", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-mai-col_879", "Mainz", "Colonia", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-rb -bor_880", "RB Leipzig", "Borussia Dortmund", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-sch-bor_881", "Schalke", "Borussia M'gladbach", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("bl1-2026-j14-uni-hof_882", "Union Berlin", "Hoffenheim", "2026-12-19T09:30:00Z", "Jornada 14", "Bundesliga", "BL1"),
+    ("pl-2026-j16-ars-man_572", "Arsenal", "Manchester United", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-bou-cov_573", "Bournemouth", "Coventry", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-bre-new_574", "Brentford", "Newcastle", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-bri-ips_575", "Brighton", "Ipswich", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-che-ast_576", "Chelsea", "Aston Villa", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-lee-ful_577", "Leeds United", "Fulham", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-liv-tot_578", "Liverpool", "Tottenham", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-man-hul_579", "Manchester City", "Hull", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-not-eve_580", "Nottingham Forest", "Everton", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("pl-2026-j16-sun-cry_581", "Sunderland", "Crystal Palace", "2026-12-19T10:00:00Z", "Jornada 16", "Premier League", "PL"),
+    ("sa-2026-j16-ac -com_1158", "AC Milan", "Como", "2026-12-19T12:00:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-rom-juv_1159", "Roma", "Juventus", "2026-12-19T14:45:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-fio-bol_1160", "Fiorentina", "Bolonia", "2026-12-20T06:30:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-tor-cag_1161", "Torino", "Cagliari", "2026-12-20T09:00:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-ven-mon_1162", "Venezia", "Monza", "2026-12-20T09:00:00Z", "Jornada 16", "Serie A", "SA"),
+    ("pd-2026-j17-ala-elc_261", "Alavés", "Elche", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-ath-rea_262", "Athletic Club", "Real Betis", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-bar-rea_263", "Barcelona", "Real Sociedad", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-cel-atl_264", "Celta de Vigo", "Atlético de Madrid", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-dep-rea_265", "Deportivo de La Coruña", "Real Madrid", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-get-lev_266", "Getafe", "Levante", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-osa-vil_267", "Osasuna", "Villarreal", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-ray-mál_268", "Rayo Vallecano", "Málaga CF", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-sev-rac_269", "Sevilla", "Racing de Santander", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j17-val-esp_270", "Valencia", "Espanyol", "2026-12-20T11:00:00Z", "Jornada 17", "LaLiga EA Sports", "PD"),
+    ("ppl-2026-j15-alv-gil_1693", "Alverca", "Gil Vicente", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-aro-cas_1694", "Arouca", "Casa Pia", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-est-mar_1695", "Estrela", "Marítimo", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-fam-por_1696", "Famalicão", "Porto", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-nac-mor_1697", "Nacional", "Moreirense", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-rio-ben_1698", "Rio Ave", "Benfica", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-san-vit_1699", "Santa Clara", "Vitória de Guimarães", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-spo-aca_1700", "Sporting Braga", "Academico Viseu", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("ppl-2026-j15-spo-est_1701", "Sporting CP", "Estoril", "2026-12-20T11:00:00Z", "Jornada 15", "Primeira Liga", "PPL"),
+    ("sa-2026-j16-gen-udi_1163", "Genoa", "Udinese", "2026-12-20T12:00:00Z", "Jornada 16", "Serie A", "SA"),
+    ("sa-2026-j16-ata-náp_1164", "Atalanta", "Nápoles", "2026-12-20T14:45:00Z", "Jornada 16", "Serie A", "SA"),
+    ("pl-2026-j17-ast-lee_582", "Aston Villa", "Leeds United", "2026-12-26T07:30:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-eve-sun_583", "Everton", "Sunderland", "2026-12-26T10:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-ful-bri_584", "Fulham", "Brighton", "2026-12-26T10:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-ips-bre_585", "Ipswich", "Brentford", "2026-12-26T10:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-tot-bou_586", "Tottenham", "Bournemouth", "2026-12-26T10:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-hul-liv_587", "Hull", "Liverpool", "2026-12-26T12:30:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-new-man_588", "Newcastle", "Manchester City", "2026-12-26T15:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-cov-che_589", "Coventry", "Chelsea", "2026-12-27T09:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("ppl-2026-j16-ben-spo_1702", "Benfica", "Sporting CP", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-cas-fam_1703", "Casa Pia", "Famalicão", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-est-alv_1704", "Estoril", "Alverca", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-gil-aro_1705", "Gil Vicente", "Arouca", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-mar-spo_1706", "Marítimo", "Sporting Braga", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-mor-aca_1707", "Moreirense", "Academico Viseu", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-por-nac_1708", "Porto", "Nacional", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-san-est_1709", "Santa Clara", "Estrela", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("ppl-2026-j16-vit-rio_1710", "Vitória de Guimarães", "Rio Ave", "2026-12-27T11:00:00Z", "Jornada 16", "Primeira Liga", "PPL"),
+    ("pl-2026-j17-man-not_590", "Manchester United", "Nottingham Forest", "2026-12-27T11:30:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j17-cry-ars_591", "Crystal Palace", "Arsenal", "2026-12-27T14:00:00Z", "Jornada 17", "Premier League", "PL"),
+    ("pl-2026-j18-hul-lee_592", "Hull", "Leeds United", "2026-12-29T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-tot-bri_593", "Tottenham", "Brighton", "2026-12-29T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-eve-man_594", "Everton", "Manchester City", "2026-12-29T15:15:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-cov-bre_595", "Coventry", "Brentford", "2026-12-30T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-cry-bou_596", "Crystal Palace", "Bournemouth", "2026-12-30T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-ful-ars_597", "Fulham", "Arsenal", "2026-12-30T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-man-sun_598", "Manchester United", "Sunderland", "2026-12-30T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-new-not_599", "Newcastle", "Nottingham Forest", "2026-12-30T14:30:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-ast-liv_600", "Aston Villa", "Liverpool", "2026-12-30T15:15:00Z", "Jornada 18", "Premier League", "PL"),
+    ("pl-2026-j18-ips-che_601", "Ipswich", "Chelsea", "2026-12-30T15:15:00Z", "Jornada 18", "Premier League", "PL"),
 ]
 
 CALENDAR_MASTER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "calendario_completo_temporada_2026_2027.json")
@@ -13079,29 +13312,38 @@ def get_active_calendar_window():
         return env_start, env_end
 
     op_date = get_current_operational_date()
-    if op_date <= "2026-11-30":
+    if op_date < "2026-11-01":
+        # En los días finales de Octubre mantiene Octubre activo y ya deja preparado el bloque 1 Nov - 31 Dic
         _CURRENT_ACTIVE_WINDOW = {
             "start_date": "2026-10-12",
-            "end_date": "2026-11-30",
-            "fase_nombre": "Fase 1: 12 Octubre a 30 Noviembre 2026 (538 partidos)"
+            "end_date": "2026-10-31",
+            "fase_nombre": "Octubre 2026 (Rotación automática el 01 Nov al 31 Dic 2026)",
+            "proxima_ventana": "01 Nov 2026 al 31 Dic 2026"
         }
-    elif op_date <= "2027-01-31":
+    elif op_date <= "2026-12-31":
+        # Rotación automática exacta el 1 de Noviembre hasta el 31 de Diciembre (2 meses completos)
         _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2026-12-01",
-            "end_date": "2027-01-31",
-            "fase_nombre": "Fase 2: 01 Diciembre 2026 a 31 Enero 2027 (542 partidos)"
+            "start_date": "2026-11-01",
+            "end_date": "2026-12-31",
+            "fase_nombre": "Ventana Bimestral Activa: 01 Noviembre al 31 Diciembre 2026 (544 partidos)"
         }
-    elif op_date <= "2027-03-31":
+    elif op_date <= "2027-02-28":
         _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2027-02-01",
-            "end_date": "2027-03-31",
-            "fase_nombre": "Fase 3: 01 Febrero a 31 Marzo 2027 (408 partidos)"
+            "start_date": "2027-01-01",
+            "end_date": "2027-02-28",
+            "fase_nombre": "Ventana Bimestral Activa: 01 Enero al 28 Febrero 2027"
+        }
+    elif op_date <= "2027-04-30":
+        _CURRENT_ACTIVE_WINDOW = {
+            "start_date": "2027-03-01",
+            "end_date": "2027-04-30",
+            "fase_nombre": "Ventana Bimestral Activa: 01 Marzo al 30 Abril 2027"
         }
     else:
         _CURRENT_ACTIVE_WINDOW = {
-            "start_date": "2027-04-01",
+            "start_date": "2027-05-01",
             "end_date": "2027-05-31",
-            "fase_nombre": "Fase 4: 01 Abril a 31 Mayo 2027 (467 partidos)"
+            "fase_nombre": "Ventana Final: 01 Mayo al 31 Mayo 2027"
         }
 
     return _CURRENT_ACTIVE_WINDOW["start_date"], _CURRENT_ACTIVE_WINDOW["end_date"]
@@ -13128,6 +13370,8 @@ def build_multimonth_calendar():
 
     if not calendar:
         for mid, loc, vis, dt, jor, liga, cod in OFFICIAL_ACTIVE_MATCHES_RAW:
+            if not (start_date <= dt[:10] <= end_date):
+                continue
             calendar.append({
                 "id_partido": mid,
                 "local": loc,
@@ -15548,6 +15792,314 @@ _AVISO_ILUSTRATIVO = {
 }
 
 
+
+# ======================================================================================
+# GENERADOR DE CAPTURA VISUAL (PNG) DEL TOP 5 LIQUIDADO Y AUTOMATIZACIÓN DE MANTENIMIENTO
+# ======================================================================================
+_ultimo_envio_resultados_top5 = set()
+_auto_resultados_lock = threading.Lock()
+
+def _ya_enviado_resultados_top5_fecha(target_date: str) -> bool:
+    if target_date in _ultimo_envio_resultados_top5:
+        return True
+    res_file = f"/tmp/predicxion_last_tg_res_{target_date}.txt"
+    try:
+        if os.path.exists(res_file):
+            _ultimo_envio_resultados_top5.add(target_date)
+            return True
+    except Exception:
+        pass
+    try:
+        if "db" in globals() and db:
+            doc = db.collection("telegram_auto_resultados").document(target_date).get()
+            if doc.exists and (doc.to_dict() or {}).get("enviado"):
+                _ultimo_envio_resultados_top5.add(target_date)
+                return True
+    except Exception:
+        pass
+    return False
+
+def _marcar_enviado_resultados_top5_fecha(target_date: str, motivo: str = "AUTO_5_DE_5_FINALIZADOS"):
+    _ultimo_envio_resultados_top5.add(target_date)
+    res_file = f"/tmp/predicxion_last_tg_res_{target_date}.txt"
+    try:
+        with open(res_file, "w", encoding="utf-8") as f:
+            f.write(target_date)
+    except Exception:
+        pass
+    try:
+        if "db" in globals() and db:
+            db.collection("telegram_auto_resultados").document(target_date).set({
+                "fecha": target_date,
+                "enviado": True,
+                "motivo": motivo,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }, merge=True)
+    except Exception:
+        pass
+
+def generar_imagen_resultados_top5(fecha_str: str, picks_liquidados: list) -> bytes:
+    """
+    Renderiza en memoria una imagen PNG de alta resolución (1200x1180) con el diseño
+    oficial de PredicXion IA mostrando los 5 partidos del Top 5 una vez finalizados,
+    con su marcador oficial y su sello WIN / LOSS.
+    """
+    try:
+        import io
+        from PIL import Image, ImageDraw, ImageFont
+
+        W, H = 1200, 1180
+        img = Image.new("RGB", (W, H), (8, 16, 14))
+        draw = ImageDraw.Draw(img)
+
+        def _load_font(bold=False, size=22, mono=False):
+            candidates = []
+            if mono:
+                candidates = [
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+                ]
+            elif bold:
+                candidates = [
+                    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                ]
+            else:
+                candidates = [
+                    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                ]
+            for c in candidates:
+                if os.path.exists(c):
+                    try:
+                        return ImageFont.truetype(c, size)
+                    except Exception:
+                        pass
+            return ImageFont.load_default()
+
+        f_title = _load_font(bold=True, size=31)
+        f_sub = _load_font(bold=False, size=19)
+        f_badge = _load_font(bold=True, size=18, mono=True)
+        f_rank = _load_font(bold=True, size=28)
+        f_team = _load_font(bold=True, size=23)
+        f_liga = _load_font(bold=False, size=16)
+        f_mkt = _load_font(bold=True, size=24)
+        f_just = _load_font(bold=False, size=16)
+        f_score = _load_font(bold=True, size=30)
+        f_win = _load_font(bold=True, size=22)
+
+        # Fondo y marco principal
+        draw.rounded_rectangle([24, 24, W - 24, H - 24], radius=28, fill=(10, 22, 19), outline=(16, 185, 129), width=2)
+
+        # Encabezado
+        partes_f = fecha_str.split("-")
+        fecha_bonita = f"{partes_f[2]}.{partes_f[1]}.{partes_f[0]}" if len(partes_f) == 3 else fecha_str
+        ganadas = sum(1 for p in picks_liquidados if p.get("estado") == "GANADA")
+        perdidas = sum(1 for p in picks_liquidados if p.get("estado") == "PERDIDA")
+        total_p = max(1, ganadas + perdidas)
+        pct_acierto = round((ganadas / total_p) * 100)
+
+        draw.text((60, 52), "PredicXion IA • Top 5 Resultados Oficiales", font=f_title, fill=(255, 255, 255))
+        draw.text((60, 102), f"Jornada Concluida: {fecha_bonita}  •  Liquidación Oficial Verificada", font=f_sub, fill=(148, 163, 184))
+
+        # Badge de efectividad a la derecha
+        draw.rounded_rectangle([W - 410, 52, W - 54, 118], radius=16, fill=(6, 48, 35), outline=(0, 230, 118), width=2)
+        draw.text((W - 390, 73), f"{pct_acierto}% ACIERTO | {ganadas} WIN / {perdidas} LOSS", font=f_badge, fill=(0, 230, 118))
+
+        draw.line([(56, 145), (W - 56, 145)], fill=(20, 60, 48), width=2)
+
+        # Dibujar las 5 tarjetas horizontales
+        y_top = 168
+        card_h = 172
+        gap = 18
+
+        for idx, p in enumerate(picks_liquidados[:5], 1):
+            es_win = (p.get("estado") == "GANADA")
+            b_color = (0, 230, 118) if es_win else (244, 63, 94)
+            bg_card = (11, 29, 23) if es_win else (28, 14, 20)
+            draw.rounded_rectangle([54, y_top, W - 54, y_top + card_h], radius=20, fill=bg_card, outline=b_color, width=2)
+
+            # Caja #Rank
+            rank_bg = (15, 45, 34) if es_win else (45, 18, 26)
+            draw.rounded_rectangle([74, y_top + 24, 142, y_top + card_h - 24], radius=14, fill=rank_bg, outline=b_color, width=1)
+            draw.text((90, y_top + 68), f"#{idx}", font=f_rank, fill=b_color)
+
+            # Columna Equipos y Liga
+            liga_txt = str(p.get("liga") or "Fútbol Oficial")[:36]
+            partido_txt = str(p.get("partido") or f"{p.get('local', '')} vs {p.get('visitante', '')}")
+            if len(partido_txt) > 34:
+                partido_txt = partido_txt[:33] + "…"
+            draw.text((164, y_top + 28), liga_txt.upper(), font=f_liga, fill=(148, 163, 184))
+            draw.text((164, y_top + 56), partido_txt, font=f_team, fill=(255, 255, 255))
+
+            # Caja central de selección recomendada
+            sel_txt = str(p.get("seleccion") or p.get("mercado") or "Selección Oficial")
+            if len(sel_txt) > 42:
+                sel_txt = sel_txt[:41] + "…"
+            cuota_str = str(p.get("cuota") or "1.55")
+            draw.text((164, y_top + 96), f"Pronóstico: {sel_txt}", font=f_mkt, fill=(0, 230, 118) if es_win else (251, 113, 133))
+            draw.text((164, y_top + 130), f"Cuota Oficial @{cuota_str}  •  Verificado en Acta Oficial", font=f_just, fill=(203, 213, 225))
+
+            # Caja derecha WIN / LOSS + Marcador
+            rx1, ry1, rx2, ry2 = W - 315, y_top + 20, W - 74, y_top + card_h - 20
+            r_bg = (8, 42, 31) if es_win else (48, 16, 24)
+            draw.rounded_rectangle([rx1, ry1, rx2, ry2], radius=16, fill=r_bg, outline=b_color, width=2)
+
+            # Icono circular vectorial (check o equis) + etiqueta WIN / LOSS
+            cx, cy = rx1 + 32, ry1 + 29
+            draw.ellipse([cx - 12, cy - 12, cx + 12, cy + 12], fill=b_color)
+            if es_win:
+                draw.line([(cx - 6, cy + 1), (cx - 1, cy + 6), (cx + 7, cy - 5)], fill=(8, 16, 14), width=3)
+            else:
+                draw.line([(cx - 5, cy - 5), (cx + 5, cy + 5)], fill=(8, 16, 14), width=3)
+                draw.line([(cx - 5, cy + 5), (cx + 5, cy - 5)], fill=(8, 16, 14), width=3)
+            estado_lbl = "WIN (ACIERTO)" if es_win else "LOSS (FALLO)"
+            draw.text((rx1 + 52, ry1 + 15), estado_lbl, font=f_win, fill=b_color)
+
+            res_raw = str(p.get("resultado") or "Finalizado")
+            # Separar marcador y detalle si tiene paréntesis
+            if "(" in res_raw:
+                marc_main = res_raw.split("(")[0].strip()
+                det_sub = "(" + res_raw.split("(", 1)[1]
+            else:
+                marc_main = res_raw[:16]
+                det_sub = "Acta Oficial FT"
+
+            draw.text((rx1 + 26, ry1 + 52), marc_main, font=f_score, fill=(255, 255, 255))
+            draw.text((rx1 + 26, ry1 + 94), det_sub[:26], font=f_liga, fill=(203, 213, 225))
+
+            y_top += card_h + gap
+
+        # Pie de imagen
+        draw.text((60, H - 56), "predicxion-ia.onrender.com  •  Terminal Cuantitativa & Auditoría Transparente 24/7", font=f_sub, fill=(100, 116, 139))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
+    except Exception as exc:
+        logger.error("Error generando imagen PNG de resultados Top 5: %s", exc)
+        return b""
+
+def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados: list, force: bool = False, motivo: str = "AUTO_5_DE_5_FINALIZADOS"):
+    """
+    Envía automáticamente la captura visual (PNG) de los resultados del Top 5 a Telegram VIP
+    UNA VEZ que los 5 partidos del Top 5 han finalizado por completo.
+    """
+    if not picks_liquidados or len(picks_liquidados) < 5:
+        return False, "Aún no están los 5 partidos del Top 5."
+
+    finalizados = [p for p in picks_liquidados if p.get("estado") in ("GANADA", "PERDIDA")]
+    if not force and len(finalizados) < 5:
+        return False, f"Faltan partidos por finalizar ({len(finalizados)}/5 completados)."
+
+    with _auto_resultados_lock:
+        if not force and _ya_enviado_resultados_top5_fecha(target_date):
+            return False, f"Ya se envió la captura de resultados del Top 5 para {target_date}."
+
+        bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
+        channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
+        if "t.me/" in channel_id:
+            channel_id = "@" + channel_id.split("t.me/")[-1].replace("+", "").strip().rstrip("/")
+        elif channel_id and not channel_id.startswith("@") and not channel_id.startswith("-") and not channel_id.isdigit():
+            channel_id = "@" + channel_id
+
+        if not bot_token or not channel_id:
+            return False, "Faltan credenciales TELEGRAM_BOT_TOKEN o TELEGRAM_CHANNEL_ID."
+
+        ganadas = sum(1 for p in finalizados if p.get("estado") == "GANADA")
+        perdidas = sum(1 for p in finalizados if p.get("estado") == "PERDIDA")
+        pct = round((ganadas / max(1, len(finalizados))) * 100, 1)
+
+        caption_lines = [
+            f"📊 <b>RESULTADOS OFICIALES TOP 5 ({target_date})</b> 📊",
+            f"✅ <b>Aciertos:</b> {ganadas}  |  ❌ <b>Fallas:</b> {perdidas}  ({pct}% Efectividad)\n",
+        ]
+        for idx, h in enumerate(finalizados[:5], 1):
+            ico = "✅" if h.get("estado") == "GANADA" else "❌"
+            caption_lines.append(f"{ico} <b>#{idx} {h.get('partido')}:</b> {h.get('seleccion')} ➔ <i>{h.get('resultado')}</i>")
+        caption_lines.append("\n📲 <i>Historial verificado en: <a href='https://predicxion-ia.onrender.com'>predicxion-ia.onrender.com</a></i>")
+        caption_text = "\n".join(caption_lines)
+
+        png_bytes = generar_imagen_resultados_top5(target_date, finalizados)
+        try:
+            if png_bytes:
+                url_photo = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+                resp = requests.post(
+                    url_photo,
+                    data={"chat_id": channel_id, "caption": caption_text, "parse_mode": "HTML"},
+                    files={"photo": (f"top5_resultados_{target_date}.png", png_bytes, "image/png")},
+                    timeout=18
+                )
+                if resp.status_code == 200:
+                    _marcar_enviado_resultados_top5_fecha(target_date, motivo)
+                    logger.info("✓ Captura PNG de resultados Top 5 (%s) enviada automáticamente a Telegram VIP.", target_date)
+                    return True, f"Captura de resultados ({target_date}) enviada a Telegram VIP."
+
+            # Fallback en caso de que sendPhoto falle en la red
+            url_msg = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            resp_m = requests.post(url_msg, json={
+                "chat_id": channel_id,
+                "text": caption_text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True
+            }, timeout=12)
+            if resp_m.status_code == 200:
+                _marcar_enviado_resultados_top5_fecha(target_date, motivo)
+                return True, f"Resumen de resultados ({target_date}) enviado a Telegram VIP."
+            return False, f"Error Telegram API: {resp_m.text}"
+        except Exception as err:
+            logger.error("Error enviando resultados Top 5 a Telegram: %s", err)
+            return False, str(err)
+
+
+def _loop_mantenimiento_quincenal_y_calendario():
+    """
+    Automatiza los pilares 2 y 3 del Plan de Mantenimiento:
+    - Pilar 2 (Cada 15 días): Actualiza automáticamente los ratings y métricas de clubes (Football-Data CSV).
+    - Pilar 3 (Cada 2 meses, con cambio automático el 1 de Noviembre al 31 de Diciembre 2026):
+      Monitorea el cambio de fecha operativa y rota automáticamente la ventana activa del calendario.
+    """
+    global ALL_FIXTURES_POOL, _CARTELERA_MEMO_CACHE
+    time.sleep(20)
+    ultima_ventana_activa = get_active_calendar_window()
+    ultimo_update_ratings_ts = time.time()
+    QUINCE_DIAS_SEG = 15 * 24 * 3600
+
+    while True:
+        try:
+            # 1. Verificar rotación automática de ventana del calendario (ej. paso del 31 Oct al 1 Nov - 31 Dic)
+            nueva_ventana = get_active_calendar_window()
+            if nueva_ventana != ultima_ventana_activa:
+                ALL_FIXTURES_POOL = build_multimonth_calendar()
+                if "_CARTELERA_MEMO_CACHE" in globals() and isinstance(_CARTELERA_MEMO_CACHE, dict):
+                    _CARTELERA_MEMO_CACHE.clear()
+                logger.info("✓ Rotación automática de calendario ejecutada: Nueva ventana activa %s a %s (%d partidos)",
+                            nueva_ventana[0], nueva_ventana[1], len(ALL_FIXTURES_POOL))
+                ultima_ventana_activa = nueva_ventana
+
+            # 2. Verificar actualización quincenal (cada 15 días) de métricas y ratings de clubes
+            if (time.time() - ultimo_update_ratings_ts) >= QUINCE_DIAS_SEG:
+                logger.info("Ejecutando revisión quincenal automática de métricas y ratings de clubes...")
+                res_r = actualizar_ratings_reales()
+                ultimo_update_ratings_ts = time.time()
+                if "db" in globals() and db:
+                    try:
+                        db.collection("sistema_mantenimiento").document("ratings_quincenal").set({
+                            "ultima_actualizacion": datetime.now(timezone.utc).isoformat(),
+                            "equipos_actualizados": res_r.get("equipos_con_datos", 0),
+                            "partidos_procesados": res_r.get("partidos_usados", 0)
+                        }, merge=True)
+                    except Exception:
+                        pass
+        except Exception as e_maint:
+            logger.debug("Aviso en loop de mantenimiento automático: %s", e_maint)
+        time.sleep(1800)  # Revisa cada 30 minutos
+
+threading.Thread(target=_loop_mantenimiento_quincenal_y_calendario, daemon=True).start()
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     _ORIGENES = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "https://predicxion-ia.onrender.com").split(",") if o.strip()]
@@ -16052,7 +16604,8 @@ def create_app() -> Flask:
                 # Descartar permanentemente partidos anteriores a la fecha actual
                 if fecha_dia_solo < today_str:
                     continue
-                if fecha_dia_solo > _CURRENT_ACTIVE_WINDOW.get("end_date", "2026-11-30") if "_CURRENT_ACTIVE_WINDOW" in globals() else "2026-11-30":
+                _, active_end_date = get_active_calendar_window()
+                if fecha_dia_solo > active_end_date:
                     continue
 
                 div_name = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
@@ -16778,17 +17331,23 @@ def create_app() -> Flask:
         return resultados_auditados
 
     # Hilo demonio 24/7 que liquida automáticamente el Top 5 conforme acaban los partidos cada día
+    # y envía automáticamente la captura PNG de resultados a Telegram VIP cuando terminan los 5 partidos
     def _loop_auto_auditoria():
         time.sleep(15)
         while True:
             try:
                 hoy = get_current_operational_date()
                 ayer = (datetime.strptime(hoy, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-                _auditar_y_liquidar_fecha(ayer)
-                _auditar_y_liquidar_fecha(hoy)
+                res_ayer = _auditar_y_liquidar_fecha(ayer)
+                if len(res_ayer) == 5 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_ayer):
+                    ejecutar_envio_automatico_resultados_top5(ayer, res_ayer, force=False, motivo="AUTO_CIERRE_JORNADA")
+
+                res_hoy = _auditar_y_liquidar_fecha(hoy)
+                if len(res_hoy) == 5 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_hoy):
+                    ejecutar_envio_automatico_resultados_top5(hoy, res_hoy, force=False, motivo="AUTO_5_PARTIDOS_FINALIZADOS")
             except Exception as ex_aud:
                 logger.debug("Ciclo auto-auditoría: %s", ex_aud)
-            time.sleep(900)  # Revisa cada 15 minutos
+            time.sleep(300)  # Revisa cada 5 minutos para enviar resultados apenas terminen todos los partidos
 
     threading.Thread(target=_loop_auto_auditoria, daemon=True).start()
 
@@ -16943,14 +17502,34 @@ def create_app() -> Flask:
             logger.error("Error transmitiendo parlay: %s", err)
             return jsonify({"success": False, "error": str(err)}), 500
 
+    @app.route("/api/v1/top3/results-image", methods=["GET"])
+    def get_top3_results_image():
+        """Devuelve la captura visual (PNG) de los resultados del Top 5 de la jornada indicada."""
+        req_fecha = (request.args.get("fecha") or "").strip()
+        if not req_fecha:
+            audit_res = get_auditoria().get_json()
+            req_fecha = audit_res.get("fecha_auditada") or get_current_operational_date()
+        historial = _auditar_y_liquidar_fecha(req_fecha)
+        png_bytes = generar_imagen_resultados_top5(req_fecha, historial)
+        if not png_bytes:
+            return jsonify({"success": False, "error": "No se pudo generar la imagen de resultados."}), 500
+        return Response(png_bytes, mimetype="image/png")
+
     @app.route("/api/v1/vip/telegram-auditoria/broadcast", methods=["POST"])
     def broadcast_telegram_auditoria():
-        """Transmite el balance oficial de auditoría (ganadas y pérdidas) directamente al canal VIP de Telegram."""
+        """Transmite la captura visual (PNG) y balance oficial de resultados del Top 5 al canal VIP de Telegram."""
         if not _verificar_es_admin():
             return jsonify({
                 "success": False,
                 "error": "Acceso restringido: Esta acción es exclusiva para el administrador."
             }), 403
+        body_req = request.get_json(silent=True) or {}
+        audit_res = get_auditoria().get_json()
+        fecha_aud = body_req.get("fecha") or audit_res.get("fecha_auditada") or get_current_operational_date()
+        historial_aud = _auditar_y_liquidar_fecha(fecha_aud)
+        ok_send, msg_send = ejecutar_envio_automatico_resultados_top5(fecha_aud, historial_aud, force=True, motivo="MANUAL_ADMIN")
+        if ok_send:
+            return jsonify({"success": True, "mensaje": msg_send, "metricas": audit_res.get("metricas", {})}), 200
 
         bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
         channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
@@ -17861,10 +18440,10 @@ def create_app() -> Flask:
             "partidos_en_memoria_activos": len(ALL_FIXTURES_POOL),
             "total_partidos_temporada_completa": total_maestro or 1956,
             "fases_disponibles": [
-                {"fase": 1, "nombre": "Fase 1 (Actual)", "inicio": "2026-10-12", "fin": "2026-11-30", "partidos": 539},
-                {"fase": 2, "nombre": "Fase 2", "inicio": "2026-12-01", "fin": "2027-01-31", "partidos": 542},
-                {"fase": 3, "nombre": "Fase 3", "inicio": "2027-02-01", "fin": "2027-03-31", "partidos": 408},
-                {"fase": 4, "nombre": "Fase 4", "inicio": "2027-04-01", "fin": "2027-05-31", "partidos": 467}
+                {"fase": 1, "nombre": "Fase Octubre 2026", "inicio": "2026-10-12", "fin": "2026-10-31", "partidos": 223},
+                {"fase": 2, "nombre": "Bimestre Nov - Dic 2026 (Auto 01 Nov)", "inicio": "2026-11-01", "fin": "2026-12-31", "partidos": 544},
+                {"fase": 3, "nombre": "Bimestre Ene - Feb 2027", "inicio": "2027-01-01", "fin": "2027-02-28", "partidos": 480},
+                {"fase": 4, "nombre": "Bimestre Mar - May 2027", "inicio": "2027-03-01", "fin": "2027-05-31", "partidos": 709}
             ]
         })
 
@@ -17879,10 +18458,10 @@ def create_app() -> Flask:
         fin = body.get("fin")
 
         fases_map = {
-            1: ("2026-10-12", "2026-11-30", "Fase 1: 11 Octubre a 30 Noviembre 2026"),
-            2: ("2026-12-01", "2027-01-31", "Fase 2: 01 Diciembre 2026 a 31 Enero 2027"),
-            3: ("2027-02-01", "2027-03-31", "Fase 3: 01 Febrero a 31 Marzo 2027"),
-            4: ("2027-04-01", "2027-05-31", "Fase 4: 01 Abril a 31 Mayo 2027")
+            1: ("2026-10-12", "2026-10-31", "Fase Octubre 2026"),
+            2: ("2026-11-01", "2026-12-31", "Bimestre 01 Noviembre al 31 Diciembre 2026"),
+            3: ("2027-01-01", "2027-02-28", "Bimestre 01 Enero al 28 Febrero 2027"),
+            4: ("2027-03-01", "2027-05-31", "Fase Final Marzo a Mayo 2027")
         }
 
         if fase_num and int(fase_num) in fases_map:
