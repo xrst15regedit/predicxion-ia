@@ -168,16 +168,11 @@
                 <span class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono font-bold" id="sidebar-total-badge">0</span>
             </div>
 
-            <div class="p-2.5 border-b border-cardBorder/60 bg-cardDark/40 space-y-2 flex-shrink-0">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-1.5">
-                    <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o partido..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none">
-                    <select id="sidebar-league-select" onchange="filtrarSidebar()" class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-2.5 py-1.5 text-[11px] font-bold text-slate-200 focus:outline-none cursor-pointer">
-                        <option value="todas">🏆 Todas las Ligas (Ver por liga)</option>
-                    </select>
-                </div>
+            <div class="p-3 border-b border-cardBorder/60 bg-cardDark/40 space-y-2 flex-shrink-0">
+                <input type="text" id="sidebar-filter" oninput="filtrarSidebar()" placeholder="Buscar equipo o liga..." class="w-full bg-cardDark border border-cardBorder focus:border-accentGreen rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
                 <div class="text-[10px] font-mono text-slate-300 bg-baseDark/90 px-3 py-1.5 rounded-xl border border-cardBorder/60 flex items-center justify-between">
-                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span> <strong class="text-white">Calendario:</strong></span>
-                    <span id="sidebar-ventana-label" class="text-accentGreen font-bold font-mono">Oct + 1 Nov - 31 Dic</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span> <strong class="text-white">Fase Activa:</strong></span>
+                    <span id="sidebar-ventana-label" class="text-accentGreen font-bold font-mono">Hasta 30 Nov 2026</span>
                 </div>
             </div>
 
@@ -2233,25 +2228,11 @@
         function renderizarSidebar(ligas, filtro = "") {
             const query = filtro.toLowerCase().trim();
             const cont = document.getElementById('sidebar-matches');
-            const selLigaEl = document.getElementById('sidebar-league-select');
-            const ligaSeleccionada = selLigaEl ? selLigaEl.value : 'todas';
-
-            // Poblar selector de ligas sin perder selección actual
-            if (selLigaEl && selLigaEl.options.length <= 1 && Object.keys(ligas || {}).length > 0) {
-                let opts = '<option value="todas">🏆 Todas las Ligas (Scroll por liga)</option>';
-                for (const nombreL of Object.keys(ligas)) {
-                    opts += `<option value="${esc(nombreL)}">${esc(nombreL)}</option>`;
-                }
-                selLigaEl.innerHTML = opts;
-                selLigaEl.value = ligaSeleccionada;
-            }
-
             let html = '';
             let total = 0;
             let id = 0;
 
             for (const [liga, partidos] of Object.entries(ligas)) {
-                if (ligaSeleccionada !== 'todas' && liga !== ligaSeleccionada) continue;
                 const lista = Array.isArray(partidos) ? partidos : [];
                 let filtrados = lista;
                 if (typeof mesFiltroActivo !== 'undefined' && mesFiltroActivo && mesFiltroActivo !== 'todos') {
@@ -2262,24 +2243,23 @@
                 }
                 if (filtrados.length === 0) continue;
                 total += filtrados.length;
-                const abierta = (ligaSeleccionada !== 'todas') ? true : (ligasAbiertas[liga] !== false);
-                const maxHClass = (ligaSeleccionada !== 'todas') ? 'max-h-[420px]' : 'max-h-56';
+                const abierta = ligasAbiertas[liga] !== false;
 
                 html += `
-                    <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/70 mb-2 shadow-sm">
-                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-200 bg-cardDark flex justify-between items-center hover:bg-slate-800 transition cursor-pointer">
+                    <div class="border border-cardBorder rounded-xl overflow-hidden bg-cardDark/50 mb-2">
+                        <button onclick="toggleLiga('${liga.replace(/'/g, "\\'")}', 'l-${id}')" class="w-full p-2.5 px-3 text-left font-bold text-xs text-slate-200 bg-cardDark flex justify-between items-center hover:bg-slate-800 transition cursor-pointer sticky top-0 z-10">
                             <span class="truncate flex items-center gap-1.5"><i class="fa-solid fa-trophy text-[10px] text-accentGreen"></i> ${liga}</span>
                             <div class="flex items-center gap-2"><span class="text-[9px] bg-slate-800 text-accentGreen px-1.5 py-0.5 rounded font-mono">${filtrados.length}</span><i class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform ${abierta ? 'rotate-180' : ''}" id="icon-l-${id}"></i></div>
                         </button>
-                        <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} ${maxHClass} overflow-y-auto overscroll-contain border-t border-cardBorder/40 bg-baseDark/80 divide-y divide-cardBorder/20">
+                        <div id="l-${id}" class="${abierta ? 'block' : 'hidden'} border-t border-cardBorder/40 bg-baseDark/60 divide-y divide-cardBorder/20">
                 `;
 
                 filtrados.forEach(p => {
                     const prob1X2 = p.probabilidades?.["1X2"] || {};
                     html += `
-                        <div onclick="mostrarDetalle('${p.id_partido}')" class="p-2.5 px-3 hover:bg-cardDark/90 cursor-pointer transition">
+                        <div onclick="mostrarDetalle('${p.id_partido}')" class="p-2.5 px-3 hover:bg-cardDark/80 cursor-pointer transition">
                             <div class="flex items-center justify-between">
-                                <div class="space-y-0.5 w-[74%] text-left">
+                                <div class="space-y-0.5 w-[75%] text-left">
                                     <div class="font-bold text-slate-200 truncate text-[11px]">${p.local}</div>
                                     <div class="text-slate-400 font-medium truncate text-[11px]">${p.visitante}</div>
                                 </div>
@@ -2294,7 +2274,7 @@
                 html += `</div></div>`;
                 id++;
             }
-            cont.innerHTML = html || `<p class="text-xs text-slate-500 py-6">No se encontraron partidos con ese filtro.</p>`;
+            cont.innerHTML = html || `<p class="text-xs text-slate-500 py-6">No se encontraron ligas.</p>`;
             document.getElementById('sidebar-total-badge').innerText = total;
         }
 
