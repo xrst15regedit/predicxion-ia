@@ -13592,6 +13592,32 @@ _VERIFIED_RESULTS_CACHE = {
         "corners_total": 9, "cards_total": 3, "yellow_cards": 3, "red_cards": 0,
         "source": "Bundesliga / SofaScore Official Stats"
     },
+    # Jornada 2026-10-19 (Actas Oficiales Verificadas)
+    ("2026-10-19", "getafe", "rayo vallecano"): {
+        "finished": True, "score_home": 1, "score_away": 1,
+        "corners_total": 9, "cards_total": 11, "yellow_cards": 9, "red_cards": 1,
+        "source": "LaLiga / SofaScore Official Stats"
+    },
+    ("2026-10-19", "parma", "torino"): {
+        "finished": True, "score_home": 0, "score_away": 3,
+        "corners_total": 9, "cards_total": 4, "yellow_cards": 4, "red_cards": 0,
+        "source": "Serie A / SofaScore Official Stats"
+    },
+    ("2026-10-19", "sporting braga", "gil vicente"): {
+        "finished": True, "score_home": 1, "score_away": 2,
+        "corners_total": 10, "cards_total": 5, "yellow_cards": 5, "red_cards": 0,
+        "source": "Primeira Liga / SofaScore Official Stats"
+    },
+    ("2026-10-19", "tottenham", "coventry"): {
+        "finished": True, "score_home": 3, "score_away": 1,
+        "corners_total": 11, "cards_total": 3, "yellow_cards": 3, "red_cards": 0,
+        "source": "Premier League / SofaScore Official Stats"
+    },
+    ("2026-10-19", "monza", "cagliari"): {
+        "finished": True, "score_home": 4, "score_away": 0,
+        "corners_total": 9, "cards_total": 4, "yellow_cards": 4, "red_cards": 0,
+        "source": "Serie A / SofaScore Official Stats"
+    },
     ("2026-10-16", "le mans", "toulouse"): {
         "finished": True, "score_home": 1, "score_away": 1,
         "corners_total": 8, "cards_total": 3, "yellow_cards": 3, "red_cards": 0,
@@ -16277,13 +16303,13 @@ def create_app() -> Flask:
             
             # Tabla Oficial de Precios de Lanzamiento en el Servidor (Previene manipulación de precios desde el cliente)
             OFFICIAL_PLANS = {
-                "pro": {"id": "pro", "nombre": "Pase Pro Mensual (15% OFF)", "precio": 16.90, "precio_regular": 19.90, "vigencia_dias": 30},
-                "mensual pro": {"id": "pro", "nombre": "Pase Pro Mensual (15% OFF)", "precio": 16.90, "precio_regular": 19.90, "vigencia_dias": 30},
-                "pase pro": {"id": "pro", "nombre": "Pase Pro Mensual (15% OFF)", "precio": 16.90, "precio_regular": 19.90, "vigencia_dias": 30},
-                "elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo (15% OFF)", "precio": 33.90, "precio_regular": 39.90, "vigencia_dias": 30},
-                "pase elite": {"id": "elite", "nombre": "Pase Élite Cuantitativo (15% OFF)", "precio": 33.90, "precio_regular": 39.90, "vigencia_dias": 30},
-                "pase élite": {"id": "elite", "nombre": "Pase Élite Cuantitativo (15% OFF)", "precio": 33.90, "precio_regular": 39.90, "vigencia_dias": 30},
-                "anual": {"id": "anual", "nombre": "Pase Anual VIP", "precio": 149.00, "vigencia_dias": 365}
+                "pro": {"id": "pro", "nombre": "Pase Pro Todo Incluido (15% OFF Lanzamiento)", "precio": 24.90, "precio_regular": 29.90, "vigencia_dias": 30},
+                "mensual pro": {"id": "pro", "nombre": "Pase Pro Todo Incluido (15% OFF Lanzamiento)", "precio": 24.90, "precio_regular": 29.90, "vigencia_dias": 30},
+                "pase pro": {"id": "pro", "nombre": "Pase Pro Todo Incluido (15% OFF Lanzamiento)", "precio": 24.90, "precio_regular": 29.90, "vigencia_dias": 30},
+                "elite": {"id": "pro", "nombre": "Pase Pro Todo Incluido (15% OFF Lanzamiento)", "precio": 24.90, "precio_regular": 29.90, "vigencia_dias": 30},
+                "pase elite": {"id": "pro", "nombre": "Pase Pro Todo Incluido (15% OFF Lanzamiento)", "precio": 24.90, "precio_regular": 29.90, "vigencia_dias": 30},
+                "pase élite": {"id": "pro", "nombre": "Pase Pro Todo Incluido (15% OFF Lanzamiento)", "precio": 24.90, "precio_regular": 29.90, "vigencia_dias": 30},
+                "anual": {"id": "anual", "nombre": "Pase Anual VIP", "precio": 199.00, "vigencia_dias": 365}
             }
 
             matched_plan = OFFICIAL_PLANS.get(plan_code, OFFICIAL_PLANS["pro"])
@@ -16681,7 +16707,7 @@ def create_app() -> Flask:
 
             if hay_partidos_hoy:
                 destacados.sort(key=_extract_prob, reverse=True)
-                destacados = destacados[:12]
+                destacados = destacados[:24]
                 mensaje_jornada = f"Partidos de Hoy • {target_featured_date} (Actualización 22:00 PE)"
             else:
                 # Si en la fecha actual (ej. 2026-10-15) NO se juegan partidos de nuestras ligas,
@@ -16695,7 +16721,7 @@ def create_app() -> Flask:
                     fecha_mostrada_destacados = fechas_con_partidos[0]
                     partidos_proxima_jornada = [x for x in pool_todos if x.get("fecha") == fecha_mostrada_destacados]
                     partidos_proxima_jornada.sort(key=_extract_prob, reverse=True)
-                    destacados = partidos_proxima_jornada[:12]
+                    destacados = partidos_proxima_jornada[:24]
                 else:
                     destacados = []
                 mensaje_jornada = f"Partidos no disponibles hoy ({target_featured_date} sin programación oficial) • Próxima jornada: {fecha_mostrada_destacados}"
@@ -17230,6 +17256,13 @@ def create_app() -> Flask:
             {"local": "AC Milan", "visitante": "Atalanta", "partido": "AC Milan vs Atalanta", "liga": "Italia · Serie A", "seleccion": "Ambos equipos anotan: Sí", "probabilidad": "84%", "cuota": "1.68", "justificacion": "Dos de las delanteras más incisivas de Serie A (1.85 vs 1.78 xG). Señal de gol en ambas porterías.", "tipster_model": "Motor PredicXion IA • Gol en Ambas Áreas", "stat_projection_label": "Proy. goles: 3.63 xG", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T11:00:00Z"},
             {"local": "Nottingham Forest", "visitante": "Arsenal", "partido": "Nottingham Forest vs Arsenal", "liga": "Inglaterra · Premier League", "seleccion": "Arsenal gana o empata y Más de 1.5 goles", "probabilidad": "82%", "cuota": "1.52", "justificacion": "Arsenal presenta superioridad estructural (2.05 xG) y el piso de 1.5 goles se sostiene con solvencia.", "tipster_model": "Motor PredicXion IA • Doble Oportunidad + Goles", "stat_projection_label": "Proy. goles: 2.85 xG", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T10:30:00Z"},
             {"local": "Bayer Leverkusen", "visitante": "Friburgo", "partido": "Bayer Leverkusen vs Friburgo", "liga": "Alemania · Bundesliga", "seleccion": "Más de 2.5 goles", "probabilidad": "79%", "cuota": "1.64", "justificacion": "El ritmo ofensivo de Leverkusen en casa proyecta 3.20 xG combinados, superando la línea de 2.5 goles.", "tipster_model": "Motor PredicXion IA • Techo de Goles", "stat_projection_label": "Proy. goles: 3.20 xG", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T08:30:00Z"}
+        ],
+        "2026-10-19": [
+            {"local": "Getafe", "visitante": "Rayo Vallecano", "partido": "Getafe vs Rayo Vallecano", "liga": "Primera División", "seleccion": "Más de 4.5 tarjetas", "probabilidad": "88%", "cuota": "1.42", "justificacion": "El promedio combinado de tarjetas en el derbi madrileño supera la línea de 4.5 por alta fricción táctica.", "tipster_model": "Motor PredicXion IA • Índice de Fricción H2H", "stat_projection_label": "Promedio: 5.2 tarjetas", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T14:00:00Z"},
+            {"local": "Parma", "visitante": "Torino", "partido": "Parma vs Torino", "liga": "Serie A", "seleccion": "Ambos equipos anotan: Sí", "probabilidad": "83%", "cuota": "1.90", "justificacion": "Ambos ataques generan ocasiones claras en transición (1.45 vs 1.40 xG proyectados).", "tipster_model": "Motor PredicXion IA • Gol en Ambas Áreas", "stat_projection_label": "Ambos anotan: 83%", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T13:45:00Z"},
+            {"local": "Sporting Braga", "visitante": "Gil Vicente", "partido": "Sporting Braga vs Gil Vicente", "liga": "Primeira Liga", "seleccion": "Sporting Braga gana y Más de 1.5 goles", "probabilidad": "81%", "cuota": "2.16", "justificacion": "Braga domina el volumen ofensivo local (1.95 xG) en un duelo con piso de 1.5 goles.", "tipster_model": "Motor PredicXion IA • Supremacía xG + Goles", "stat_projection_label": "Goles esp.: 1.95 vs 0.95 xG", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T14:15:00Z"},
+            {"local": "Tottenham", "visitante": "Coventry", "partido": "Tottenham vs Coventry", "liga": "Premier League", "seleccion": "Ambos equipos anotan: Sí", "probabilidad": "80%", "cuota": "1.62", "justificacion": "Ritmo alto y defensa adelantada de Tottenham que favorece goles en ambas áreas.", "tipster_model": "Motor PredicXion IA • Gol en Ambas Áreas", "stat_projection_label": "Proy. goles: 3.45 xG", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T14:00:00Z"},
+            {"local": "Monza", "visitante": "Cagliari", "partido": "Monza vs Cagliari", "liga": "Serie A", "seleccion": "Más de 1.5 goles", "probabilidad": "78%", "cuota": "1.60", "justificacion": "El piso de goles proyecta 2.55 xG combinados sin necesidad de forzar el 2.5.", "tipster_model": "Motor PredicXion IA • Piso de Goles Seguro", "stat_projection_label": "Proyección: 2.55 goles esp.", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T11:30:00Z"}
         ]
     }
 
@@ -17407,10 +17440,46 @@ def create_app() -> Flask:
         yield_pct = round((ganancia_neta / max(1, total_liq)) * 100, 1)
         yield_str = f"+{yield_pct}%" if yield_pct >= 0 else f"{yield_pct}%"
 
+        # Construir lista de todas las fechas históricas auditadas disponibles para navegar hacia atrás y adelante
+        fechas_hist_set = set(_HISTORICAL_ISSUED_TOP5.keys())
+        for f_fix in ALL_FIXTURES_POOL:
+            f_d = (f_fix.get("fecha_utc") or "")[:10]
+            if "2026-10-12" <= f_d < op_date:
+                fechas_hist_set.add(f_d)
+        if fecha_auditada:
+            fechas_hist_set.add(fecha_auditada)
+        fechas_auditadas_disponibles = sorted(list(fechas_hist_set))
+
+        # Calcular balance global acumulado de todas las fechas históricas
+        tot_g_global = 0
+        tot_p_global = 0
+        neto_global = 0.0
+        for f_h in fechas_auditadas_disponibles:
+            h_list = _auditar_y_liquidar_fecha(f_h)[:5]
+            for item_h in h_list:
+                if item_h.get("estado") == "GANADA":
+                    tot_g_global += 1
+                    neto_global += (float(item_h.get("cuota") or 1.5) - 1.0)
+                elif item_h.get("estado") == "PERDIDA":
+                    tot_p_global += 1
+                    neto_global -= 1.0
+        tot_liq_global = tot_g_global + tot_p_global
+        tasa_global_acum = round((tot_g_global / max(1, tot_liq_global)) * 100, 1) if tot_liq_global > 0 else efectividad_pct
+        yield_global_val = round((neto_global / max(1, tot_liq_global)) * 100, 1)
+        yield_global_str = f"+{yield_global_val}%" if yield_global_val >= 0 else f"{yield_global_val}%"
+
         return jsonify({
             "success": True,
             "fecha_operativa": op_date,
             "fecha_auditada": fecha_auditada,
+            "fechas_disponibles": fechas_auditadas_disponibles,
+            "resumen_global": {
+                "total_picks": tot_liq_global,
+                "ganadas": tot_g_global,
+                "perdidas": tot_p_global,
+                "tasa_acierto": f"{tasa_global_acum}%",
+                "yield_global": yield_global_str
+            },
             "metricas": {
                 "tasa_acierto_global": f"{efectividad_pct}%",
                 "yield_acumulado": yield_str,
