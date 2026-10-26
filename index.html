@@ -302,7 +302,7 @@
                                 </button>
                                 <div class="px-3 flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-white">
                                     <i class="fa-regular fa-calendar text-[#00e676]"></i>
-                                    <span id="top3-fecha-display">19.10.2026</span>
+                                    <span id="top3-fecha-display">26.10.2026</span>
                                 </div>
                                 <button onclick="navegarFechaTop3(1)" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Día siguiente">
                                     <i class="fa-solid fa-chevron-right text-xs"></i>
@@ -489,7 +489,7 @@
                         </div>
                         <div class="flex items-center gap-2 text-[10px] font-mono text-accentGreen bg-emerald-950/80 border border-emerald-800/70 px-3 py-1.5 rounded-xl shadow-md">
                             <span class="w-2 h-2 rounded-full bg-accentGreen animate-pulse"></span>
-                            <span id="destacados-fecha-label" class="font-bold">Partidos de Hoy • 07 Octubre 2026</span>
+                            <span id="destacados-fecha-label" class="font-bold">Partidos de Hoy • 26 Octubre 2026</span>
                         </div>
                     </div>
                     <div id="carousel-cards" class="flex gap-3 overflow-x-auto no-scrollbar py-1 w-full scroll-smooth">
@@ -591,7 +591,7 @@
                                 </button>
                                 <div class="px-3 flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-white">
                                     <i class="fa-regular fa-calendar-check text-[#00e676]"></i>
-                                    <span id="auditoria-fecha-display">19.10.2026</span>
+                                    <span id="auditoria-fecha-display">25.10.2026</span>
                                 </div>
                                 <button onclick="navegarFechaHistorial(1)" id="btn-hist-next" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Jornada siguiente">
                                     <i class="fa-solid fa-chevron-right text-xs"></i>
@@ -1228,7 +1228,7 @@
         }
 
         var fechaHistorialActiva = "";
-        var FECHAS_HISTORIAL_DISPONIBLES = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19'];
+        var FECHAS_HISTORIAL_DISPONIBLES = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-23', '2026-10-24', '2026-10-25'];
 
         function navegarFechaHistorial(delta) {
             const fechas = (FECHAS_HISTORIAL_DISPONIBLES && FECHAS_HISTORIAL_DISPONIBLES.length > 0)
@@ -1787,6 +1787,7 @@
                 'PPL': { over_2_5: 55, over_1_5: 72, btts: 54, goals: 2.8, cards: 5.4, corners: 10.3, shots: 25.6, shots_on_target: 8.6 },
                 'BSA': { over_2_5: 51, over_1_5: 70, btts: 53, goals: 2.6, cards: 5.6, corners: 10.5, shots: 26.2, shots_on_target: 8.4 },
                 'UCL': { over_2_5: 63, over_1_5: 77, btts: 60, goals: 3.2, cards: 4.3, corners: 10.4, shots: 28.2, shots_on_target: 9.7 },
+                'UEL': { over_2_5: 61, over_1_5: 76, btts: 59, goals: 3.1, cards: 4.5, corners: 10.2, shots: 27.5, shots_on_target: 9.3 },
                 'UNL': { over_2_5: 54, over_1_5: 71, btts: 54, goals: 2.7, cards: 4.5, corners: 9.5, shots: 24.8, shots_on_target: 8.4 }
             };
             if (tabla[c]) return tabla[c];
@@ -1797,6 +1798,7 @@
             if (l.includes('ligue 1')) return tabla['FL1'];
             if (l.includes('primeira')) return tabla['PPL'];
             if (l.includes('brasileir')) return tabla['BSA'];
+            if (l.includes('europa league')) return tabla['UEL'];
             if (l.includes('champions')) return tabla['UCL'];
             return tabla['PD'];
         }
@@ -2119,7 +2121,7 @@
             }
 
             const esVip = verificarEsVip();
-            const listaDestacados = destacados;
+            const listaDestacados = destacados.slice(0, 12);
             const badgeAlt = document.getElementById('badge-total-alternativos');
             if (badgeAlt) {
                 badgeAlt.innerText = esVip
@@ -2524,7 +2526,7 @@
                 `;
             }
             const esVipCarrusel = verificarEsVip();
-            destacados.forEach((d, idx) => {
+            destacados.slice(0, 12).forEach((d, idx) => {
                 const pick = d.pronostico_principal || {};
                 const stks = d.organizacion_stakazos || {};
                 const n1 = stks.nivel_1_base || {};
@@ -3234,6 +3236,7 @@
             if (l.includes('ligue 1') || l.includes('francia') || l.includes('france')) return '🇫🇷 France · Ligue 1';
             if (l.includes('primeira') || l.includes('portugal')) return '🇵🇹 Portugal · Primeira Liga';
             if (l.includes('brasileir') || l.includes('brasil')) return '🇧🇷 Brazil · Série A';
+            if (l.includes('europa league')) return '🇪🇺 UEFA · Europa League';
             if (l.includes('champions')) return '🇪🇺 UEFA · Champions League';
             if (l.includes('nations')) return '🇪🇺 UEFA · Nations League';
             return '🌍 ' + (ligaStr || 'Fútbol Oficial');
@@ -3266,7 +3269,7 @@
         function navegarFechaTop3(delta) {
             const fechas = (FECHAS_DISPONIBLES_SISTEMA && FECHAS_DISPONIBLES_SISTEMA.length > 0)
                 ? FECHAS_DISPONIBLES_SISTEMA
-                : ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-23', '2026-10-24', '2026-10-25'];
+                : ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31'];
             let idx = fechas.indexOf(fechaTop3Activa);
             if (idx === -1) idx = fechas.length - 1;
             const nuevoIdx = Math.max(0, Math.min(fechas.length - 1, idx + delta));
