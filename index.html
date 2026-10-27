@@ -2114,8 +2114,10 @@
 
             if (!destacados.length && window.globalTodosPartidos) {
                 const pool = [];
+                const fTarget = window.fechaActivaDestacados || '';
                 for (const k in window.globalTodosPartidos) {
-                    pool.push(...(window.globalTodosPartidos[k] || []));
+                    const arr = window.globalTodosPartidos[k] || [];
+                    pool.push(...(fTarget ? arr.filter(x => x.fecha === fTarget) : arr));
                 }
                 destacados = pool.slice(0, 12);
             }
@@ -3334,7 +3336,7 @@
                 window.top5DataMemoria = data.top3;
 
                 if (data.top3 && data.top3.length > 0 && typeof precargarAudioTexto === 'function') {
-                    const pLibre = data.top3.find(x => x.rank === 5) || data.top3[0];
+                    const pLibre = data.top3.find(x => x.es_gratis_telegram) || data.top3[data.top3.length - 1] || data.top3[0];
                     setTimeout(() => precargarAudioTexto(`Vamos con el pick número ${pLibre.rank} del Top 5: ${pLibre.local} contra ${pLibre.visitante}. Aquí la jugada recomendada es ${pLibre.mercado}, con un ${pLibre.probabilidad} de confianza estadística.`), 150);
                 }
 
