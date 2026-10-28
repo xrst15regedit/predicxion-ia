@@ -1808,6 +1808,7 @@
             const probs = item.probabilidades || {};
             const pGoles25 = probs.over_under_2_5 || {};
             const pGoles15 = probs.over_under_1_5 || {};
+            const pGoles35 = probs.over_under_3_5 || {};
             const pBtts = probs.btts || {};
             const xgParams = item.parametros_xg || {};
             const ant = item.analisis_partidos_anteriores || {};
@@ -1815,39 +1816,76 @@
             const visAnt = ant.visitante || {};
             const lAvg = obtenerPromediosLigaOddster(item.codigo_liga, item.liga);
 
-            const lh = parseFloat(xgParams.lambda_home || item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_local || 1.52);
-            const la = parseFloat(xgParams.lambda_away || item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_visitante || 1.24);
+            const lh = parseFloat(kp.avg_goals?.home ?? xgParams.lambda_home ?? item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_local ?? 1.52);
+            const la = parseFloat(kp.avg_goals?.away ?? xgParams.lambda_away ?? item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_visitante ?? 1.24);
             const avgGoalsVal = kp.avg_goals?.value != null ? parseFloat(kp.avg_goals.value) : Math.round((lh + la) * 100) / 100;
 
-            const over25Val = kp.over_2_5?.value != null ? Math.round(kp.over_2_5.value) : Math.round(parseFloat(pGoles25.over || 62));
-            const over15Val = kp.over_1_5?.value != null ? Math.round(kp.over_1_5.value) : Math.round(parseFloat(pGoles15.over || 82));
-            const bttsVal = kp.btts?.value != null ? Math.round(kp.btts.value) : Math.round(parseFloat(pBtts.yes || 64));
+            const over25Val = kp.over_2_5?.value != null ? Math.round(kp.over_2_5.value) : Math.round(parseFloat(pGoles25.over || 60));
+            const under25Val = kp.over_2_5?.under_value != null ? Math.round(kp.over_2_5.under_value) : Math.max(8, 100 - over25Val);
+            const over15Val = kp.over_1_5?.value != null ? Math.round(kp.over_1_5.value) : Math.round(parseFloat(pGoles15.over || 80));
+            const under15Val = kp.over_1_5?.under_value != null ? Math.round(kp.over_1_5.under_value) : Math.max(5, 100 - over15Val);
+            const under35Val = kp.over_1_5?.under_3_5 != null ? Math.round(kp.over_1_5.under_3_5) : Math.round(parseFloat(pGoles35.under || Math.min(91, Math.max(58, 96 - avgGoalsVal * 9))));
+            const over35Val = Math.max(8, 100 - under35Val);
 
+            const bttsVal = kp.btts?.value != null ? Math.round(kp.btts.value) : Math.round(parseFloat(pBtts.yes || 62));
+            const bttsNoVal = kp.btts?.no_value != null ? Math.round(kp.btts.no_value) : Math.max(8, 100 - bttsVal);
+
+            const cardsH = parseFloat(kp.avg_cards?.home ?? locAnt.tarjetas_prom ?? 2.05);
+            const cardsA = parseFloat(kp.avg_cards?.away ?? visAnt.tarjetas_prom ?? 2.00);
             const avgCardsVal = kp.avg_cards?.value != null
                 ? parseFloat(kp.avg_cards.value)
-                : Math.round(((parseFloat(locAnt.tarjetas_prom || 2.1) + parseFloat(visAnt.tarjetas_prom || 2.0)) || parseFloat(xgParams.expected_cards || 4.15)) * 100) / 100;
+                : Math.round(((cardsH + cardsA) || parseFloat(xgParams.expected_cards || 4.10)) * 100) / 100;
 
+            const cardsOver35 = kp.avg_cards?.over_3_5_pct != null ? Math.round(kp.avg_cards.over_3_5_pct) : Math.min(90, Math.max(45, Math.round(54 + avgCardsVal * 6.2)));
+            const cardsUnder45 = kp.avg_cards?.under_4_5_pct != null ? Math.round(kp.avg_cards.under_4_5_pct) : Math.min(91, Math.max(42, Math.round(98 - avgCardsVal * 6.5)));
+            const cardsUnder55 = kp.avg_cards?.under_5_5_pct != null ? Math.round(kp.avg_cards.under_5_5_pct) : Math.min(93, Math.max(55, Math.round(102 - avgCardsVal * 5.2)));
+
+            const cornersH = parseFloat(kp.avg_corners?.home ?? locAnt.corners_prom ?? 5.0);
+            const cornersA = parseFloat(kp.avg_corners?.away ?? visAnt.corners_prom ?? 4.8);
             const avgCornersVal = kp.avg_corners?.value != null
                 ? parseFloat(kp.avg_corners.value)
-                : Math.round(((parseFloat(locAnt.corners_prom || 5.1) + parseFloat(visAnt.corners_prom || 4.8)) || parseFloat(xgParams.expected_corners || 9.85)) * 100) / 100;
+                : Math.round(((cornersH + cornersA) || parseFloat(xgParams.expected_corners || 9.8)) * 100) / 100;
 
+            const cornersOver85 = kp.avg_corners?.over_8_5_pct != null ? Math.round(kp.avg_corners.over_8_5_pct) : Math.min(89, Math.max(38, Math.round(35 + avgCornersVal * 4.5)));
+            const cornersUnder95 = kp.avg_corners?.under_9_5_pct != null ? Math.round(kp.avg_corners.under_9_5_pct) : Math.min(90, Math.max(35, Math.round(115 - avgCornersVal * 4.8)));
+            const cornersUnder105 = kp.avg_corners?.under_10_5_pct != null ? Math.round(kp.avg_corners.under_10_5_pct) : Math.min(92, Math.max(48, Math.round(122 - avgCornersVal * 4.5)));
+
+            const shotsH = parseFloat(kp.avg_shots?.home ?? locAnt.tiros_totales_prom ?? 13.2);
+            const shotsA = parseFloat(kp.avg_shots?.away ?? visAnt.tiros_totales_prom ?? 12.4);
             const avgShotsVal = kp.avg_shots?.value != null
                 ? parseFloat(kp.avg_shots.value)
-                : Math.round((parseFloat(locAnt.tiros_totales_prom || 13.4) + parseFloat(visAnt.tiros_totales_prom || 12.8) + (avgGoalsVal - 2.5) * 1.8) * 100) / 100;
+                : Math.round((shotsH + shotsA + (avgGoalsVal - 2.5) * 1.8) * 100) / 100;
 
+            const shotsOTH = parseFloat(kp.avg_shots_on_target?.home ?? locAnt.tiros_puerta_prom ?? 4.8);
+            const shotsOTA = parseFloat(kp.avg_shots_on_target?.away ?? visAnt.tiros_puerta_prom ?? 4.3);
             const avgShotsOTVal = kp.avg_shots_on_target?.value != null
                 ? parseFloat(kp.avg_shots_on_target.value)
-                : Math.round((parseFloat(locAnt.tiros_puerta_prom || 4.9) + parseFloat(visAnt.tiros_puerta_prom || 4.4) + (avgGoalsVal - 2.5) * 0.7) * 100) / 100;
+                : Math.round((shotsOTH + shotsOTA + (avgGoalsVal - 2.5) * 0.7) * 100) / 100;
+
+            const recGoals = kp.avg_goals?.recommended || (avgGoalsVal >= 3.05 ? 'Más de 2.5 goles' : (avgGoalsVal <= 2.32 ? 'Menos de 3.5 goles' : 'Más de 1.5 goles'));
+            const recCorners = kp.avg_corners?.recommended || (avgCornersVal <= 8.2 ? 'Menos de 9.5 córners' : (avgCornersVal <= 9.1 ? 'Menos de 10.5 córners' : 'Más de 8.5 córners'));
+            const recCards = kp.avg_cards?.recommended || (avgCardsVal <= 3.15 ? 'Menos de 4.5 tarjetas' : (avgCardsVal <= 3.75 ? 'Menos de 5.5 tarjetas' : 'Más de 3.5 tarjetas'));
 
             return {
-                over_2_5: { val: over25Val, avg: kp.over_2_5?.league_avg ?? lAvg.over_2_5 },
-                over_1_5: { val: over15Val, avg: kp.over_1_5?.league_avg ?? lAvg.over_1_5 },
-                btts: { val: bttsVal, avg: kp.btts?.league_avg ?? lAvg.btts },
-                avg_goals: { val: avgGoalsVal.toFixed(2), num: avgGoalsVal, avg: (kp.avg_goals?.league_avg ?? lAvg.goals).toFixed(1), avgNum: parseFloat(kp.avg_goals?.league_avg ?? lAvg.goals) },
-                avg_cards: { val: avgCardsVal.toFixed(2), num: avgCardsVal, avg: (kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1), avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards) },
-                avg_corners: { val: avgCornersVal.toFixed(2), num: avgCornersVal, avg: (kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1), avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners) },
-                avg_shots: { val: avgShotsVal.toFixed(2), num: avgShotsVal, avg: (kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1), avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots) },
-                avg_shots_ot: { val: avgShotsOTVal.toFixed(2), num: avgShotsOTVal, avg: (kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1), avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target) }
+                over_2_5: { val: over25Val, under: under25Val, avg: kp.over_2_5?.league_avg ?? lAvg.over_2_5, rec: over25Val >= 58 ? 'MÁS DE 2.5' : 'MENOS DE 2.5' },
+                over_1_5: { val: over15Val, under15: under15Val, under35: under35Val, over35: over35Val, avg: kp.over_1_5?.league_avg ?? lAvg.over_1_5, rec: recGoals },
+                btts: { val: bttsVal, no: bttsNoVal, avg: kp.btts?.league_avg ?? lAvg.btts, rec: bttsVal >= 57 ? 'AMBOS ANOTAN: SÍ' : 'AMBOS ANOTAN: NO' },
+                avg_goals: { val: avgGoalsVal.toFixed(2), num: avgGoalsVal, home: lh.toFixed(2), away: la.toFixed(2), under35: under35Val, avg: (kp.avg_goals?.league_avg ?? lAvg.goals).toFixed(1), avgNum: parseFloat(kp.avg_goals?.league_avg ?? lAvg.goals), rec: recGoals },
+                avg_cards: {
+                    val: avgCardsVal.toFixed(2), num: avgCardsVal, home: cardsH.toFixed(1), away: cardsA.toFixed(1),
+                    over35: cardsOver35, under45: cardsUnder45, under55: cardsUnder55,
+                    avg: (kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1), avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards),
+                    rec: recCards
+                },
+                avg_corners: {
+                    val: avgCornersVal.toFixed(2), num: avgCornersVal, home: cornersH.toFixed(1), away: cornersA.toFixed(1),
+                    over85: cornersOver85, under95: cornersUnder95, under105: cornersUnder105,
+                    styleNote: kp.avg_corners?.style_note || (avgCornersVal <= 8.6 ? 'Juego Interior (Under)' : 'Ataque por Bandas (Over)'),
+                    avg: (kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1), avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners),
+                    rec: recCorners
+                },
+                avg_shots: { val: avgShotsVal.toFixed(1), num: avgShotsVal, home: shotsH.toFixed(1), away: shotsA.toFixed(1), avg: (kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1), avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots) },
+                avg_shots_ot: { val: avgShotsOTVal.toFixed(1), num: avgShotsOTVal, home: shotsOTH.toFixed(1), away: shotsOTA.toFixed(1), avg: (kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1), avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target) }
             };
         }
 
@@ -1875,113 +1913,173 @@
         window.filtrarTabKeyProbabilities = filtrarTabKeyProbabilities;
 
         function renderizarKeyProbabilitiesOddsterHtml(item) {
-            const probs = item.probabilidades || {};
-            const p1x2 = probs["1X2"] || {};
-            const p1 = Math.round(parseFloat(p1x2["1"] || 38));
-            const px = Math.round(parseFloat(p1x2["X"] || 26));
-            const p2 = Math.max(1, 100 - p1 - px);
             const m = extraerMetricasOddsterPartido(item);
+            const locName = item.local || 'Local';
+            const visName = item.visitante || 'Visita';
+            const selPrincipal = item.pronostico_principal?.seleccion || item.consenso_dual_ia?.seleccion_final_consenso || 'Más de 1.5 goles';
 
             function colorBarraOddster(valNum, avgNum, isPct = false) {
                 const ratio = avgNum > 0 ? (valNum / avgNum) : 1.0;
                 if (isPct) {
-                    if (valNum >= 75 || ratio >= 1.12) return 'bg-[#00d054]';
-                    if (valNum >= 55 || ratio >= 0.94) return 'bg-[#eab308]';
-                    return 'bg-[#ef4444]';
+                    if (valNum >= 74 || ratio >= 1.10) return 'bg-[#00d054]';
+                    if (valNum >= 54 || ratio >= 0.92) return 'bg-[#eab308]';
+                    return 'bg-[#38bdf8]';
                 }
-                if (ratio >= 1.08) return 'bg-[#00d054]';
-                if (ratio >= 0.92) return 'bg-[#eab308]';
-                return 'bg-[#ef4444]';
+                if (ratio >= 1.06) return 'bg-[#00d054]';
+                if (ratio >= 0.90) return 'bg-[#eab308]';
+                return 'bg-[#38bdf8]';
             }
 
             const cards = [
                 {
                     cat: 'goals',
-                    title: 'Más de 2.5 goles',
-                    subEn: 'Over 2.5 goals',
-                    icon: `<i class="fa-solid fa-futbol text-slate-300 text-lg"></i>`,
-                    displayVal: `${m.over_2_5.val}%`,
-                    barWidth: Math.min(100, Math.max(12, m.over_2_5.val)),
-                    barColor: colorBarraOddster(m.over_2_5.val, m.over_2_5.avg, true),
-                    avgLabel: `${m.over_2_5.avg}%`,
-                    diffText: m.over_2_5.val >= m.over_2_5.avg ? `+${m.over_2_5.val - m.over_2_5.avg}% sobre media` : `${m.over_2_5.val - m.over_2_5.avg}% vs media`
-                },
-                {
-                    cat: 'goals',
-                    title: 'Más de 1.5 goles',
-                    subEn: 'Over 1.5 goals',
-                    icon: `<i class="fa-solid fa-futbol text-slate-300 text-lg"></i>`,
+                    title: 'Piso y Techo de Goles (1.5 / 3.5)',
+                    badge: m.over_1_5.rec.toUpperCase(),
+                    badgeColor: m.over_1_5.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
+                    icon: `<i class="fa-solid fa-futbol text-[#00e676] text-lg"></i>`,
                     displayVal: `${m.over_1_5.val}%`,
-                    barWidth: Math.min(100, Math.max(12, m.over_1_5.val)),
+                    displayLabel: 'Más de 1.5 goles',
+                    splitLeft: `Más de 1.5: <strong>${m.over_1_5.val}%</strong>`,
+                    splitRight: `Menos de 3.5: <strong>${m.over_1_5.under35}%</strong>`,
+                    barWidth: Math.min(100, Math.max(14, m.over_1_5.val)),
                     barColor: colorBarraOddster(m.over_1_5.val, m.over_1_5.avg, true),
                     avgLabel: `${m.over_1_5.avg}%`,
-                    diffText: m.over_1_5.val >= m.over_1_5.avg ? `+${m.over_1_5.val - m.over_1_5.avg}% sobre media` : `${m.over_1_5.val - m.over_1_5.avg}% vs media`
+                    diffText: m.over_1_5.val >= m.over_1_5.avg ? `+${m.over_1_5.val - m.over_1_5.avg}% vs liga` : `${m.over_1_5.val - m.over_1_5.avg}% vs liga`
                 },
                 {
                     cat: 'goals',
-                    title: 'Ambos equipos anotan',
-                    subEn: 'Both teams to score',
+                    title: 'Línea Estándar 2.5 Goles (Más / Menos)',
+                    badge: m.over_2_5.rec,
+                    badgeColor: m.over_2_5.val >= 58 ? 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40' : 'bg-sky-500/15 text-sky-300 border-sky-500/40',
+                    icon: `<i class="fa-solid fa-scale-balanced text-slate-300 text-lg"></i>`,
+                    displayVal: m.over_2_5.val >= m.over_2_5.under ? `${m.over_2_5.val}%` : `${m.over_2_5.under}%`,
+                    displayLabel: m.over_2_5.val >= m.over_2_5.under ? 'Prob. Más de 2.5' : 'Prob. Menos de 2.5',
+                    splitLeft: `Más de 2.5: <strong>${m.over_2_5.val}%</strong>`,
+                    splitRight: `Menos de 2.5: <strong>${m.over_2_5.under}%</strong>`,
+                    barWidth: Math.min(100, Math.max(14, Math.max(m.over_2_5.val, m.over_2_5.under))),
+                    barColor: colorBarraOddster(m.over_2_5.val, m.over_2_5.avg, true),
+                    avgLabel: `${m.over_2_5.avg}% (Over 2.5)`,
+                    diffText: m.over_2_5.val >= m.over_2_5.avg ? `+${m.over_2_5.val - m.over_2_5.avg}% sobre media` : `Tendencia Under (${m.over_2_5.under}%)`
+                },
+                {
+                    cat: 'goals',
+                    title: 'Ambos Equipos Anotan (Sí / No)',
+                    badge: m.btts.rec,
+                    badgeColor: m.btts.val >= 57 ? 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40' : 'bg-sky-500/15 text-sky-300 border-sky-500/40',
                     icon: `<i class="fa-solid fa-arrows-left-right text-slate-300 text-lg"></i>`,
-                    displayVal: `${m.btts.val}%`,
-                    barWidth: Math.min(100, Math.max(12, m.btts.val)),
+                    displayVal: m.btts.val >= m.btts.no ? `${m.btts.val}%` : `${m.btts.no}%`,
+                    displayLabel: m.btts.val >= m.btts.no ? 'Ambos anotan: Sí' : 'Ambos anotan: No',
+                    splitLeft: `Sí anotan: <strong>${m.btts.val}%</strong>`,
+                    splitRight: `No (0-1 eq.): <strong>${m.btts.no}%</strong>`,
+                    barWidth: Math.min(100, Math.max(14, Math.max(m.btts.val, m.btts.no))),
                     barColor: colorBarraOddster(m.btts.val, m.btts.avg, true),
                     avgLabel: `${m.btts.avg}%`,
                     diffText: m.btts.val >= m.btts.avg ? `+${m.btts.val - m.btts.avg}% sobre media` : `${m.btts.val - m.btts.avg}% vs media`
                 },
                 {
                     cat: 'goals',
-                    title: 'Promedio de goles',
-                    subEn: 'Average goals',
-                    icon: `<i class="fa-regular fa-futbol text-slate-300 text-lg"></i>`,
+                    title: 'Promedio de Goles Esperados (xG)',
+                    badge: `${m.avg_goals.home} vs ${m.avg_goals.away} xG`,
+                    badgeColor: 'bg-slate-800 text-lime-400 border-slate-700',
+                    icon: `<i class="fa-regular fa-futbol text-lime-400 text-lg"></i>`,
                     displayVal: `${m.avg_goals.val}`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_goals.num / 4.8) * 100))),
+                    displayLabel: 'Goles totales esp.',
+                    splitLeft: `${locName}: <strong>${m.avg_goals.home} xG</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_goals.away} xG</strong>`,
+                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_goals.num / 4.5) * 100))),
                     barColor: colorBarraOddster(m.avg_goals.num, m.avg_goals.avgNum, false),
-                    avgLabel: `${m.avg_goals.avg}`,
-                    diffText: m.avg_goals.num >= m.avg_goals.avgNum ? `+${(m.avg_goals.num - m.avg_goals.avgNum).toFixed(2)} xG` : `${(m.avg_goals.num - m.avg_goals.avgNum).toFixed(2)} xG`
-                },
-                {
-                    cat: 'cards',
-                    title: 'Promedio de tarjetas',
-                    subEn: 'Average cards',
-                    icon: `<i class="fa-regular fa-clone text-slate-300 text-lg"></i>`,
-                    displayVal: `${m.avg_cards.val}`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_cards.num / 7.2) * 100))),
-                    barColor: colorBarraOddster(m.avg_cards.num, m.avg_cards.avgNum, false),
-                    avgLabel: `${m.avg_cards.avg}`,
-                    diffText: m.avg_cards.num >= m.avg_cards.avgNum ? `+${(m.avg_cards.num - m.avg_cards.avgNum).toFixed(2)} tarj.` : `${(m.avg_cards.num - m.avg_cards.avgNum).toFixed(2)} tarj.`
+                    avgLabel: `${m.avg_goals.avg} goles`,
+                    diffText: m.avg_goals.num >= m.avg_goals.avgNum ? `+${(m.avg_goals.num - m.avg_goals.avgNum).toFixed(2)} xG vs liga` : `${(m.avg_goals.num - m.avg_goals.avgNum).toFixed(2)} xG vs liga`
                 },
                 {
                     cat: 'corners',
-                    title: 'Promedio de córners',
-                    subEn: 'Average corners',
-                    icon: `<i class="fa-regular fa-flag text-slate-300 text-lg"></i>`,
+                    title: 'Córners Bidireccional (Más / Menos)',
+                    badge: m.avg_corners.rec.toUpperCase(),
+                    badgeColor: m.avg_corners.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
+                    icon: `<i class="fa-regular fa-flag text-amber-400 text-lg"></i>`,
+                    displayVal: m.avg_corners.rec.includes('Menos') ? `${m.avg_corners.under105}%` : `${m.avg_corners.over85}%`,
+                    displayLabel: m.avg_corners.rec,
+                    splitLeft: `Más 8.5 córn.: <strong>${m.avg_corners.over85}%</strong>`,
+                    splitRight: `Menos 9.5 / 10.5: <strong>${m.avg_corners.under95}% / ${m.avg_corners.under105}%</strong>`,
+                    barWidth: Math.min(100, Math.max(14, m.avg_corners.rec.includes('Menos') ? m.avg_corners.under105 : m.avg_corners.over85)),
+                    barColor: m.avg_corners.rec.includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#00d054]',
+                    avgLabel: `${m.avg_corners.avg} córn.`,
+                    diffText: m.avg_corners.styleNote
+                },
+                {
+                    cat: 'corners',
+                    title: 'Promedio de Córners por Equipo',
+                    badge: `${m.avg_corners.home} + ${m.avg_corners.away}`,
+                    badgeColor: 'bg-slate-800 text-amber-300 border-slate-700',
+                    icon: `<i class="fa-solid fa-flag-checkered text-slate-300 text-lg"></i>`,
                     displayVal: `${m.avg_corners.val}`,
+                    displayLabel: 'Córners proyectados',
+                    splitLeft: `${locName}: <strong>${m.avg_corners.home} córn.</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_corners.away} córn.</strong>`,
                     barWidth: Math.min(100, Math.max(14, Math.round((m.avg_corners.num / 13.5) * 100))),
                     barColor: colorBarraOddster(m.avg_corners.num, m.avg_corners.avgNum, false),
                     avgLabel: `${m.avg_corners.avg}`,
-                    diffText: m.avg_corners.num >= m.avg_corners.avgNum ? `+${(m.avg_corners.num - m.avg_corners.avgNum).toFixed(2)} córn.` : `${(m.avg_corners.num - m.avg_corners.avgNum).toFixed(2)} córn.`
+                    diffText: m.avg_corners.num >= m.avg_corners.avgNum ? `+${(m.avg_corners.num - m.avg_corners.avgNum).toFixed(1)} sobre media` : `${(m.avg_corners.num - m.avg_corners.avgNum).toFixed(1)} bajo media`
+                },
+                {
+                    cat: 'cards',
+                    title: 'Tarjetas Bidireccional (Más / Menos)',
+                    badge: m.avg_cards.rec.toUpperCase(),
+                    badgeColor: m.avg_cards.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+                    icon: `<i class="fa-regular fa-clone text-yellow-400 text-lg"></i>`,
+                    displayVal: m.avg_cards.rec.includes('Menos') ? `${m.avg_cards.under55}%` : `${m.avg_cards.over35}%`,
+                    displayLabel: m.avg_cards.rec,
+                    splitLeft: `Más de 3.5: <strong>${m.avg_cards.over35}%</strong>`,
+                    splitRight: `Menos 4.5 / 5.5: <strong>${m.avg_cards.under45}% / ${m.avg_cards.under55}%</strong>`,
+                    barWidth: Math.min(100, Math.max(14, m.avg_cards.rec.includes('Menos') ? m.avg_cards.under55 : m.avg_cards.over35)),
+                    barColor: m.avg_cards.rec.includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#eab308]',
+                    avgLabel: `${m.avg_cards.avg} tarj.`,
+                    diffText: m.avg_cards.num <= 3.7 ? 'Ritmo limpio (Tendencia Under)' : 'Alta fricción (Tendencia Over)'
+                },
+                {
+                    cat: 'cards',
+                    title: 'Promedio de Tarjetas por Equipo',
+                    badge: `${m.avg_cards.home} + ${m.avg_cards.away}`,
+                    badgeColor: 'bg-slate-800 text-yellow-300 border-slate-700',
+                    icon: `<i class="fa-solid fa-shield-halved text-slate-300 text-lg"></i>`,
+                    displayVal: `${m.avg_cards.val}`,
+                    displayLabel: 'Tarjetas combinadas',
+                    splitLeft: `${locName}: <strong>${m.avg_cards.home} tarj.</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_cards.away} tarj.</strong>`,
+                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_cards.num / 7.0) * 100))),
+                    barColor: colorBarraOddster(m.avg_cards.num, m.avg_cards.avgNum, false),
+                    avgLabel: `${m.avg_cards.avg}`,
+                    diffText: m.avg_cards.num >= m.avg_cards.avgNum ? `+${(m.avg_cards.num - m.avg_cards.avgNum).toFixed(2)} tarj. vs liga` : `${(m.avg_cards.num - m.avg_cards.avgNum).toFixed(2)} tarj. vs liga`
                 },
                 {
                     cat: 'shots',
-                    title: 'Promedio de remates',
-                    subEn: 'Average shots',
+                    title: 'Promedio de Remates Totales',
+                    badge: `${m.avg_shots.home} vs ${m.avg_shots.away}`,
+                    badgeColor: 'bg-slate-800 text-slate-200 border-slate-700',
                     icon: `<i class="fa-solid fa-crosshairs text-slate-300 text-lg"></i>`,
                     displayVal: `${m.avg_shots.val}`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_shots.num / 36.0) * 100))),
+                    displayLabel: 'Remates en el partido',
+                    splitLeft: `${locName}: <strong>${m.avg_shots.home} tiros</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_shots.away} tiros</strong>`,
+                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_shots.num / 35.0) * 100))),
                     barColor: colorBarraOddster(m.avg_shots.num, m.avg_shots.avgNum, false),
                     avgLabel: `${m.avg_shots.avg}`,
-                    diffText: m.avg_shots.num >= m.avg_shots.avgNum ? `+${(m.avg_shots.num - m.avg_shots.avgNum).toFixed(1)} tiros` : `${(m.avg_shots.num - m.avg_shots.avgNum).toFixed(1)} tiros`
+                    diffText: m.avg_shots.num >= m.avg_shots.avgNum ? `+${(m.avg_shots.num - m.avg_shots.avgNum).toFixed(1)} tiros sobre media` : `${(m.avg_shots.num - m.avg_shots.avgNum).toFixed(1)} tiros vs media`
                 },
                 {
                     cat: 'shots',
-                    title: 'Promedio de tiros a puerta',
-                    subEn: 'Average shots on target',
-                    icon: `<i class="fa-solid fa-bullseye text-slate-300 text-lg"></i>`,
+                    title: 'Promedio de Tiros a Puerta (Al Arco)',
+                    badge: `${m.avg_shots_ot.home} vs ${m.avg_shots_ot.away}`,
+                    badgeColor: 'bg-slate-800 text-emerald-300 border-slate-700',
+                    icon: `<i class="fa-solid fa-bullseye text-[#00e676] text-lg"></i>`,
                     displayVal: `${m.avg_shots_ot.val}`,
+                    displayLabel: 'Remates directos al arco',
+                    splitLeft: `${locName}: <strong>${m.avg_shots_ot.home} al arco</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_shots_ot.away} al arco</strong>`,
                     barWidth: Math.min(100, Math.max(14, Math.round((m.avg_shots_ot.num / 14.0) * 100))),
                     barColor: colorBarraOddster(m.avg_shots_ot.num, m.avg_shots_ot.avgNum, false),
                     avgLabel: `${m.avg_shots_ot.avg}`,
-                    diffText: m.avg_shots_ot.num >= m.avg_shots_ot.avgNum ? `+${(m.avg_shots_ot.num - m.avg_shots_ot.avgNum).toFixed(1)} al arco` : `${(m.avg_shots_ot.num - m.avg_shots_ot.avgNum).toFixed(1)} al arco`
+                    diffText: m.avg_shots_ot.num >= m.avg_shots_ot.avgNum ? `+${(m.avg_shots_ot.num - m.avg_shots_ot.avgNum).toFixed(1)} al arco vs media` : `${(m.avg_shots_ot.num - m.avg_shots_ot.avgNum).toFixed(1)} al arco vs media`
                 }
             ];
 
@@ -1989,8 +2087,8 @@
             const lockIconHtml = !esVip ? ' <i class="fa-solid fa-lock text-amber-400 text-[9px] ml-0.5"></i>' : '';
 
             return `
-                <div class="bg-[#0b0e14] border border-slate-800/90 rounded-2xl p-4 sm:p-5 space-y-5 shadow-2xl relative overflow-hidden">
-                    <!-- Barra de Pestañas Interactivas Estilo Oddster (General | Goles | Remates | Córners | Tarjetas) -->
+                <div class="bg-[#0b0e14] border border-slate-800/90 rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xl relative overflow-hidden">
+                    <!-- Barra de Pestañas Interactivas (General | Goles | Remates | Córners | Tarjetas) -->
                     <div class="grid grid-cols-5 border-b border-slate-800/90 text-center">
                         <button type="button" onclick="filtrarTabKeyProbabilities('general')" data-kp-tab="general" class="oddster-kp-tab flex flex-col items-center justify-center gap-1.5 pb-2.5 px-2 border-b-2 border-[#00e676] text-[#00e676] font-bold text-xs transition cursor-pointer">
                             <i class="fa-solid fa-chart-simple text-sm"></i>
@@ -2014,35 +2112,49 @@
                         </button>
                     </div>
 
-                    <!-- Cabecera Key Probabilities -->
-                    <div class="flex items-center justify-between pt-1">
-                        <h4 class="text-base sm:text-lg font-outfit font-extrabold text-white m-0 tracking-tight flex items-center gap-2">
-                            <span>Probabilidades clave</span> <span class="text-xs font-normal text-slate-400">(Goles, Remates, Córners y Tarjetas)</span>
-                        </h4>
-                        <span class="text-[10px] ${esVip ? 'bg-emerald-950/90 text-[#00e676] border-emerald-500/40' : 'bg-amber-500/10 text-amber-400 border-amber-500/40'} border px-2.5 py-0.5 rounded-full font-mono font-bold">
+                    <!-- Cabecera Key Probabilities con Resumen de Señal Consenso -->
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div>
+                            <h4 class="text-base sm:text-lg font-outfit font-extrabold text-white m-0 tracking-tight flex items-center gap-2">
+                                <span>Probabilidades clave</span>
+                                <span class="text-xs font-normal text-slate-400">(Análisis Más de / Menos de en Goles, Remates, Córners y Tarjetas)</span>
+                            </h4>
+                            <p class="text-[11px] text-slate-400 m-0 mt-0.5">
+                                Selección unificada del Consenso 3 IA y Top 5: <strong class="text-[#00e676] font-mono">${selPrincipal}</strong>
+                            </p>
+                        </div>
+                        <span class="text-[10px] ${esVip ? 'bg-emerald-950/90 text-[#00e676] border-emerald-500/40' : 'bg-amber-500/10 text-amber-400 border-amber-500/40'} border px-2.5 py-1 rounded-full font-mono font-bold">
                             ${esVip ? 'PASE PRO ACTIVO' : '🔒 EXCLUSIVO PASE PRO'}
                         </span>
                     </div>
 
                     ${esVip ? `
-                    <!-- Grilla 2x4 de las 8 Tarjetas de Probabilidades Clave (Desbloqueada para Pase Pro) -->
+                    <!-- Grilla Organizada de 10 Tarjetas Bidireccionales (Desbloqueada para Pase Pro) -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         ${cards.map(c => `
                             <div data-kp-cat="${c.cat}" class="oddster-kp-card bg-[#141821] border border-slate-800/90 hover:border-emerald-500/40 rounded-2xl p-4 space-y-2.5 shadow-lg transition">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-xs font-semibold text-slate-400">${c.title}</span>
-                                    <span class="text-[10px] font-mono text-slate-500">${c.subEn}</span>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-xs font-bold text-slate-200">${c.title}</span>
+                                    <span class="text-[9px] font-mono font-extrabold px-2 py-0.5 rounded-md border ${c.badgeColor}">${c.badge}</span>
                                 </div>
-                                <div class="flex items-center gap-2.5">
-                                    ${c.icon}
-                                    <span class="text-2xl sm:text-3xl font-outfit font-black text-white tracking-tight leading-none">${c.displayVal}</span>
+                                <div class="flex items-baseline justify-between gap-2">
+                                    <div class="flex items-center gap-2.5">
+                                        ${c.icon}
+                                        <span class="text-2xl sm:text-3xl font-outfit font-black text-white tracking-tight leading-none">${c.displayVal}</span>
+                                    </div>
+                                    <span class="text-[11px] font-semibold text-slate-400">${c.displayLabel}</span>
+                                </div>
+                                <!-- Desglose Bidireccional (Más de vs Menos de / Local vs Visita) -->
+                                <div class="grid grid-cols-2 gap-2 bg-black/35 border border-slate-800/80 rounded-xl px-3 py-1.5 text-[11px] text-slate-300">
+                                    <div>${c.splitLeft}</div>
+                                    <div class="text-right">${c.splitRight}</div>
                                 </div>
                                 <div class="w-full bg-slate-800/90 h-1.5 rounded-full overflow-hidden">
                                     <div class="${c.barColor} h-full rounded-full transition-all duration-500" style="width: ${c.barWidth}%"></div>
                                 </div>
-                                <div class="flex items-center justify-between text-xs pt-0.5">
-                                    <span class="text-slate-400 font-medium">Promedio de liga: <strong class="text-[#84cc16] font-mono ml-1">${c.avgLabel}</strong></span>
-                                    <span class="text-[10px] font-mono text-slate-400">${c.diffText}</span>
+                                <div class="flex items-center justify-between text-[11px] pt-0.5">
+                                    <span class="text-slate-400 font-medium">Media de liga: <strong class="text-[#84cc16] font-mono ml-1">${c.avgLabel}</strong></span>
+                                    <span class="text-[10px] font-mono text-slate-300">${c.diffText}</span>
                                 </div>
                             </div>
                         `).join('')}
@@ -2051,11 +2163,11 @@
                     <!-- Vista Bloqueada con Candado para Usuarios Gratuitos -->
                     <div class="relative rounded-2xl overflow-hidden">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 filter blur-[5px] select-none opacity-25 pointer-events-none">
-                            ${cards.map(c => `
+                            ${cards.slice(0, 8).map(c => `
                                 <div class="bg-[#141821] border border-slate-800/90 rounded-2xl p-4 space-y-2.5">
                                     <div class="flex items-center justify-between">
                                         <span class="text-xs font-semibold text-slate-400">${c.title}</span>
-                                        <span class="text-[10px] font-mono text-slate-500">${c.subEn}</span>
+                                        <span class="text-[10px] font-mono text-slate-500">${c.badge}</span>
                                     </div>
                                     <div class="flex items-center gap-2.5">
                                         ${c.icon}
@@ -2065,7 +2177,7 @@
                                         <div class="bg-[#00d054] h-full rounded-full" style="width: 78%"></div>
                                     </div>
                                     <div class="flex items-center justify-between text-xs pt-0.5">
-                                        <span class="text-slate-400">Promedio de liga: <strong class="text-[#84cc16] font-mono ml-1">${c.avgLabel}</strong></span>
+                                        <span class="text-slate-400">Media de liga: <strong class="text-[#84cc16] font-mono ml-1">${c.avgLabel}</strong></span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2075,13 +2187,13 @@
                                 <i class="fa-solid fa-lock"></i>
                             </div>
                             <span class="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-0.5 rounded-full mb-2">
-                                Goles • Remates • Córners • Tarjetas
+                                Goles • Remates • Córners • Tarjetas (Más de / Menos de)
                             </span>
                             <h5 class="text-sm sm:text-base font-outfit font-black text-white m-0">
                                 Si quieres acceder a esta información, desbloquea la Membresía Pro / Pase Pro
                             </h5>
                             <p class="text-xs text-slate-300 max-w-md mt-1.5 mb-4 leading-relaxed">
-                                Accede a las 8 probabilidades clave del motor (Más de 1.5 y 2.5 goles, Ambos anotan, promedios exactos de remates, tiros a puerta, córners y tarjetas frente a la media de liga).
+                                Accede al desglose bidireccional completo (Más de y Menos de en goles, córners y tarjetas, remates totales, tiros a puerta y comparativa frente al promedio de la liga).
                             </p>
                             <button type="button" onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition shadow-lg shadow-amber-950/50 flex items-center gap-2 cursor-pointer">
                                 <i class="fa-solid fa-crown"></i> <span>Desbloquear Pase Pro (S/ 24.90)</span>
@@ -2774,7 +2886,7 @@
                             </div>
                             <div>
                                 <span class="text-[9px] font-black uppercase text-accentGreen block tracking-wider">LOCUCIÓN DE ANALISTA EN VIVO • RESPUESTA INSTANTÁNEA</span>
-                                <span class="text-xs font-bold text-white">Análisis directo del partido (sin leer iconos ni pausas artificiales)</span>
+                                <span class="text-xs font-bold text-white">Análisis directo del partido</span>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 flex-wrap">
