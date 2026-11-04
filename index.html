@@ -184,33 +184,15 @@
         <!-- ÁREA PRINCIPAL -->
         <main class="flex-1 flex flex-col bg-[#050913] lg:h-[calc(100vh-108px)] overflow-y-auto relative p-4 sm:p-6">
             
-            <!-- PANEL DE TELEMETRÍA -->
-            <div class="w-full max-w-[1600px] mx-auto mb-3 bg-cardDark border border-cardBorder rounded-2xl p-4 shadow-xl w-full">
-                <div class="flex items-center justify-between border-b border-cardBorder pb-3 mb-3">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
-                        <span class="text-xs font-black uppercase tracking-wider text-slate-200">Modelo estadístico • Poisson & Monte Carlo</span>
-                    </div>
-                    <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-accentGreen border border-emerald-500/30">Poisson & Monte Carlo 10K</span>
+            <!-- PANEL DE TELEMETRÍA COMPACTO (SOLO PARTIDOS EN LÍNEA) -->
+            <div class="w-full max-w-[1600px] mx-auto mb-3 bg-cardDark border border-cardBorder rounded-2xl px-4 py-3 shadow-xl flex items-center justify-between flex-wrap gap-3">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
+                    <span class="text-xs font-black uppercase tracking-wider text-slate-200">Modelo Estadístico • Poisson & Monte Carlo</span>
                 </div>
-
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
-                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl">
-                        <span class="text-[9px] font-bold text-slate-400 block">PROVEEDOR OFICIAL</span>
-                        <span class="text-xs font-black text-white">Football-Data.org</span>
-                    </div>
-                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl">
-                        <span class="text-[9px] font-bold text-slate-400 block">BASE DE DATOS</span>
-                        <span class="text-xs font-black text-accentGreen">Firestore Cloud</span>
-                    </div>
-                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl">
-                        <span class="text-[9px] font-bold text-slate-400 block">PARTIDOS EN LÍNEA</span>
-                        <span class="text-xs font-black text-cyan-400 font-mono" id="telemetria-partidos">0 Partidos</span>
-                    </div>
-                    <div class="bg-baseDark/80 border border-cardBorder p-2.5 rounded-xl">
-                        <span class="text-[9px] font-bold text-slate-400 block">ESTADO DEL SERVICIO</span>
-                        <span class="text-xs font-black text-white">Operacional</span>
-                    </div>
+                <div class="bg-baseDark/90 border border-cardBorder px-3.5 py-1.5 rounded-xl flex items-center gap-2.5">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Partidos en Línea:</span>
+                    <span class="text-xs font-black text-cyan-400 font-mono" id="telemetria-partidos">0 Partidos</span>
                 </div>
             </div>
 
@@ -1816,76 +1798,116 @@
             const visAnt = ant.visitante || {};
             const lAvg = obtenerPromediosLigaOddster(item.codigo_liga, item.liga);
 
-            const lh = parseFloat(kp.avg_goals?.home ?? xgParams.lambda_home ?? item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_local ?? 1.52);
-            const la = parseFloat(kp.avg_goals?.away ?? xgParams.lambda_away ?? item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_visitante ?? 1.24);
+            const lh = parseFloat(kp.avg_goals?.home ?? xgParams.lambda_home ?? item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_local ?? 1.42);
+            const la = parseFloat(kp.avg_goals?.away ?? xgParams.lambda_away ?? item.pilares_cuantitativos?.pilar_1_volumen_ofensivo?.xg_proyectado_visitante ?? 1.16);
             const avgGoalsVal = kp.avg_goals?.value != null ? parseFloat(kp.avg_goals.value) : Math.round((lh + la) * 100) / 100;
 
-            const over25Val = kp.over_2_5?.value != null ? Math.round(kp.over_2_5.value) : Math.round(parseFloat(pGoles25.over || 60));
-            const under25Val = kp.over_2_5?.under_value != null ? Math.round(kp.over_2_5.under_value) : Math.max(8, 100 - over25Val);
-            const over15Val = kp.over_1_5?.value != null ? Math.round(kp.over_1_5.value) : Math.round(parseFloat(pGoles15.over || 80));
-            const under15Val = kp.over_1_5?.under_value != null ? Math.round(kp.over_1_5.under_value) : Math.max(5, 100 - over15Val);
-            const under35Val = kp.over_1_5?.under_3_5 != null ? Math.round(kp.over_1_5.under_3_5) : Math.round(parseFloat(pGoles35.under || Math.min(91, Math.max(58, 96 - avgGoalsVal * 9))));
-            const over35Val = Math.max(8, 100 - under35Val);
+            const over25Val = kp.over_2_5?.value != null ? Math.round(kp.over_2_5.value) : Math.round(parseFloat(pGoles25.over || 56));
+            const under25Val = kp.over_2_5?.under_value != null ? Math.round(kp.over_2_5.under_value) : Math.max(12, 100 - over25Val);
+            const over15Val = kp.over_1_5?.value != null ? Math.round(kp.over_1_5.value) : Math.round(parseFloat(pGoles15.over || 78));
+            const under35Val = kp.over_1_5?.under_3_5 != null ? Math.round(kp.over_1_5.under_3_5) : Math.round(parseFloat(pGoles35.under || Math.min(89, Math.max(58, 95 - avgGoalsVal * 8))));
 
-            const bttsVal = kp.btts?.value != null ? Math.round(kp.btts.value) : Math.round(parseFloat(pBtts.yes || 62));
-            const bttsNoVal = kp.btts?.no_value != null ? Math.round(kp.btts.no_value) : Math.max(8, 100 - bttsVal);
+            const bttsVal = kp.btts?.value != null ? Math.round(kp.btts.value) : Math.round(parseFloat(pBtts.yes || 58));
+            const bttsNoVal = kp.btts?.no_value != null ? Math.round(kp.btts.no_value) : Math.max(12, 100 - bttsVal);
+            const bttsRec = kp.btts?.recommended || ((bttsVal >= 55 && lh >= 1.15 && la >= 1.05) ? 'Ambos anotan: Sí' : 'Ambos anotan: No');
+            const bttsProb = kp.btts?.prob_pct != null ? Math.round(kp.btts.prob_pct) : Math.min(86, Math.max(72, bttsRec.includes('Sí') ? bttsVal + 10 : bttsNoVal + 10));
 
-            const cardsH = parseFloat(kp.avg_cards?.home ?? locAnt.tarjetas_prom ?? 2.05);
-            const cardsA = parseFloat(kp.avg_cards?.away ?? visAnt.tarjetas_prom ?? 2.00);
+            const cardsH = parseFloat(kp.avg_cards?.home ?? locAnt.tarjetas_prom ?? 1.9);
+            const cardsA = parseFloat(kp.avg_cards?.away ?? visAnt.tarjetas_prom ?? 1.9);
             const avgCardsVal = kp.avg_cards?.value != null
                 ? parseFloat(kp.avg_cards.value)
-                : Math.round(((cardsH + cardsA) || parseFloat(xgParams.expected_cards || 4.10)) * 100) / 100;
+                : Math.round(((cardsH + cardsA) || parseFloat(xgParams.expected_cards || 3.8)) * 100) / 100;
 
-            const cardsOver35 = kp.avg_cards?.over_3_5_pct != null ? Math.round(kp.avg_cards.over_3_5_pct) : Math.min(90, Math.max(45, Math.round(54 + avgCardsVal * 6.2)));
-            const cardsUnder45 = kp.avg_cards?.under_4_5_pct != null ? Math.round(kp.avg_cards.under_4_5_pct) : Math.min(91, Math.max(42, Math.round(98 - avgCardsVal * 6.5)));
-            const cardsUnder55 = kp.avg_cards?.under_5_5_pct != null ? Math.round(kp.avg_cards.under_5_5_pct) : Math.min(93, Math.max(55, Math.round(102 - avgCardsVal * 5.2)));
-
-            const cornersH = parseFloat(kp.avg_corners?.home ?? locAnt.corners_prom ?? 5.0);
-            const cornersA = parseFloat(kp.avg_corners?.away ?? visAnt.corners_prom ?? 4.8);
+            const cornersH = parseFloat(kp.avg_corners?.home ?? locAnt.corners_prom ?? 4.9);
+            const cornersA = parseFloat(kp.avg_corners?.away ?? visAnt.corners_prom ?? 4.5);
             const avgCornersVal = kp.avg_corners?.value != null
                 ? parseFloat(kp.avg_corners.value)
-                : Math.round(((cornersH + cornersA) || parseFloat(xgParams.expected_corners || 9.8)) * 100) / 100;
+                : Math.round(((cornersH + cornersA) || parseFloat(xgParams.expected_corners || 9.4)) * 100) / 100;
 
-            const cornersOver85 = kp.avg_corners?.over_8_5_pct != null ? Math.round(kp.avg_corners.over_8_5_pct) : Math.min(89, Math.max(38, Math.round(35 + avgCornersVal * 4.5)));
-            const cornersUnder95 = kp.avg_corners?.under_9_5_pct != null ? Math.round(kp.avg_corners.under_9_5_pct) : Math.min(90, Math.max(35, Math.round(115 - avgCornersVal * 4.8)));
-            const cornersUnder105 = kp.avg_corners?.under_10_5_pct != null ? Math.round(kp.avg_corners.under_10_5_pct) : Math.min(92, Math.max(48, Math.round(122 - avgCornersVal * 4.5)));
-
-            const shotsH = parseFloat(kp.avg_shots?.home ?? locAnt.tiros_totales_prom ?? 13.2);
-            const shotsA = parseFloat(kp.avg_shots?.away ?? visAnt.tiros_totales_prom ?? 12.4);
+            const shotsH = parseFloat(kp.avg_shots?.home ?? locAnt.tiros_totales_prom ?? 12.6);
+            const shotsA = parseFloat(kp.avg_shots?.away ?? visAnt.tiros_totales_prom ?? 11.4);
             const avgShotsVal = kp.avg_shots?.value != null
                 ? parseFloat(kp.avg_shots.value)
-                : Math.round((shotsH + shotsA + (avgGoalsVal - 2.5) * 1.8) * 100) / 100;
+                : Math.round((shotsH + shotsA) * 10) / 10;
 
-            const shotsOTH = parseFloat(kp.avg_shots_on_target?.home ?? locAnt.tiros_puerta_prom ?? 4.8);
-            const shotsOTA = parseFloat(kp.avg_shots_on_target?.away ?? visAnt.tiros_puerta_prom ?? 4.3);
+            const shotsOTH = parseFloat(kp.avg_shots_on_target?.home ?? locAnt.tiros_puerta_prom ?? 4.6);
+            const shotsOTA = parseFloat(kp.avg_shots_on_target?.away ?? visAnt.tiros_puerta_prom ?? 4.1);
             const avgShotsOTVal = kp.avg_shots_on_target?.value != null
                 ? parseFloat(kp.avg_shots_on_target.value)
-                : Math.round((shotsOTH + shotsOTA + (avgGoalsVal - 2.5) * 0.7) * 100) / 100;
+                : Math.round((shotsOTH + shotsOTA) * 10) / 10;
 
-            const recGoals = kp.avg_goals?.recommended || (avgGoalsVal >= 3.05 ? 'Más de 2.5 goles' : (avgGoalsVal <= 2.32 ? 'Menos de 3.5 goles' : 'Más de 1.5 goles'));
-            const recCorners = kp.avg_corners?.recommended || (avgCornersVal <= 8.2 ? 'Menos de 9.5 córners' : (avgCornersVal <= 9.1 ? 'Menos de 10.5 córners' : 'Más de 8.5 córners'));
-            const recCards = kp.avg_cards?.recommended || (avgCardsVal <= 3.15 ? 'Menos de 4.5 tarjetas' : (avgCardsVal <= 3.75 ? 'Menos de 5.5 tarjetas' : 'Más de 3.5 tarjetas'));
+            const recGoals = kp.avg_goals?.recommended || (avgGoalsVal >= 2.85 ? 'Más de 2.5 goles' : (avgGoalsVal <= 1.98 ? 'Menos de 2.5 goles' : (avgGoalsVal <= 2.32 ? 'Menos de 3.5 goles' : 'Más de 1.5 goles')));
+            const probGoals = kp.avg_goals?.prob_pct != null ? Math.round(kp.avg_goals.prob_pct) : (recGoals.includes('2.5') ? Math.max(over25Val, under25Val) + 8 : (recGoals.includes('3.5') ? under35Val : over15Val));
+
+            let recCards = kp.avg_cards?.recommended;
+            if (!recCards) {
+                if (avgCardsVal <= 2.95) recCards = 'Menos de 3.5 tarjetas';
+                else if (avgCardsVal <= 3.55) recCards = 'Menos de 4.5 tarjetas';
+                else if (avgCardsVal <= 3.95) recCards = 'Menos de 5.5 tarjetas';
+                else if (avgCardsVal >= 5.10) recCards = 'Más de 4.5 tarjetas';
+                else if (avgCardsVal >= 4.25) recCards = 'Más de 3.5 tarjetas';
+                else recCards = 'Más de 2.5 tarjetas';
+            }
+            const probCards = kp.avg_cards?.prob_pct != null ? Math.round(kp.avg_cards.prob_pct) : 84;
+
+            let recCorners = kp.avg_corners?.recommended;
+            if (!recCorners) {
+                if (avgCornersVal <= 7.8) recCorners = 'Menos de 8.5 córners';
+                else if (avgCornersVal <= 8.6) recCorners = 'Menos de 9.5 córners';
+                else if (avgCornersVal <= 9.2) recCorners = 'Menos de 10.5 córners';
+                else if (avgCornersVal >= 10.4) recCorners = 'Más de 9.5 córners';
+                else if (avgCornersVal >= 9.5) recCorners = 'Más de 8.5 córners';
+                else recCorners = 'Más de 7.5 córners';
+            }
+            const probCorners = kp.avg_corners?.prob_pct != null ? Math.round(kp.avg_corners.prob_pct) : 83;
+
+            const recShots = kp.avg_shots?.recommended || `Más de ${Math.floor(avgShotsVal - 2.5) + 0.5} remates`;
+            const probShots = kp.avg_shots?.prob_pct != null ? Math.round(kp.avg_shots.prob_pct) : 81;
+
+            const recShotsOT = kp.avg_shots_on_target?.recommended || `Más de ${Math.max(5.5, Math.floor(avgShotsOTVal - 1.5) + 0.5)} tiros a puerta`;
+            const probShotsOT = kp.avg_shots_on_target?.prob_pct != null ? Math.round(kp.avg_shots_on_target.prob_pct) : 82;
 
             return {
-                over_2_5: { val: over25Val, under: under25Val, avg: kp.over_2_5?.league_avg ?? lAvg.over_2_5, rec: over25Val >= 58 ? 'MÁS DE 2.5' : 'MENOS DE 2.5' },
-                over_1_5: { val: over15Val, under15: under15Val, under35: under35Val, over35: over35Val, avg: kp.over_1_5?.league_avg ?? lAvg.over_1_5, rec: recGoals },
-                btts: { val: bttsVal, no: bttsNoVal, avg: kp.btts?.league_avg ?? lAvg.btts, rec: bttsVal >= 57 ? 'AMBOS ANOTAN: SÍ' : 'AMBOS ANOTAN: NO' },
-                avg_goals: { val: avgGoalsVal.toFixed(2), num: avgGoalsVal, home: lh.toFixed(2), away: la.toFixed(2), under35: under35Val, avg: (kp.avg_goals?.league_avg ?? lAvg.goals).toFixed(1), avgNum: parseFloat(kp.avg_goals?.league_avg ?? lAvg.goals), rec: recGoals },
+                avg_goals: {
+                    val: avgGoalsVal.toFixed(2), num: avgGoalsVal,
+                    home: lh.toFixed(2), away: la.toFixed(2),
+                    avg: parseFloat(kp.avg_goals?.league_avg ?? lAvg.goals).toFixed(2),
+                    avgNum: parseFloat(kp.avg_goals?.league_avg ?? lAvg.goals),
+                    rec: recGoals, prob: probGoals
+                },
+                btts: {
+                    val: bttsVal, no: bttsNoVal,
+                    avg: kp.btts?.league_avg ?? lAvg.btts,
+                    rec: bttsRec, prob: bttsProb
+                },
                 avg_cards: {
-                    val: avgCardsVal.toFixed(2), num: avgCardsVal, home: cardsH.toFixed(1), away: cardsA.toFixed(1),
-                    over35: cardsOver35, under45: cardsUnder45, under55: cardsUnder55,
-                    avg: (kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1), avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards),
-                    rec: recCards
+                    val: avgCardsVal.toFixed(1), num: avgCardsVal,
+                    home: cardsH.toFixed(1), away: cardsA.toFixed(1),
+                    avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
+                    avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards),
+                    rec: recCards, prob: probCards
                 },
                 avg_corners: {
-                    val: avgCornersVal.toFixed(2), num: avgCornersVal, home: cornersH.toFixed(1), away: cornersA.toFixed(1),
-                    over85: cornersOver85, under95: cornersUnder95, under105: cornersUnder105,
-                    styleNote: kp.avg_corners?.style_note || (avgCornersVal <= 8.6 ? 'Juego Interior (Under)' : 'Ataque por Bandas (Over)'),
-                    avg: (kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1), avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners),
-                    rec: recCorners
+                    val: avgCornersVal.toFixed(1), num: avgCornersVal,
+                    home: cornersH.toFixed(1), away: cornersA.toFixed(1),
+                    avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1),
+                    avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners),
+                    rec: recCorners, prob: probCorners
                 },
-                avg_shots: { val: avgShotsVal.toFixed(1), num: avgShotsVal, home: shotsH.toFixed(1), away: shotsA.toFixed(1), avg: (kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1), avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots) },
-                avg_shots_ot: { val: avgShotsOTVal.toFixed(1), num: avgShotsOTVal, home: shotsOTH.toFixed(1), away: shotsOTA.toFixed(1), avg: (kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1), avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target) }
+                avg_shots: {
+                    val: avgShotsVal.toFixed(1), num: avgShotsVal,
+                    home: shotsH.toFixed(1), away: shotsA.toFixed(1),
+                    avg: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1),
+                    avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots),
+                    rec: recShots, prob: probShots
+                },
+                avg_shots_ot: {
+                    val: avgShotsOTVal.toFixed(1), num: avgShotsOTVal,
+                    home: shotsOTH.toFixed(1), away: shotsOTA.toFixed(1),
+                    avg: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1),
+                    avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target),
+                    rec: recShotsOT, prob: probShotsOT
+                }
             };
         }
 
@@ -1916,170 +1938,98 @@
             const m = extraerMetricasOddsterPartido(item);
             const locName = item.local || 'Local';
             const visName = item.visitante || 'Visita';
-            const selPrincipal = item.pronostico_principal?.seleccion || item.consenso_dual_ia?.seleccion_final_consenso || 'Más de 1.5 goles';
-
-            function colorBarraOddster(valNum, avgNum, isPct = false) {
-                const ratio = avgNum > 0 ? (valNum / avgNum) : 1.0;
-                if (isPct) {
-                    if (valNum >= 74 || ratio >= 1.10) return 'bg-[#00d054]';
-                    if (valNum >= 54 || ratio >= 0.92) return 'bg-[#eab308]';
-                    return 'bg-[#38bdf8]';
-                }
-                if (ratio >= 1.06) return 'bg-[#00d054]';
-                if (ratio >= 0.90) return 'bg-[#eab308]';
-                return 'bg-[#38bdf8]';
-            }
+            const selPrincipal = item.pronostico_principal?.seleccion || item.consenso_dual_ia?.seleccion_final_consenso || m.avg_goals.rec;
 
             const cards = [
                 {
                     cat: 'goals',
-                    title: 'Piso y Techo de Goles (1.5 / 3.5)',
-                    badge: m.over_1_5.rec.toUpperCase(),
-                    badgeColor: m.over_1_5.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
+                    title: 'Goles Totales',
+                    badge: `${m.avg_goals.rec.toUpperCase()} (${m.avg_goals.prob}%)`,
+                    badgeColor: m.avg_goals.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
                     icon: `<i class="fa-solid fa-futbol text-[#00e676] text-lg"></i>`,
-                    displayVal: `${m.over_1_5.val}%`,
-                    displayLabel: 'Más de 1.5 goles',
-                    splitLeft: `Más de 1.5: <strong>${m.over_1_5.val}%</strong>`,
-                    splitRight: `Menos de 3.5: <strong>${m.over_1_5.under35}%</strong>`,
-                    barWidth: Math.min(100, Math.max(14, m.over_1_5.val)),
-                    barColor: colorBarraOddster(m.over_1_5.val, m.over_1_5.avg, true),
-                    avgLabel: `${m.over_1_5.avg}%`,
-                    diffText: m.over_1_5.val >= m.over_1_5.avg ? `+${m.over_1_5.val - m.over_1_5.avg}% vs liga` : `${m.over_1_5.val - m.over_1_5.avg}% vs liga`
-                },
-                {
-                    cat: 'goals',
-                    title: 'Línea Estándar 2.5 Goles (Más / Menos)',
-                    badge: m.over_2_5.rec,
-                    badgeColor: m.over_2_5.val >= 58 ? 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40' : 'bg-sky-500/15 text-sky-300 border-sky-500/40',
-                    icon: `<i class="fa-solid fa-scale-balanced text-slate-300 text-lg"></i>`,
-                    displayVal: m.over_2_5.val >= m.over_2_5.under ? `${m.over_2_5.val}%` : `${m.over_2_5.under}%`,
-                    displayLabel: m.over_2_5.val >= m.over_2_5.under ? 'Prob. Más de 2.5' : 'Prob. Menos de 2.5',
-                    splitLeft: `Más de 2.5: <strong>${m.over_2_5.val}%</strong>`,
-                    splitRight: `Menos de 2.5: <strong>${m.over_2_5.under}%</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.max(m.over_2_5.val, m.over_2_5.under))),
-                    barColor: colorBarraOddster(m.over_2_5.val, m.over_2_5.avg, true),
-                    avgLabel: `${m.over_2_5.avg}% (Over 2.5)`,
-                    diffText: m.over_2_5.val >= m.over_2_5.avg ? `+${m.over_2_5.val - m.over_2_5.avg}% sobre media` : `Tendencia Under (${m.over_2_5.under}%)`
-                },
-                {
-                    cat: 'goals',
-                    title: 'Ambos Equipos Anotan (Sí / No)',
-                    badge: m.btts.rec,
-                    badgeColor: m.btts.val >= 57 ? 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40' : 'bg-sky-500/15 text-sky-300 border-sky-500/40',
-                    icon: `<i class="fa-solid fa-arrows-left-right text-slate-300 text-lg"></i>`,
-                    displayVal: m.btts.val >= m.btts.no ? `${m.btts.val}%` : `${m.btts.no}%`,
-                    displayLabel: m.btts.val >= m.btts.no ? 'Ambos anotan: Sí' : 'Ambos anotan: No',
-                    splitLeft: `Sí anotan: <strong>${m.btts.val}%</strong>`,
-                    splitRight: `No (0-1 eq.): <strong>${m.btts.no}%</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.max(m.btts.val, m.btts.no))),
-                    barColor: colorBarraOddster(m.btts.val, m.btts.avg, true),
-                    avgLabel: `${m.btts.avg}%`,
-                    diffText: m.btts.val >= m.btts.avg ? `+${m.btts.val - m.btts.avg}% sobre media` : `${m.btts.val - m.btts.avg}% vs media`
-                },
-                {
-                    cat: 'goals',
-                    title: 'Promedio de Goles Esperados (xG)',
-                    badge: `${m.avg_goals.home} vs ${m.avg_goals.away} xG`,
-                    badgeColor: 'bg-slate-800 text-lime-400 border-slate-700',
-                    icon: `<i class="fa-regular fa-futbol text-lime-400 text-lg"></i>`,
                     displayVal: `${m.avg_goals.val}`,
-                    displayLabel: 'Goles totales esp.',
-                    splitLeft: `${locName}: <strong>${m.avg_goals.home} xG</strong>`,
-                    splitRight: `${visName}: <strong>${m.avg_goals.away} xG</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_goals.num / 4.5) * 100))),
-                    barColor: colorBarraOddster(m.avg_goals.num, m.avg_goals.avgNum, false),
+                    displayLabel: `Promedio real • Jugada: ${m.avg_goals.rec}`,
+                    splitLeft: `${locName}: <strong>${m.avg_goals.home} goles/p</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_goals.away} goles/p</strong>`,
+                    barWidth: Math.min(96, Math.max(45, m.avg_goals.prob)),
+                    barColor: m.avg_goals.rec.includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#00d054]',
                     avgLabel: `${m.avg_goals.avg} goles`,
-                    diffText: m.avg_goals.num >= m.avg_goals.avgNum ? `+${(m.avg_goals.num - m.avg_goals.avgNum).toFixed(2)} xG vs liga` : `${(m.avg_goals.num - m.avg_goals.avgNum).toFixed(2)} xG vs liga`
+                    diffText: `Consenso 3 IA: ${m.avg_goals.rec}`
                 },
                 {
-                    cat: 'corners',
-                    title: 'Córners Bidireccional (Más / Menos)',
-                    badge: m.avg_corners.rec.toUpperCase(),
-                    badgeColor: m.avg_corners.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
-                    icon: `<i class="fa-regular fa-flag text-amber-400 text-lg"></i>`,
-                    displayVal: m.avg_corners.rec.includes('Menos') ? `${m.avg_corners.under105}%` : `${m.avg_corners.over85}%`,
-                    displayLabel: m.avg_corners.rec,
-                    splitLeft: `Más 8.5 córn.: <strong>${m.avg_corners.over85}%</strong>`,
-                    splitRight: `Menos 9.5 / 10.5: <strong>${m.avg_corners.under95}% / ${m.avg_corners.under105}%</strong>`,
-                    barWidth: Math.min(100, Math.max(14, m.avg_corners.rec.includes('Menos') ? m.avg_corners.under105 : m.avg_corners.over85)),
-                    barColor: m.avg_corners.rec.includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#00d054]',
-                    avgLabel: `${m.avg_corners.avg} córn.`,
-                    diffText: m.avg_corners.styleNote
-                },
-                {
-                    cat: 'corners',
-                    title: 'Promedio de Córners por Equipo',
-                    badge: `${m.avg_corners.home} + ${m.avg_corners.away}`,
-                    badgeColor: 'bg-slate-800 text-amber-300 border-slate-700',
-                    icon: `<i class="fa-solid fa-flag-checkered text-slate-300 text-lg"></i>`,
-                    displayVal: `${m.avg_corners.val}`,
-                    displayLabel: 'Córners proyectados',
-                    splitLeft: `${locName}: <strong>${m.avg_corners.home} córn.</strong>`,
-                    splitRight: `${visName}: <strong>${m.avg_corners.away} córn.</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_corners.num / 13.5) * 100))),
-                    barColor: colorBarraOddster(m.avg_corners.num, m.avg_corners.avgNum, false),
-                    avgLabel: `${m.avg_corners.avg}`,
-                    diffText: m.avg_corners.num >= m.avg_corners.avgNum ? `+${(m.avg_corners.num - m.avg_corners.avgNum).toFixed(1)} sobre media` : `${(m.avg_corners.num - m.avg_corners.avgNum).toFixed(1)} bajo media`
+                    cat: 'goals',
+                    title: 'Ambos Equipos Anotan',
+                    badge: `${m.btts.rec.toUpperCase()} (${m.btts.prob}%)`,
+                    badgeColor: m.btts.rec.includes('Sí') ? 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40' : 'bg-sky-500/15 text-sky-300 border-sky-500/40',
+                    icon: `<i class="fa-solid fa-arrows-left-right text-emerald-400 text-lg"></i>`,
+                    displayVal: `${m.btts.prob}%`,
+                    displayLabel: `Selección: ${m.btts.rec}`,
+                    splitLeft: `Sí anotan ambos: <strong>${m.btts.val}%</strong>`,
+                    splitRight: `No anotan ambos: <strong>${m.btts.no}%</strong>`,
+                    barWidth: Math.min(96, Math.max(45, m.btts.prob)),
+                    barColor: m.btts.rec.includes('Sí') ? 'bg-[#00d054]' : 'bg-[#38bdf8]',
+                    avgLabel: `${m.btts.avg}%`,
+                    diffText: `Consenso 3 IA: ${m.btts.rec}`
                 },
                 {
                     cat: 'cards',
-                    title: 'Tarjetas Bidireccional (Más / Menos)',
-                    badge: m.avg_cards.rec.toUpperCase(),
+                    title: 'Promedio de Tarjetas',
+                    badge: `${m.avg_cards.rec.toUpperCase()} (${m.avg_cards.prob}%)`,
                     badgeColor: m.avg_cards.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40',
                     icon: `<i class="fa-regular fa-clone text-yellow-400 text-lg"></i>`,
-                    displayVal: m.avg_cards.rec.includes('Menos') ? `${m.avg_cards.under55}%` : `${m.avg_cards.over35}%`,
-                    displayLabel: m.avg_cards.rec,
-                    splitLeft: `Más de 3.5: <strong>${m.avg_cards.over35}%</strong>`,
-                    splitRight: `Menos 4.5 / 5.5: <strong>${m.avg_cards.under45}% / ${m.avg_cards.under55}%</strong>`,
-                    barWidth: Math.min(100, Math.max(14, m.avg_cards.rec.includes('Menos') ? m.avg_cards.under55 : m.avg_cards.over35)),
+                    displayVal: `${m.avg_cards.val}`,
+                    displayLabel: `Promedio real • Jugada: ${m.avg_cards.rec}`,
+                    splitLeft: `${locName}: <strong>${m.avg_cards.home} tarj./p</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_cards.away} tarj./p</strong>`,
+                    barWidth: Math.min(96, Math.max(45, m.avg_cards.prob)),
                     barColor: m.avg_cards.rec.includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#eab308]',
                     avgLabel: `${m.avg_cards.avg} tarj.`,
-                    diffText: m.avg_cards.num <= 3.7 ? 'Ritmo limpio (Tendencia Under)' : 'Alta fricción (Tendencia Over)'
+                    diffText: `Consenso 3 IA: ${m.avg_cards.rec}`
                 },
                 {
-                    cat: 'cards',
-                    title: 'Promedio de Tarjetas por Equipo',
-                    badge: `${m.avg_cards.home} + ${m.avg_cards.away}`,
-                    badgeColor: 'bg-slate-800 text-yellow-300 border-slate-700',
-                    icon: `<i class="fa-solid fa-shield-halved text-slate-300 text-lg"></i>`,
-                    displayVal: `${m.avg_cards.val}`,
-                    displayLabel: 'Tarjetas combinadas',
-                    splitLeft: `${locName}: <strong>${m.avg_cards.home} tarj.</strong>`,
-                    splitRight: `${visName}: <strong>${m.avg_cards.away} tarj.</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_cards.num / 7.0) * 100))),
-                    barColor: colorBarraOddster(m.avg_cards.num, m.avg_cards.avgNum, false),
-                    avgLabel: `${m.avg_cards.avg}`,
-                    diffText: m.avg_cards.num >= m.avg_cards.avgNum ? `+${(m.avg_cards.num - m.avg_cards.avgNum).toFixed(2)} tarj. vs liga` : `${(m.avg_cards.num - m.avg_cards.avgNum).toFixed(2)} tarj. vs liga`
+                    cat: 'corners',
+                    title: 'Promedio de Córners',
+                    badge: `${m.avg_corners.rec.toUpperCase()} (${m.avg_corners.prob}%)`,
+                    badgeColor: m.avg_corners.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
+                    icon: `<i class="fa-regular fa-flag text-amber-400 text-lg"></i>`,
+                    displayVal: `${m.avg_corners.val}`,
+                    displayLabel: `Promedio real • Jugada: ${m.avg_corners.rec}`,
+                    splitLeft: `${locName}: <strong>${m.avg_corners.home} córn./p</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_corners.away} córn./p</strong>`,
+                    barWidth: Math.min(96, Math.max(45, m.avg_corners.prob)),
+                    barColor: m.avg_corners.rec.includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#00d054]',
+                    avgLabel: `${m.avg_corners.avg} córn.`,
+                    diffText: `Consenso 3 IA: ${m.avg_corners.rec}`
                 },
                 {
                     cat: 'shots',
                     title: 'Promedio de Remates Totales',
-                    badge: `${m.avg_shots.home} vs ${m.avg_shots.away}`,
-                    badgeColor: 'bg-slate-800 text-slate-200 border-slate-700',
+                    badge: `${m.avg_shots.rec.toUpperCase()} (${m.avg_shots.prob}%)`,
+                    badgeColor: 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
                     icon: `<i class="fa-solid fa-crosshairs text-slate-300 text-lg"></i>`,
                     displayVal: `${m.avg_shots.val}`,
-                    displayLabel: 'Remates en el partido',
-                    splitLeft: `${locName}: <strong>${m.avg_shots.home} tiros</strong>`,
-                    splitRight: `${visName}: <strong>${m.avg_shots.away} tiros</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_shots.num / 35.0) * 100))),
-                    barColor: colorBarraOddster(m.avg_shots.num, m.avg_shots.avgNum, false),
-                    avgLabel: `${m.avg_shots.avg}`,
-                    diffText: m.avg_shots.num >= m.avg_shots.avgNum ? `+${(m.avg_shots.num - m.avg_shots.avgNum).toFixed(1)} tiros sobre media` : `${(m.avg_shots.num - m.avg_shots.avgNum).toFixed(1)} tiros vs media`
+                    displayLabel: `Promedio real • Jugada: ${m.avg_shots.rec}`,
+                    splitLeft: `${locName}: <strong>${m.avg_shots.home} tiros/p</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_shots.away} tiros/p</strong>`,
+                    barWidth: Math.min(96, Math.max(45, m.avg_shots.prob)),
+                    barColor: 'bg-[#00d054]',
+                    avgLabel: `${m.avg_shots.avg} tiros`,
+                    diffText: `Consenso 3 IA: ${m.avg_shots.rec}`
                 },
                 {
                     cat: 'shots',
-                    title: 'Promedio de Tiros a Puerta (Al Arco)',
-                    badge: `${m.avg_shots_ot.home} vs ${m.avg_shots_ot.away}`,
-                    badgeColor: 'bg-slate-800 text-emerald-300 border-slate-700',
+                    title: 'Promedio de Tiros a Puerta',
+                    badge: `${m.avg_shots_ot.rec.toUpperCase()} (${m.avg_shots_ot.prob}%)`,
+                    badgeColor: 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
                     icon: `<i class="fa-solid fa-bullseye text-[#00e676] text-lg"></i>`,
                     displayVal: `${m.avg_shots_ot.val}`,
-                    displayLabel: 'Remates directos al arco',
-                    splitLeft: `${locName}: <strong>${m.avg_shots_ot.home} al arco</strong>`,
-                    splitRight: `${visName}: <strong>${m.avg_shots_ot.away} al arco</strong>`,
-                    barWidth: Math.min(100, Math.max(14, Math.round((m.avg_shots_ot.num / 14.0) * 100))),
-                    barColor: colorBarraOddster(m.avg_shots_ot.num, m.avg_shots_ot.avgNum, false),
-                    avgLabel: `${m.avg_shots_ot.avg}`,
-                    diffText: m.avg_shots_ot.num >= m.avg_shots_ot.avgNum ? `+${(m.avg_shots_ot.num - m.avg_shots_ot.avgNum).toFixed(1)} al arco vs media` : `${(m.avg_shots_ot.num - m.avg_shots_ot.avgNum).toFixed(1)} al arco vs media`
+                    displayLabel: `Promedio real • Jugada: ${m.avg_shots_ot.rec}`,
+                    splitLeft: `${locName}: <strong>${m.avg_shots_ot.home} al arco/p</strong>`,
+                    splitRight: `${visName}: <strong>${m.avg_shots_ot.away} al arco/p</strong>`,
+                    barWidth: Math.min(96, Math.max(45, m.avg_shots_ot.prob)),
+                    barColor: 'bg-[#00d054]',
+                    avgLabel: `${m.avg_shots_ot.avg} al arco`,
+                    diffText: `Consenso 3 IA: ${m.avg_shots_ot.rec}`
                 }
             ];
 
@@ -2117,10 +2067,10 @@
                         <div>
                             <h4 class="text-base sm:text-lg font-outfit font-extrabold text-white m-0 tracking-tight flex items-center gap-2">
                                 <span>Probabilidades clave</span>
-                                <span class="text-xs font-normal text-slate-400">(Análisis Más de / Menos de en Goles, Remates, Córners y Tarjetas)</span>
+                                <span class="text-xs font-normal text-slate-400">(Promedios reales y selección calculada por las 3 IAs)</span>
                             </h4>
                             <p class="text-[11px] text-slate-400 m-0 mt-0.5">
-                                Selección unificada del Consenso 3 IA y Top 5: <strong class="text-[#00e676] font-mono">${selPrincipal}</strong>
+                                Selección principal del partido: <strong class="text-[#00e676] font-mono">${selPrincipal}</strong>
                             </p>
                         </div>
                         <span class="text-[10px] ${esVip ? 'bg-emerald-950/90 text-[#00e676] border-emerald-500/40' : 'bg-amber-500/10 text-amber-400 border-amber-500/40'} border px-2.5 py-1 rounded-full font-mono font-bold">
@@ -2129,7 +2079,7 @@
                     </div>
 
                     ${esVip ? `
-                    <!-- Grilla Organizada de 10 Tarjetas Bidireccionales (Desbloqueada para Pase Pro) -->
+                    <!-- Grilla Organizada de 6 Tarjetas Directas con Promedio Real y Selección 3 IA -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         ${cards.map(c => `
                             <div data-kp-cat="${c.cat}" class="oddster-kp-card bg-[#141821] border border-slate-800/90 hover:border-emerald-500/40 rounded-2xl p-4 space-y-2.5 shadow-lg transition">
@@ -2142,9 +2092,8 @@
                                         ${c.icon}
                                         <span class="text-2xl sm:text-3xl font-outfit font-black text-white tracking-tight leading-none">${c.displayVal}</span>
                                     </div>
-                                    <span class="text-[11px] font-semibold text-slate-400">${c.displayLabel}</span>
+                                    <span class="text-[11px] font-semibold text-slate-300">${c.displayLabel}</span>
                                 </div>
-                                <!-- Desglose Bidireccional (Más de vs Menos de / Local vs Visita) -->
                                 <div class="grid grid-cols-2 gap-2 bg-black/35 border border-slate-800/80 rounded-xl px-3 py-1.5 text-[11px] text-slate-300">
                                     <div>${c.splitLeft}</div>
                                     <div class="text-right">${c.splitRight}</div>
@@ -2154,7 +2103,7 @@
                                 </div>
                                 <div class="flex items-center justify-between text-[11px] pt-0.5">
                                     <span class="text-slate-400 font-medium">Media de liga: <strong class="text-[#84cc16] font-mono ml-1">${c.avgLabel}</strong></span>
-                                    <span class="text-[10px] font-mono text-slate-300">${c.diffText}</span>
+                                    <span class="text-[10px] font-mono text-emerald-400 font-bold">${c.diffText}</span>
                                 </div>
                             </div>
                         `).join('')}
@@ -2163,7 +2112,7 @@
                     <!-- Vista Bloqueada con Candado para Usuarios Gratuitos -->
                     <div class="relative rounded-2xl overflow-hidden">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 filter blur-[5px] select-none opacity-25 pointer-events-none">
-                            ${cards.slice(0, 8).map(c => `
+                            ${cards.map(c => `
                                 <div class="bg-[#141821] border border-slate-800/90 rounded-2xl p-4 space-y-2.5">
                                     <div class="flex items-center justify-between">
                                         <span class="text-xs font-semibold text-slate-400">${c.title}</span>
@@ -2187,13 +2136,13 @@
                                 <i class="fa-solid fa-lock"></i>
                             </div>
                             <span class="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-0.5 rounded-full mb-2">
-                                Goles • Remates • Córners • Tarjetas (Más de / Menos de)
+                                Goles • Remates • Córners • Tarjetas
                             </span>
                             <h5 class="text-sm sm:text-base font-outfit font-black text-white m-0">
                                 Si quieres acceder a esta información, desbloquea la Membresía Pro / Pase Pro
                             </h5>
                             <p class="text-xs text-slate-300 max-w-md mt-1.5 mb-4 leading-relaxed">
-                                Accede al desglose bidireccional completo (Más de y Menos de en goles, córners y tarjetas, remates totales, tiros a puerta y comparativa frente al promedio de la liga).
+                                Accede a los promedios reales del partido y las selecciones calculadas por las 3 IAs en Goles Totales, Ambos Anotan, Tarjetas, Córners y Remates.
                             </p>
                             <button type="button" onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition shadow-lg shadow-amber-950/50 flex items-center gap-2 cursor-pointer">
                                 <i class="fa-solid fa-crown"></i> <span>Desbloquear Pase Pro (S/ 24.90)</span>
@@ -2827,8 +2776,8 @@
                                     <span class="text-[10px] text-slate-400 font-semibold">Confidence</span>
                                 </div>
                                 <div class="bg-[#131f28] border border-emerald-500/40 px-3.5 py-2 rounded-xl text-center">
-                                    <span class="text-[9px] text-slate-400 font-mono block uppercase">Cuota Rotativa</span>
-                                    <span class="text-lg font-mono font-black text-white">@${item.pronostico_principal?.cuota_calibrada || '1.58'}</span>
+                                    <span class="text-[9px] text-slate-400 font-mono block uppercase">Promedio Real</span>
+                                    <span class="text-sm font-mono font-black text-emerald-300">${esc(item.pronostico_principal?.stat_projection_label || 'Piso verificado')}</span>
                                 </div>
                             </div>
                         </div>
@@ -2903,126 +2852,52 @@
                     </div>
 
                     ${esVip ? `
-                    <!-- PANEL CONSENSO TRIPLE IA (GEMINI ANALISTA + DEEPSEEK +EV + GROK AUDITOR) -->
-                    <div class="bg-gradient-to-r from-blue-950/50 via-purple-950/40 to-emerald-950/50 border border-cyan-800/40 rounded-2xl p-4 shadow-2xl space-y-3">
-                        <div class="flex items-center justify-between border-b border-cardBorder/60 pb-2.5 flex-wrap gap-2">
-                            <div class="flex items-center gap-2">
+                    <!-- PANEL CONSENSO TRIPLE IA COMPACTO (SOLO VEREDICTO Y PROBABILIDAD) -->
+                    <div class="bg-gradient-to-r from-blue-950/50 via-purple-950/40 to-emerald-950/50 border border-cyan-800/40 rounded-2xl p-4 shadow-xl">
+                        <div class="flex items-center justify-between flex-wrap gap-3">
+                            <div class="flex items-center gap-2.5">
                                 <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
-                                <span class="text-xs font-black text-white tracking-wide flex items-center gap-1.5">
-                                    <i class="fa-solid fa-brain text-cyan-400"></i> Consenso Triple IA: Gemini + DeepSeek + Grok
-                                </span>
-                            </div>
-                            <div class="flex items-center gap-1.5">
-                                <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-lime-400 border border-lime-500/40 font-bold">
-                                    TRIPLE VERIFICACIÓN Cuantitativa & Arbitraje
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="grid sm:grid-cols-3 gap-3 text-xs" id="triple-ia-cards-container">
-                            <!-- 1. GEMINI -->
-                            <div class="bg-baseDark/90 border border-blue-900/50 rounded-xl p-3 space-y-1.5 flex flex-col justify-between">
                                 <div>
-                                    <div class="text-[10px] font-black text-cyan-400 flex items-center justify-between uppercase tracking-wider mb-1">
-                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-microchip"></i> 1. Gemini Flash</span>
-                                        <span class="text-[8px] font-mono text-cyan-300/80 bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-800/40">Analista</span>
+                                    <span class="text-[10px] font-mono uppercase text-cyan-300 block font-bold">Consenso Triple IA (Gemini • DeepSeek • Grok)</span>
+                                    <div class="text-xs sm:text-sm font-bold text-slate-200 flex items-center gap-1.5 mt-0.5">
+                                        <i class="fa-solid fa-check-double text-accentGreen"></i>
+                                        <span>Veredicto Consensuado por las 3 IA:</span>
+                                        <strong class="text-white font-black ml-1" id="ia-veredicto-text">${esc(item.pronostico_principal?.seleccion || item.consenso_dual_ia?.seleccion_final_consenso || 'Selección recomendada')}</strong>
                                     </div>
-                                    <p class="text-[11px] text-slate-300 m-0 leading-relaxed font-sans" id="ia-text-gemini">${item.consenso_dual_ia?.gemini_tesis || item.consenso_triple_ia?.gemini_tesis || `Tesis Cuantitativa (Gemini): Con xG proyectado (${item.parametros_xg?.lambda_home || 1.5} vs ${item.parametros_xg?.lambda_away || 1.2}), la selección con mayor valor esperado es '${item.pronostico_principal?.seleccion || 'la recomendada'}'.`}</p>
-                                </div>
-                                <div class="pt-1 border-t border-cardBorder/40 text-[9px] text-slate-400 flex justify-between">
-                                    <span>Rol: Modelado xG</span>
-                                    <span class="text-cyan-400 font-mono">API Activa</span>
                                 </div>
                             </div>
-
-                            <!-- 2. DEEPSEEK -->
-                            <div class="bg-baseDark/90 border border-purple-900/50 rounded-xl p-3 space-y-1.5 flex flex-col justify-between">
-                                <div>
-                                    <div class="text-[10px] font-black text-purple-400 flex items-center justify-between uppercase tracking-wider mb-1">
-                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-calculator"></i> 2. DeepSeek-V3</span>
-                                        <span class="text-[8px] font-mono text-purple-300/80 bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">+EV & Kelly</span>
-                                    </div>
-                                    <p class="text-[11px] text-slate-300 m-0 leading-relaxed font-sans" id="ia-text-deepseek">${item.consenso_dual_ia?.deepseek_razonamiento || item.consenso_triple_ia?.deepseek_razonamiento || `Razonamiento Lógico (DeepSeek): Validación matemática formal de Valor Esperado (+EV). Probabilidad proyectada supera el margen con ventaja en gestión de riesgo.`}</p>
-                                </div>
-                                <div class="pt-1 border-t border-cardBorder/40 text-[9px] text-slate-400 flex justify-between">
-                                    <span>Rol: Deducción Lógica</span>
-                                    <span class="text-purple-400 font-mono">API Activa</span>
-                                </div>
+                            <div class="bg-emerald-950/80 border border-lime-500/40 px-3.5 py-1.5 rounded-xl text-right">
+                                <span class="text-xs sm:text-sm font-mono font-black text-lime-400" id="ia-probabilidad-text">${esc(item.pronostico_principal?.probabilidad || '82%')} Probabilidad</span>
                             </div>
-
-                            <!-- 3. GROK / GROQ -->
-                            <div class="bg-baseDark/90 border border-emerald-900/50 rounded-xl p-3 space-y-1.5 flex flex-col justify-between">
-                                <div>
-                                    <div class="text-[10px] font-black text-lime-400 flex items-center justify-between uppercase tracking-wider mb-1">
-                                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield-halved"></i> 3. Grok / Groq</span>
-                                        <span class="text-[8px] font-mono text-lime-300/80 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">Red Team</span>
-                                    </div>
-                                    <p class="text-[11px] text-slate-300 m-0 leading-relaxed font-sans" id="ia-text-grok">${item.consenso_dual_ia?.grok_auditoria || item.consenso_triple_ia?.grok_auditoria || `Auditoría de Riesgo (Grok Red Team): Confirmado consenso unificado sin riesgo de sesgo ni trampa de mercado.`}</p>
-                                </div>
-                                <div class="pt-1 border-t border-cardBorder/40 text-[9px] text-slate-400 flex justify-between">
-                                    <span>Rol: Control de Riesgo</span>
-                                    <span class="text-lime-400 font-mono">API Activa</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="bg-black/40 border border-cardBorder/50 rounded-xl p-2.5 flex items-center justify-between flex-wrap gap-2">
-                            <div class="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
-                                <i class="fa-solid fa-check-double text-accentGreen"></i> Veredicto Consensuado por las 3 IA:
-                                <span class="text-xs font-black text-white ml-1" id="ia-veredicto-text">${item.pronostico_principal?.seleccion || 'Selección recomendada'}</span>
-                            </div>
-                            <span class="text-xs font-mono font-black text-lime-400" id="ia-probabilidad-text">${item.pronostico_principal?.probabilidad || '80%'} Probabilidad</span>
                         </div>
                     </div>
                     ` : `
-                    <!-- BLOQUEO VIP CONSENSO TRIPLE IA -->
-                    <div class="bg-gradient-to-r from-blue-950/30 via-purple-950/20 to-emerald-950/30 border border-cardBorder rounded-2xl p-4 shadow-xl relative overflow-hidden">
-                        <div class="flex items-center justify-between border-b border-cardBorder/40 pb-2 mb-3">
-                            <span class="text-xs font-black text-slate-300 flex items-center gap-1.5">
-                                <i class="fa-solid fa-brain text-amber-400"></i> Consenso Triple IA: Gemini + DeepSeek + Grok
-                            </span>
-                            <span class="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1">
-                                <i class="fa-solid fa-lock text-[8px]"></i> Exclusivo VIP
-                            </span>
-                        </div>
-                        <div class="grid sm:grid-cols-3 gap-3 filter blur-[3px] select-none opacity-30">
-                            <div class="bg-baseDark/90 border border-blue-900/50 rounded-xl p-3">
-                                <span class="text-[10px] font-black text-cyan-400">1. Gemini Flash (Analista)</span>
-                                <p class="text-[10px] text-slate-300 mt-1">Análisis xG y modelado Poisson institucional...</p>
+                    <!-- BLOQUEO VIP CONSENSO TRIPLE IA COMPACTO -->
+                    <div class="bg-gradient-to-r from-blue-950/30 via-purple-950/20 to-emerald-950/30 border border-amber-500/30 rounded-2xl p-4 shadow-xl flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-sm">
+                                <i class="fa-solid fa-lock"></i>
                             </div>
-                            <div class="bg-baseDark/90 border border-purple-900/50 rounded-xl p-3">
-                                <span class="text-[10px] font-black text-purple-400">2. DeepSeek-V3 (+EV)</span>
-                                <p class="text-[10px] text-slate-300 mt-1">Deducción de valor matemático esperado y Kelly...</p>
-                            </div>
-                            <div class="bg-baseDark/90 border border-emerald-900/50 rounded-xl p-3">
-                                <span class="text-[10px] font-black text-lime-400">3. Grok / Groq (Auditor)</span>
-                                <p class="text-[10px] text-slate-300 mt-1">Auditoría crítica de varianza y riesgo de bajas...</p>
+                            <div>
+                                <h4 class="text-xs font-black text-white m-0">Veredicto Consensuado por las 3 IA (Gemini + DeepSeek + Grok)</h4>
+                                <p class="text-[11px] text-slate-300 m-0 mt-0.5">Desbloquea el veredicto unificado y la probabilidad consensuada con el Pase Pro.</p>
                             </div>
                         </div>
-                        <div class="absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-baseDark/85 backdrop-blur-xs">
-                            <div class="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-lg mb-1.5 shadow-lg">
-                                <i class="fa-solid fa-crown"></i>
-                            </div>
-                            <h4 class="text-xs font-black text-white m-0">Veredicto Consensuado por las 3 IAs</h4>
-                            <p class="text-[10px] text-slate-300 max-w-sm mt-1 mb-2.5">
-                                Desbloquea la tesis de Gemini, la deducción formal de DeepSeek y la auditoría de Grok con tu Membresía VIP.
-                            </p>
-                            <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-[11px] px-4 py-2 rounded-xl transition shadow-lg shadow-amber-950/40 flex items-center gap-1.5 cursor-pointer">
-                                <i class="fa-solid fa-crown text-[10px]"></i> Ver Planes VIP
-                            </button>
-                        </div>
+                        <button onclick="abrirVipModal()" class="bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-[11px] px-4 py-2 rounded-xl transition shadow-lg flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-crown text-[10px]"></i> Desbloquear Pase Pro
+                        </button>
                     </div>
                     `}
 
-                    <!-- 1. RESUMEN EJECUTIVO -->
+                    <!-- 1. RESUMEN EJECUTIVO (1X2 REALISTA SEGÚN RACHA Y RENDIMIENTO) -->
                     <div>
                         <h4 class="text-xs font-black uppercase text-slate-400 mb-2.5 tracking-wider flex items-center gap-1.5">
-                            <i class="fa-solid fa-chart-line text-accentGreen"></i> 1. Resumen Ejecutivo (Probabilidades 1X2 & Cuotas Justas)
+                            <i class="fa-solid fa-chart-line text-accentGreen"></i> 1. Resumen Ejecutivo (Probabilidades 1X2 del Partido)
                         </h4>
                         <div class="grid grid-cols-3 gap-2.5 text-center">
-                            <div class="bg-baseDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 block mb-1">Victoria Local (1)</span><span class="text-lg font-black text-white font-mono">${p1x2["1"] || 0}%</span><span class="text-[9px] text-accentGreen block mt-1 font-mono">Cuota: ${fair["1"] || '--'}</span></div>
-                            <div class="bg-baseDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 block mb-1">Empate (X)</span><span class="text-lg font-black text-white font-mono">${p1x2["X"] || 0}%</span><span class="text-[9px] text-accentGreen block mt-1 font-mono">Cuota: ${fair["X"] || '--'}</span></div>
-                            <div class="bg-baseDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 block mb-1">Victoria Visitante (2)</span><span class="text-lg font-black text-white font-mono">${p1x2["2"] || 0}%</span><span class="text-[9px] text-accentGreen block mt-1 font-mono">Cuota: ${fair["2"] || '--'}</span></div>
+                            <div class="bg-baseDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 block mb-1">Victoria ${esc(item.local)} (1)</span><span class="text-lg font-black text-white font-mono">${p1x2["1"] || 0}%</span><span class="text-[9px] text-accentGreen block mt-1 font-mono">1X: ${dobles["1X"] || '--'}%</span></div>
+                            <div class="bg-baseDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 block mb-1">Empate (X)</span><span class="text-lg font-black text-white font-mono">${p1x2["X"] || 0}%</span><span class="text-[9px] text-slate-400 block mt-1 font-mono">Equilibrio táctico</span></div>
+                            <div class="bg-baseDark border border-cardBorder p-3 rounded-xl"><span class="text-[10px] text-slate-400 block mb-1">Victoria ${esc(item.visitante)} (2)</span><span class="text-lg font-black text-white font-mono">${p1x2["2"] || 0}%</span><span class="text-[9px] text-cyan-400 block mt-1 font-mono">X2: ${dobles["X2"] || '--'}%</span></div>
                         </div>
                     </div>
 
@@ -3137,7 +3012,7 @@
                             <div class="bg-purple-950/40 border border-purple-800/60 p-3 rounded-xl">
                                 <span class="text-[9px] text-purple-400 font-black uppercase block">${stks.nivel_3_quirurgico?.etiqueta || '🎯 Nivel 3 (Quirúrgico)'}</span>
                                 <div class="text-xs font-black text-white mt-1 font-semibold">${stks.nivel_3_quirurgico?.mercado || 'Pendiente'}</div>
-                                <span class="text-[10px] text-purple-300 font-mono block mt-1">Cuota justa del modelo: ${stks.nivel_3_quirurgico?.cuota_justa || '—'}</span>
+                                <span class="text-[10px] text-purple-300 font-mono block mt-1">Opción combinada de valor estadístico</span>
                             </div>
                             ${esVip ? `
                                 <div class="bg-amber-950/40 border border-amber-800/60 p-3 rounded-xl">
@@ -3317,7 +3192,7 @@
                 { nombre: "1. Margen de Línea", autor: "Colchón Estadístico", metrica: fallbackObj.safety_margin || `Se esperan ${totXg} goles (supera la línea base)`, confianza: `Confianza: ${fallbackObj.probabilidad || '85%'}` },
                 { nombre: "2. Cálculo xG de Goles", autor: "Proyección Ofensiva", metrica: `Local ${xgL.toFixed(2)} xG vs Visita ${xgV.toFixed(2)} xG (Total: ${totXg} goles)`, confianza: "Volumen Verificado ✓" },
                 { nombre: "3. Cálculo Poisson", autor: "Piso de Goles y Córners", metrica: "Distribución exacta de goles y saques de esquina", confianza: "Probabilidad Alta ✓" },
-                { nombre: "4. Valor de Cuota (+EV)", autor: "Rentabilidad Matemática", metrica: `Cuota @${fallbackObj.cuota || '1.58'} con ventaja sobre la casa`, confianza: "Valor Positivo (+EV) ✓" },
+                { nombre: "4. Ventaja Estadística (+EV)", autor: "Diferencial vs Media de Liga", metrica: "Supera la media histórica del torneo", confianza: "Ventaja Positiva ✓" },
                 { nombre: "5. Balance y Promedio", autor: "Estabilidad del Partido", metrica: fallbackObj.stat_projection_label || "Tendencia sólida en los últimos 5 partidos", confianza: "Indicadores 5/5 ✓" }
             ];
             return `
@@ -3532,7 +3407,7 @@
                                             <div class="text-xs font-black text-white flex items-center gap-1.5 mb-1">
                                                 <i class="fa-solid fa-lock text-amber-400"></i> Señal Estadística #${t.rank} Bloqueada (VIP)
                                             </div>
-                                            <p class="text-[10px] text-slate-300 max-w-xs mb-2">Desbloquea la jugada exacta, cuota calibrada y desglose estadístico completo del motor.</p>
+                                            <p class="text-[10px] text-slate-300 max-w-xs mb-2">Desbloquea la jugada exacta, el promedio real del partido y el análisis completo.</p>
                                             <button onclick="abrirModalPlanes()" class="bg-[#00e676] hover:bg-emerald-400 text-slate-950 font-black text-[11px] px-3.5 py-1.5 rounded-lg transition shadow-lg flex items-center gap-1.5 cursor-pointer">
                                                 <i class="fa-solid fa-crown"></i> Desbloquear Top 5 VIP
                                             </button>
@@ -3582,20 +3457,17 @@
                                             </div>
                                         </div>
 
-                                        <!-- 5 Columnas de Consenso Extraído de los 5 Modelos Cuantitativos Mundiales -->
-                                        ${renderizarConsenso5ModelosHtml(t.consenso_5_modelos, t)}
                                     `}
                                 </div>
 
-                                <!-- COLUMNA 3: CAJA DERECHA DE ESTADO (WIN / LOSS / SEÑAL ACTIVA + CUOTA ROTATIVA + PROYECCIÓN) -->
-                                <div class="w-full lg:w-44 bg-[#091e17]/95 border border-emerald-500/40 rounded-xl p-3.5 flex flex-col items-center justify-center text-center flex-shrink-0 min-h-[124px] shadow-inner">
+                                <!-- COLUMNA 3: CAJA DERECHA DE ESTADO (WIN / LOSS / PROMEDIO REAL DEL PARTIDO SIN CUOTAS) -->
+                                <div class="w-full lg:w-48 bg-[#091e17]/95 border border-emerald-500/40 rounded-xl p-3.5 flex flex-col items-center justify-center text-center flex-shrink-0 min-h-[112px] shadow-inner">
                                     ${esBloqueado ? `
                                         <span class="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center text-xs mb-1">
                                             <i class="fa-solid fa-lock"></i>
                                         </span>
-                                        <span class="text-xs font-black text-white">CUOTA VIP</span>
-                                        <span class="text-[10px] text-slate-400 font-mono mt-0.5">@1.30 - @2.20</span>
-                                        <span class="text-[9px] text-emerald-400 font-mono mt-1"><i class="fa-solid fa-shield-halved"></i> Hash Activo</span>
+                                        <span class="text-xs font-black text-white">PROMEDIO VIP</span>
+                                        <span class="text-[10px] text-slate-400 font-mono mt-0.5">Exclusivo Pase Pro</span>
                                     ` : (t.estado_partido === 'GANADA' ? `
                                         <div class="inline-flex items-center gap-1.5 text-xs font-black text-[#00e676] uppercase tracking-wider mb-1">
                                             <span class="w-5 h-5 rounded-full bg-[#00e676] text-slate-950 flex items-center justify-center text-[11px] font-black"><i class="fa-solid fa-check"></i></span>
@@ -3604,11 +3476,8 @@
                                         <div class="text-2xl font-outfit font-black text-white tracking-tight leading-tight my-0.5">
                                             ${esc(t.marcador_final || '2 - 1')}
                                         </div>
-                                        <div class="text-[11px] text-slate-400 font-medium">
+                                        <div class="text-[11px] text-emerald-300 font-semibold">
                                             ${esc(t.stat_resultado_label || 'Línea cumplida')}
-                                        </div>
-                                        <div class="text-[10px] font-mono font-bold text-emerald-400 mt-1">
-                                            Cuota @${esc(t.cuota)}
                                         </div>
                                     ` : (t.estado_partido === 'PERDIDA' ? `
                                         <div class="inline-flex items-center gap-1.5 text-xs font-black text-rose-500 uppercase tracking-wider mb-1">
@@ -3618,25 +3487,19 @@
                                         <div class="text-2xl font-outfit font-black text-white tracking-tight leading-tight my-0.5">
                                             ${esc(t.marcador_final || '0 - 1')}
                                         </div>
-                                        <div class="text-[11px] text-slate-400 font-medium">
+                                        <div class="text-[11px] text-rose-300 font-semibold">
                                             ${esc(t.stat_resultado_label || 'Línea no superada')}
                                         </div>
-                                        <div class="text-[10px] font-mono font-bold text-rose-400 mt-1">
-                                            Cuota @${esc(t.cuota)}
-                                        </div>
                                     ` : `
-                                        <div class="inline-flex items-center gap-1 text-[10px] font-black text-[#00e676] bg-emerald-950/90 border border-emerald-500/40 px-2.5 py-0.5 rounded-full uppercase mb-1">
-                                            <i class="fa-solid fa-circle-check"></i> SEÑAL ACTIVA
+                                        <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block mb-0.5">
+                                            ${esc(t.promedio_mercado_etiqueta || 'Promedio del partido')}
+                                        </span>
+                                        <div class="text-xl sm:text-2xl font-outfit font-black text-white tracking-tight leading-tight my-0.5">
+                                            ${esc(t.promedio_mercado_valor || t.stat_projection_label || 'Verificado')}
                                         </div>
-                                        <div class="text-2xl font-mono font-black text-white tracking-tight leading-tight my-0.5">
-                                            @${esc(t.cuota)}
-                                        </div>
-                                        <div class="text-[11px] text-slate-300 font-medium">
-                                            ${esc(t.stat_resultado_label || t.stat_projection_label || 'Piso verificado')}
-                                        </div>
-                                        <div class="text-[9px] font-mono text-emerald-400/80 mt-1 flex items-center gap-1" title="Firma de integridad inmutable pre-partido">
-                                            <i class="fa-solid fa-shield-halved"></i> ${esc(t.signal_hash || 'ODD-LOCK')}
-                                        </div>
+                                        <span class="text-[10px] text-slate-400 font-mono mt-0.5">
+                                            Media real últimos 5 p.
+                                        </span>
                                     `))}
                                 </div>
 
@@ -4197,13 +4060,38 @@
             return Math.min(100, Math.max(20, Math.round((puntos / maxPts) * 100)));
         }
 
+        function resumirConteoRacha5(rachaStr) {
+            const partes = (rachaStr || "V-E-V-D-D").replace(/\s+/g, '').split('-').filter(Boolean).slice(0, 5);
+            let v = 0, e = 0, d = 0;
+            partes.forEach(p => {
+                const u = p.toUpperCase();
+                if (u === 'V' || u === 'W') v++;
+                else if (u === 'E') e++;
+                else d++;
+            });
+            return `${v}V • ${e}E • ${d}D`;
+        }
+
+        function renderizarListaUltimos5Html(ultimosList) {
+            if (!Array.isArray(ultimosList) || ultimosList.length === 0) return '';
+            return `
+                <div class="pt-2 border-t border-cardBorder/40 flex flex-wrap gap-1.5">
+                    ${ultimosList.slice(0, 5).map(m => {
+                        const c = String(m.condicion || 'E').toUpperCase();
+                        const col = c === 'V' ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/40' : (c === 'E' ? 'text-amber-300 border-amber-500/30 bg-amber-950/40' : 'text-rose-300 border-rose-500/30 bg-rose-950/40');
+                        return `<span class="text-[9px] font-mono px-2 py-0.5 rounded border ${col}">${esc(m.resultado)} vs ${esc(m.rival)} (${c})</span>`;
+                    }).join('')}
+                </div>
+            `;
+        }
+
         function renderizarTermometroRachaHtml(item) {
             const ant = item.analisis_partidos_anteriores || {};
             const locAnt = ant.local || {};
             const visAnt = ant.visitante || {};
 
-            const rachaLoc = locAnt.racha || "V-V-E-V-D";
-            const rachaVis = visAnt.racha || "V-D-E-V-E";
+            const rachaLoc = locAnt.racha || "V-E-V-D-D";
+            const rachaVis = visAnt.racha || "V-V-E-D-V";
 
             const pctLoc = calcularPctRacha(rachaLoc);
             const pctVis = calcularPctRacha(rachaVis);
@@ -4211,13 +4099,16 @@
             const badgesLoc = renderizarBadgesRacha(rachaLoc);
             const badgesVis = renderizarBadgesRacha(rachaVis);
 
-            const gfLoc = locAnt.gf_ultimos3 != null ? locAnt.gf_ultimos3 : 7;
-            const gcLoc = locAnt.gc_ultimos3 != null ? locAnt.gc_ultimos3 : 2;
+            const resumenLoc = resumirConteoRacha5(rachaLoc);
+            const resumenVis = resumirConteoRacha5(rachaVis);
+
+            const gfLoc = locAnt.gf_ultimos3 != null ? locAnt.gf_ultimos3 : 8;
+            const gcLoc = locAnt.gc_ultimos3 != null ? locAnt.gc_ultimos3 : 5;
             const tpLoc = locAnt.tiros_puerta_prom || "4.8";
 
-            const gfVis = visAnt.gf_ultimos3 != null ? visAnt.gf_ultimos3 : 5;
-            const gcVis = visAnt.gc_ultimos3 != null ? visAnt.gc_ultimos3 : 4;
-            const tpVis = visAnt.tiros_puerta_prom || "3.9";
+            const gfVis = visAnt.gf_ultimos3 != null ? visAnt.gf_ultimos3 : 8;
+            const gcVis = visAnt.gc_ultimos3 != null ? visAnt.gc_ultimos3 : 5;
+            const tpVis = visAnt.tiros_puerta_prom || "4.4";
 
             return `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -4227,22 +4118,23 @@
                             <span class="text-xs font-black text-white flex items-center gap-1.5">
                                 <span class="w-2 h-2 rounded-full bg-accentGreen"></span> ${esc(item.local)} (Local)
                             </span>
-                            <span class="text-[11px] font-mono font-bold text-accentGreen">${pctLoc}% Rendimiento</span>
+                            <span class="text-[11px] font-mono font-bold text-accentGreen">${resumenLoc} (${pctLoc}%)</span>
                         </div>
                         <div class="w-full bg-cardDark rounded-full h-2 overflow-hidden border border-cardBorder/60">
                             <div class="bg-gradient-to-r from-emerald-500 to-lime-400 h-2 rounded-full transition-all duration-500" style="width: ${pctLoc}%"></div>
                         </div>
                         <div class="flex items-center justify-between pt-1">
-                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos 5:</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos 5 partidos:</span>
                             <div class="flex items-center gap-1.5">
                                 ${badgesLoc}
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2 pt-2 border-t border-cardBorder/40 text-center text-[10px]">
-                            <div><span class="text-slate-400 block font-mono">Goles Favor</span><span class="text-white font-bold font-mono">${gfLoc}</span></div>
-                            <div><span class="text-slate-400 block font-mono">Goles Contra</span><span class="text-white font-bold font-mono">${gcLoc}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Favor (5p)</span><span class="text-white font-bold font-mono">${gfLoc}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Contra (5p)</span><span class="text-white font-bold font-mono">${gcLoc}</span></div>
                             <div><span class="text-slate-400 block font-mono">Tiros Arco</span><span class="text-accentGreen font-bold font-mono">${tpLoc}/p</span></div>
                         </div>
+                        ${renderizarListaUltimos5Html(locAnt.ultimos_partidos)}
                     </div>
 
                     <!-- Racha Visitante -->
@@ -4251,22 +4143,23 @@
                             <span class="text-xs font-black text-white flex items-center gap-1.5">
                                 <span class="w-2 h-2 rounded-full bg-cyan-400"></span> ${esc(item.visitante)} (Visitante)
                             </span>
-                            <span class="text-[11px] font-mono font-bold text-cyan-400">${pctVis}% Rendimiento</span>
+                            <span class="text-[11px] font-mono font-bold text-cyan-400">${resumenVis} (${pctVis}%)</span>
                         </div>
                         <div class="w-full bg-cardDark rounded-full h-2 overflow-hidden border border-cardBorder/60">
                             <div class="bg-gradient-to-r from-blue-500 to-cyan-400 h-2 rounded-full transition-all duration-500" style="width: ${pctVis}%"></div>
                         </div>
                         <div class="flex items-center justify-between pt-1">
-                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos 5:</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos 5 partidos:</span>
                             <div class="flex items-center gap-1.5">
                                 ${badgesVis}
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2 pt-2 border-t border-cardBorder/40 text-center text-[10px]">
-                            <div><span class="text-slate-400 block font-mono">Goles Favor</span><span class="text-white font-bold font-mono">${gfVis}</span></div>
-                            <div><span class="text-slate-400 block font-mono">Goles Contra</span><span class="text-white font-bold font-mono">${gcVis}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Favor (5p)</span><span class="text-white font-bold font-mono">${gfVis}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Contra (5p)</span><span class="text-white font-bold font-mono">${gcVis}</span></div>
                             <div><span class="text-slate-400 block font-mono">Tiros Arco</span><span class="text-cyan-400 font-bold font-mono">${tpVis}/p</span></div>
                         </div>
+                        ${renderizarListaUltimos5Html(visAnt.ultimos_partidos)}
                     </div>
                 </div>
             `;
