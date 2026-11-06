@@ -1905,11 +1905,19 @@
                 cards_totals: {
                     rec: recCards, prob: probCards,
                     over_35: over35Cards, under_45: under45Cards,
-                    avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1)
+                    avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
+                    refName: kp.avg_cards?.referee_name || item.arbitro_designado?.nombre || item.parametros_xg?.referee_name || "Árbitro Oficial",
+                    refAvg: parseFloat(kp.avg_cards?.referee_avg ?? item.arbitro_designado?.avg_cards ?? item.parametros_xg?.referee_avg_cards ?? lAvg.cards).toFixed(2),
+                    refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO"
                 },
                 avg_cards: {
-                    val: avgCardsVal.toFixed(1), num: avgCardsVal,
+                    val: avgCardsVal.toFixed(2), num: avgCardsVal,
                     home: cardsH.toFixed(1), away: cardsA.toFixed(1),
+                    provH: parseFloat(kp.avg_cards?.provoked_home ?? cardsA).toFixed(1),
+                    provA: parseFloat(kp.avg_cards?.provoked_away ?? cardsH).toFixed(1),
+                    refName: kp.avg_cards?.referee_name || item.arbitro_designado?.nombre || item.parametros_xg?.referee_name || "Árbitro Oficial",
+                    refAvg: parseFloat(kp.avg_cards?.referee_avg ?? item.arbitro_designado?.avg_cards ?? item.parametros_xg?.referee_avg_cards ?? lAvg.cards).toFixed(2),
+                    refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO",
                     avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
                     avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards),
                     rec: recCards, prob: probCards
@@ -2040,7 +2048,7 @@
                     diffText: `Media de liga: ${m.avg_corners.avg}`
                 },
 
-                // 3. TARJETAS (2 Tarjetas Separadas)
+                // 3. TARJETAS (2 Tarjetas Separadas con Modelo Cruzado + Árbitro Asignado)
                 {
                     cat: 'cards',
                     title: 'Tarjetas Totales',
@@ -2054,22 +2062,22 @@
                     barWidth: Math.min(96, Math.max(45, m.cards_totals?.prob || m.avg_cards.prob)),
                     barColor: (m.cards_totals?.rec || m.avg_cards.rec).includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#eab308]',
                     avgLabel: `${m.avg_cards.avg} tarj.`,
-                    diffText: `Consenso 3 IA: ${m.cards_totals?.rec || m.avg_cards.rec}`
+                    diffText: `Árbitro: ${m.avg_cards.refName} (${m.avg_cards.refAvg}/p • ${m.avg_cards.refProfile})`
                 },
                 {
                     cat: 'cards',
                     title: 'Promedio de Tarjetas',
-                    badge: `PROYECCIÓN: ${m.avg_cards.val} TARJETAS`,
-                    badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+                    badge: `ÁRBITRO ${m.avg_cards.refProfile}: ${m.avg_cards.refAvg}/P`,
+                    badgeColor: m.avg_cards.refProfile === 'ESTRICTO' ? 'bg-rose-500/15 text-rose-300 border-rose-500/40' : (m.avg_cards.refProfile === 'LIBERAL' ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40'),
                     icon: `<i class="fa-solid fa-clone text-amber-400 text-lg"></i>`,
                     displayVal: `${m.avg_cards.val}`,
-                    displayLabel: `Tarjetas esperadas en el partido`,
-                    splitLeft: `${locName}: <strong>${m.avg_cards.home} tarj./p</strong>`,
-                    splitRight: `${visName}: <strong>${m.avg_cards.away} tarj./p</strong>`,
-                    barWidth: Math.min(96, Math.max(45, Math.round((m.avg_cards.num / 7.0) * 100))),
+                    displayLabel: `λ Cruzado + Colegiado: ${m.avg_cards.refName}`,
+                    splitLeft: `λ ${locName}: <strong>${m.avg_cards.home} tarj.</strong>`,
+                    splitRight: `λ ${visName}: <strong>${m.avg_cards.away} tarj.</strong>`,
+                    barWidth: Math.min(96, Math.max(45, Math.round((m.avg_cards.num / 6.5) * 100))),
                     barColor: 'bg-[#eab308]',
                     avgLabel: `${m.avg_cards.avg} tarj.`,
-                    diffText: `Media de liga: ${m.avg_cards.avg}`
+                    diffText: `Colegiado: ${m.avg_cards.refName} (${m.avg_cards.refProfile})`
                 },
 
                 // 4. REMATES (2 Tarjetas Separadas)
