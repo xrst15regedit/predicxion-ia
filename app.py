@@ -1285,7 +1285,7 @@ class DualAIEngine:
         home_stars_txt = ", ".join([f"{p['nombre']} (Dorsal {p.get('dorsal', 9)}, {p.get('posicion', 'Delantero')})" for p in pl_home[:2]]) if pl_home else f"Alineación titular de {local}"
         away_stars_txt = ", ".join([f"{p['nombre']} (Dorsal {p.get('dorsal', 9)}, {p.get('posicion', 'Delantero')})" for p in pl_away[:2]]) if pl_away else f"Alineación titular de {visita}"
 
-        if p_princ.get("confianza_insuficiente") or p_princ.get("seleccion") in ("Confianza insuficiente", "Datos insuficientes", "", None):
+        if p_princ.get("seleccion") in ("Confianza insuficiente", "Datos insuficientes", "", None):
             msg_insuf = (
                 f"Datos insuficientes para {local} vs {visita} ({liga}): "
                 "no existen al menos 5 partidos oficiales verificados por equipo en football-data.org para emitir una tesis cuantitativa."
@@ -1627,6 +1627,7 @@ class MatchEnrichmentCache:
             "tarjetas_home", "tarjetas_away", "tarjetas",
             "tiros_home", "tiros_away", "tiros",
             "tiros_puerta_home", "tiros_puerta_away", "tiros_puerta",
+            "faltas_home", "faltas_away", "faltas",
             "arbitro", "arbitro_avg_cards", "resultado",
         )
 
@@ -1773,6 +1774,9 @@ class MatchEnrichmentCache:
                             "tiros_puerta_home": sofa.get("shots_on_target_home"),
                             "tiros_puerta_away": sofa.get("shots_on_target_away"),
                             "tiros_puerta": sofa.get("shots_on_target"),
+                            "faltas_home": sofa.get("fouls_home"),
+                            "faltas_away": sofa.get("fouls_away"),
+                            "faltas": sofa.get("fouls_total"),
                             "arbitro": sofa.get("referee"),
                             "arbitro_avg_cards": sofa.get("referee_avg_cards"),
                             "resultado": f"{sofa.get('score_home')}-{sofa.get('score_away')}" if sofa.get("finished") else None,
@@ -1802,6 +1806,9 @@ class MatchEnrichmentCache:
                             "tiros_puerta_home": espn.get("shots_on_target_home"),
                             "tiros_puerta_away": espn.get("shots_on_target_away"),
                             "tiros_puerta": espn.get("shots_on_target"),
+                            "faltas_home": espn.get("fouls_home"),
+                            "faltas_away": espn.get("fouls_away"),
+                            "faltas": espn.get("fouls_total"),
                             "arbitro": espn.get("referee"),
                             "arbitro_avg_cards": espn.get("referee_avg_cards"),
                             "resultado": f"{espn.get('score_home')}-{espn.get('score_away')}" if espn.get("finished") else None,
@@ -13761,6 +13768,35 @@ class SportsAnalyticsEngine:
         btts_rec_line = "Ambos anotan: Sí" if (pBtts["yes"] >= 55.0 and lh >= 1.15 and la >= 1.05) else "Ambos anotan: No"
         btts_rec_prob = int(round(pBtts["yes"] if "Sí" in btts_rec_line else pBtts["no"]))
 
+        enr_has_any_valid = any(
+            (m_v.get("nivel_verificacion") in ("PRIMARIO_OFICIAL", "RESPALDO_SECUNDARIO") and m_v.get("valor") is not None)
+            for m_v in enr_metricas.values()
+        )
+        tiene_datos_parciales = (
+            muestra_h > 0 or muestra_a > 0
+            or h_stat.get("base_att") is not None or a_stat.get("base_att") is not None
+            or enr_has_any_valid
+        )
+        sin_ninguna_fuente = not tiene_datos_parciales
+
+        metricas_faltantes = []
+        if not corners_disponibles:
+            metricas_faltantes.append("corners")
+        if not tarjetas_activas:
+            metricas_faltantes.append("tarjetas")
+        if not tiros_disponibles:
+            metricas_faltantes.append("tiros")
+        if not arbitro_confirmado:
+            metricas_faltantes.append("arbitro")
+        if muestra_h < 5 or muestra_a < 5:
+            metricas_faltantes.append("racha_5_completa")
+
+        nivel_verif_global = (
+            "NO_DISPONIBLE" if sin_ninguna_fuente
+            else ("VERIFICADO_COMPLETO" if (muestra_h >= 5 and muestra_a >= 5 and not metricas_faltantes)
+                  else "MUESTRA_PARCIAL")
+        )
+
         key_probabilities = {
             "over_2_5": {"value": int(round(pGoles["over"])), "under_value": int(round(prob_under_25_pct)), "league_avg": l_avg["over_2_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob},
             "over_1_5": {"value": int(round(pGoles15["over"])), "under_value": int(round(prob_under_15_pct)), "under_3_5": int(round(prob_under_35_pct)), "league_avg": l_avg["over_1_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob},
@@ -13832,20 +13868,25 @@ class SportsAnalyticsEngine:
                 "confianza_insuficiente": confianza_insuficiente_global,
                 "corners_disponibles": corners_disponibles,
                 "tarjetas_disponibles": tarjetas_disponibles,
-                "tiros_disponibles": tiros_disponibles
+                "tiros_disponibles": tiros_disponibles,
+                "metricas_faltantes": metricas_faltantes,
+                "nivel_verificacion": nivel_verif_global,
+                "fecha_consulta": enrichment_cache.get("fecha_consulta")
             }
         }
 
         pronostico_principal_obj = {
-            "seleccion": "Confianza insuficiente" if (muestra_h == 0 or muestra_a == 0) else mercado_sugerido,
-            "probabilidad": "—" if (muestra_h == 0 or muestra_a == 0) else prob_principal,
-            "confidence_pct": 0 if (muestra_h == 0 or muestra_a == 0) else conf_val,
-            "cuota_justa_modelo": cuota_calibrada,
-            "cuota_modelo": cuota_calibrada,
-            "cuota_calibrada": cuota_calibrada,
+            "seleccion": "Datos insuficientes" if sin_ninguna_fuente else mercado_sugerido,
+            "probabilidad": "—" if sin_ninguna_fuente else prob_principal,
+            "confidence_pct": 0 if sin_ninguna_fuente else conf_val,
+            "cuota_justa_modelo": None if sin_ninguna_fuente else cuota_calibrada,
+            "cuota_modelo": None if sin_ninguna_fuente else cuota_calibrada,
+            "cuota_calibrada": None if sin_ninguna_fuente else cuota_calibrada,
             "cuota_real": None,
             "es_cuota_real": False,
-            "confianza_insuficiente": confianza_insuficiente_global,
+            "nivel_verificacion": nivel_verif_global,
+            "metricas_faltantes": metricas_faltantes,
+            "confianza_insuficiente": sin_ninguna_fuente,
             "muestra_n": min(muestra_h, muestra_a),
             "num_selecciones": num_selecciones,
             "categoria_oddster": tipo_mercado_code,
@@ -14055,7 +14096,7 @@ def _seleccionar_top3_verificado(matches_day: list, target_date: str, limit: int
         an = SportsAnalyticsEngine.generate_institutional_analysis(m)
         p_princ = an.get("pronostico_principal", {})
         sel_text = p_princ.get("seleccion", "")
-        if p_princ.get("confianza_insuficiente") or not sel_text or sel_text == "Confianza insuficiente":
+        if p_princ.get("confianza_insuficiente") or not sel_text or sel_text in ("Confianza insuficiente", "Datos insuficientes"):
             continue
         prob_raw = p_princ.get("probabilidad", "")
         prob_clean = re.sub(r'[^0-9.]', '', str(prob_raw))
@@ -19506,8 +19547,21 @@ def create_app() -> Flask:
                     matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
 
             limite_top = min(3, max(1, int(request.args.get("limit", 3))))
-            # Respetar estrictamente los partidos programados en target_date sin mezclar partidos de otros días
-            top3_list = _seleccionar_top5_diversificado(matches_day, target_date, limit=limite_top)
+            top3_list = _seleccionar_top3_verificado(matches_day, target_date, limit=limite_top)
+            if not top3_list and not req_fecha:
+                fechas_cand = sorted(list(set(
+                    (f.get("fecha_utc") or "")[:10]
+                    for f in ALL_FIXTURES_POOL
+                    if (f.get("fecha_utc") or "")[:10] >= today_str
+                )))
+                for f_cand in fechas_cand[:14]:
+                    m_cand = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == f_cand]
+                    cand_picks = _seleccionar_top3_verificado(m_cand, f_cand, limit=limite_top)
+                    if cand_picks:
+                        target_date = f_cand
+                        matches_day = m_cand
+                        top3_list = cand_picks
+                        break
             for item in top3_list:
                 item.pop("an_data", None)
 
