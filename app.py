@@ -230,7 +230,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("PredicXionCore")
 
-ALLOW_SIMULATED_ACTA = os.getenv("ALLOW_SIMULATED_ACTA", "true").strip().lower() == "true"
+ALLOW_SIMULATED_ACTA = os.getenv("ALLOW_SIMULATED_ACTA", "false").strip().lower() == "true"
 OWNER_EMAILS = set(filter(None, [e.strip().lower() for e in (os.getenv("OWNER_EMAILS") or os.getenv("ADMIN_EMAIL") or "fabiancermaz@gmail.com").split(",")]))
 
 def _verificar_es_admin() -> bool:
@@ -417,7 +417,8 @@ def _loop_auto_telegram():
             logger.error("Error en _loop_auto_telegram: %s", e)
         time.sleep(30)
 
-threading.Thread(target=_loop_auto_telegram, daemon=True).start()
+if os.getenv("DISABLE_BACKGROUND_WORKERS", "false").lower() != "true":
+    threading.Thread(target=_loop_auto_telegram, daemon=True).start()
 
 _telegram_match_cursor = 0
 
@@ -429,6 +430,8 @@ _firebase_initialized = False
 
 def ensure_firebase_initialized():
     global _firestore_client, _firebase_initialized
+    if os.getenv("DISABLE_FIREBASE_INIT", "false").lower() == "true":
+        return False
     if firebase_admin is None:
         return False
     if firebase_admin._apps:
@@ -617,11 +620,240 @@ def require_admin(f):
 class DualProviderH2HService:
     API_SPORTS_BASE = "https://v3.football.api-sports.io"
     FOOTBALL_DATA_BASE = "https://api.football-data.org/v4"
+
+class FootballDataOrgClient:
+    """
+    Capa única y segura de acceso a football-data.org v4.
+    - Lee la clave exclusivamente desde variables de entorno (sin exponerla en logs ni respuestas).
+    - Registra por solicitud: endpoint, competición, código HTTP, fecha, partidos, duración, caché y error sanitizado.
+    - Maneja 401, 403, 429, timeout, respuesta vacía y errores de formato.
+    - Mantiene caché con TTL para evitar consumo repetido de cuota.
+    """
+    BASE_URL = "https://api.football-data.org/v4"
+    COMPETITION_CODE_MAP = {
+        "BL1": "BL1",
+        "BSA": "BSA",
+        "FL1": "FL1",
+        "PL":  "PL",
+        "PPL": "PPL",
+        "PD":  "PD",
+        "SA":  "SA",
+        "UCL": "CL",
+        "UEL": "EL",
+        "UNL": "UNL",
+    }
+    COMPETITION_NAMES = {
+        "BL1": "Bundesliga",
+        "BSA": "Campeonato Brasileiro Série A",
+        "FL1": "Ligue 1",
+        "PL":  "Premier League",
+        "PPL": "Primeira Liga",
+        "PD":  "Primera División",
+        "SA":  "Serie A",
+        "UCL": "UEFA Champions League",
+        "UEL": "UEFA Europa League",
+        "UNL": "UEFA Nations League",
+    }
+    _CACHE = {}
+    _LOCK = threading.RLock()
+    _REQUEST_LOGS = []
+    _STATUS = {
+        "proveedor": "football-data.org",
+        "ultima_sincronizacion": None,
+        "ultima_respuesta_valida": None,
+        "ultima_falla": None,
+        "partidos_por_competicion": {},
+        "cuota": {
+            "requests_available_minute": None,
+            "request_counter_reset": None,
+        },
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "total_solicitudes": 0,
+    }
+
+    @classmethod
+    def _get_api_key(cls) -> str:
+        return (
+            os.getenv("FOOTBALL_API_KEY")
+            or os.getenv("FOOTBALL_DATA_API_KEY")
+            or os.getenv("FOOTBALL_DATA_ORG_KEY")
+            or ""
+        ).strip()
+
+    @classmethod
+    def _sanitize_error(cls, msg: str, key: str) -> str:
+        s = str(msg or "")
+        if key:
+            s = s.replace(key, "[REDACTED]")
+        return s[:240]
+
+    @classmethod
+    def _record_log(cls, entry: dict):
+        with cls._LOCK:
+            cls._REQUEST_LOGS.append(entry)
+            if len(cls._REQUEST_LOGS) > 100:
+                cls._REQUEST_LOGS = cls._REQUEST_LOGS[-100:]
+
+    @classmethod
+    def fetch_json(cls, endpoint_path: str, competition_code: str = "", params: dict = None, ttl_seconds: int = 900, timeout_sec: int = 12) -> dict:
+        key = cls._get_api_key()
+        now_ts = time.time()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        params_key = json.dumps(params or {}, sort_keys=True)
+        cache_key = f"{endpoint_path}?{params_key}"
+
+        cached_payload = None
+        with cls._LOCK:
+            cached = cls._CACHE.get(cache_key)
+            if cached and (now_ts - cached["ts"]) < ttl_seconds:
+                cls._STATUS["cache_hits"] += 1
+                cached_payload = cached["data"]
+            else:
+                cls._STATUS["cache_misses"] += 1
+
+        if cached_payload is not None:
+            cls._record_log({
+                "endpoint": endpoint_path,
+                "competicion": competition_code or "GENERAL",
+                "codigo_http": 200,
+                "fecha": now_iso,
+                "cantidad_partidos": len((cached_payload or {}).get("matches", [])),
+                "duracion_ms": 0,
+                "cache_hit": True,
+                "error_sanitizado": None,
+            })
+            return {"ok": True, "data": cached_payload, "status_code": 200, "cache_hit": True, "error": None}
+
+        if not key:
+            err_msg = "Clave de football-data.org no configurada en variables de entorno."
+            with cls._LOCK:
+                cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": None, "error": err_msg}
+            cls._record_log({
+                "endpoint": endpoint_path, "competicion": competition_code or "GENERAL",
+                "codigo_http": None, "fecha": now_iso, "cantidad_partidos": 0,
+                "duracion_ms": 0, "cache_hit": False, "error_sanitizado": err_msg,
+            })
+            return {"ok": False, "data": None, "status_code": None, "cache_hit": False, "error": err_msg}
+
+        url = f"{cls.BASE_URL}{endpoint_path}"
+        headers = {"X-Auth-Token": key, "Accept": "application/json"}
+        t0 = time.time()
+        status_code = None
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=timeout_sec)
+            dur_ms = int(round((time.time() - t0) * 1000))
+            status_code = resp.status_code
+
+            with cls._LOCK:
+                cls._STATUS["total_solicitudes"] += 1
+                avail = resp.headers.get("X-Requests-Available-Minute")
+                reset = resp.headers.get("X-RequestCounter-Reset")
+                if avail is not None:
+                    cls._STATUS["cuota"]["requests_available_minute"] = avail
+                if reset is not None:
+                    cls._STATUS["cuota"]["request_counter_reset"] = reset
+
+            if status_code in (401, 403):
+                err = f"Acceso denegado o plan sin cobertura ({status_code})"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": status_code, "error": err}
+                cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": status_code, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": status_code, "cache_hit": False, "error": err}
+
+            if status_code == 429:
+                err = "Rate limit alcanzado (HTTP 429)"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": 429, "error": err}
+                cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": 429, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 429, "cache_hit": False, "error": err}
+
+            if status_code != 200:
+                err = f"Respuesta HTTP inesperada ({status_code})"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": status_code, "error": err}
+                cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": status_code, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": status_code, "cache_hit": False, "error": err}
+
+            if not resp.text or not resp.text.strip():
+                err = "Respuesta vacía del proveedor"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": 200, "error": err}
+                cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": 200, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 200, "cache_hit": False, "error": err}
+
+            try:
+                payload = resp.json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Payload JSON no es objeto")
+            except Exception as j_err:
+                err = cls._sanitize_error(f"Error de formato JSON: {j_err}", key)
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": 200, "error": err}
+                cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": 200, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 200, "cache_hit": False, "error": err}
+
+            matches_list = payload.get("matches", [])
+            if not isinstance(matches_list, list):
+                matches_list = []
+
+            with cls._LOCK:
+                cls._CACHE[cache_key] = {"ts": now_ts, "data": payload}
+                cls._STATUS["ultima_respuesta_valida"] = {"fecha": now_iso, "competicion": competition_code, "partidos": len(matches_list)}
+                if competition_code:
+                    cls._STATUS["partidos_por_competicion"][competition_code] = len(matches_list)
+
+            cls._record_log({
+                "endpoint": endpoint_path, "competicion": competition_code or "GENERAL",
+                "codigo_http": 200, "fecha": now_iso, "cantidad_partidos": len(matches_list),
+                "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": None,
+            })
+            return {"ok": True, "data": payload, "status_code": 200, "cache_hit": False, "error": None}
+
+        except requests.Timeout:
+            dur_ms = int(round((time.time() - t0) * 1000))
+            err = f"Timeout al consultar football-data.org ({timeout_sec}s)"
+            with cls._LOCK:
+                cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": None, "error": err}
+            cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": None, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+            return {"ok": False, "data": None, "status_code": None, "cache_hit": False, "error": err}
+        except Exception as exc:
+            dur_ms = int(round((time.time() - t0) * 1000))
+            err = cls._sanitize_error(f"Error de red/formato: {type(exc).__name__}", key)
+            with cls._LOCK:
+                cls._STATUS["ultima_falla"] = {"fecha": now_iso, "competicion": competition_code, "codigo_http": status_code, "error": err}
+            cls._record_log({"endpoint": endpoint_path, "competicion": competition_code, "codigo_http": status_code, "fecha": now_iso, "cantidad_partidos": 0, "duracion_ms": dur_ms, "cache_hit": False, "error_sanitizado": err})
+            return {"ok": False, "data": None, "status_code": status_code, "cache_hit": False, "error": err}
+
+    @classmethod
+    def get_status_report(cls) -> dict:
+        with cls._LOCK:
+            return {
+                "proveedor": cls._STATUS["proveedor"],
+                "api_key_configurada": bool(cls._get_api_key()),
+                "ultima_sincronizacion": cls._STATUS["ultima_sincronizacion"],
+                "ultima_respuesta_valida": cls._STATUS["ultima_respuesta_valida"],
+                "ultima_falla": cls._STATUS["ultima_falla"],
+                "partidos_por_competicion": dict(cls._STATUS["partidos_por_competicion"]),
+                "cuota": dict(cls._STATUS["cuota"]),
+                "cache": {
+                    "entradas": len(cls._CACHE),
+                    "hits": cls._STATUS["cache_hits"],
+                    "misses": cls._STATUS["cache_misses"],
+                },
+                "total_solicitudes": cls._STATUS["total_solicitudes"],
+                "ultimas_solicitudes": list(cls._REQUEST_LOGS[-20:]),
+            }
+
     _session = requests.Session()
     _h2h_mem_cache = {}
 
     @classmethod
     def get_h2h(cls, home_team: str, away_team: str, competition_code: str = "", match_id: str = "") -> dict:
+        """
+        Ruta productiva única (Fase 1): NO consulta API-Sports, SofaScore, ESPN ni fabrica H2H por hash.
+        Usa únicamente caché verificado real; si no existe, retorna estado vacío NO_DISPONIBLE.
+        """
         home_clean = (home_team or "Local").strip()
         away_clean = (away_team or "Visitante").strip()
         doc_key = f"{re.sub(r'[^a-zA-Z0-9]', '_', home_clean.lower())}_vs_{re.sub(r'[^a-zA-Z0-9]', '_', away_clean.lower())}"
@@ -629,64 +861,74 @@ class DualProviderH2HService:
         if doc_key in cls._h2h_mem_cache:
             return cls._h2h_mem_cache[doc_key]
 
-        # Respaldo institucional determinista de alta fidelidad en memoria (0.001 ms)
-        h2h_res = cls._derive_institutional_h2h(home_clean, away_clean, competition_code)
-        cls._h2h_mem_cache[doc_key] = h2h_res
-        return h2h_res
+        return {
+            "victorias_local": 0,
+            "empates": 0,
+            "victorias_visitante": 0,
+            "total_partidos": 0,
+            "resumen": "Sin historial H2H verificado",
+            "partidos": [],
+            "fuente": "NO_DISPONIBLE",
+        }
 
     @classmethod
     def get_h2h_remote(cls, home_team: str, away_team: str, competition_code: str = "", match_id: str = "") -> dict:
+        """
+        Consulta remota H2H restringida exclusivamente a football-data.org (sin API-Sports ni respaldos sintéticos).
+        """
         home_clean = (home_team or "Local").strip()
         away_clean = (away_team or "Visitante").strip()
         doc_key = f"{re.sub(r'[^a-zA-Z0-9]', '_', home_clean.lower())}_vs_{re.sub(r'[^a-zA-Z0-9]', '_', away_clean.lower())}"
 
-        # 1. Chequeo de caché en Firestore
         if db:
             try:
                 doc = db.collection("h2h_cache").document(doc_key).get()
                 if doc.exists:
                     cached = doc.to_dict()
-                    if cached.get("data"):
+                    if cached.get("data") and cached["data"].get("fuente") != "NO_DISPONIBLE":
                         return cached["data"]
             except Exception:
                 pass
 
-        api_sports_key = (os.getenv("APISPORTS_KEY") or os.getenv("API_SPORTS_KEY") or "").strip()
-        football_data_key = (os.getenv("FOOTBALL_API_KEY") or "").strip()
-
         h2h_result = None
+        # 1. Fuente principal: football-data.org
+        if match_id and str(match_id).isdigit():
+            res = FootballDataOrgClient.fetch_json(
+                f"/matches/{match_id}/head2head",
+                competition_code=competition_code,
+                params={"limit": 10},
+                ttl_seconds=1800,
+                timeout_sec=8,
+            )
+            if res.get("ok") and res.get("data"):
+                h2h_result = cls._parse_footballdata_h2h(home_clean, away_clean, res["data"])
 
-        # 2. Intento 1: API-Sports / RapidAPI Football
-        client = get_football_api_client()
-        if client:
-            try:
-                headers = client["headers"]
-                base_u = client["base_url"]
-                # Consultar H2H directo
-                url = f"{base_u}/fixtures/headtohead?h2h={home_clean}-{away_clean}"
-                resp = cls._session.get(url, headers=headers, timeout=6)
-                if resp.status_code == 200:
-                    items = resp.json().get("response", [])
-                    if items:
-                        h2h_result = cls._parse_apisports_h2h(home_clean, away_clean, items)
-            except Exception as e:
-                logger.warning("Fallo consultando H2H en API-Sports: %s", e)
-
-        # 3. Intento 2: Football-Data.org (Si hay match_id numérico de Football-Data)
-        if not h2h_result and football_data_key and match_id and str(match_id).isdigit():
-            try:
-                headers = {"X-Auth-Token": football_data_key}
-                url = f"{cls.FOOTBALL_DATA_BASE}/matches/{match_id}/head2head?limit=10"
-                resp = cls._session.get(url, headers=headers, timeout=6)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    h2h_result = cls._parse_footballdata_h2h(home_clean, away_clean, data)
-            except Exception as e:
-                logger.warning("Fallo consultando H2H en Football-Data: %s", e)
-
-        # 4. Intento 3: Respaldo institucional determinista de alta fidelidad
+        # 2. Respaldo secundario controlado: API-Sports (solo cuando football-data.org no tiene H2H)
         if not h2h_result:
-            h2h_result = cls._derive_institutional_h2h(home_clean, away_clean, competition_code)
+            client = get_football_api_client()
+            if client:
+                try:
+                    url = f"{client['base_url']}/fixtures/headtohead?h2h={home_clean}-{away_clean}"
+                    resp = requests.get(url, headers=client["headers"], timeout=6)
+                    if resp.status_code == 200:
+                        items = resp.json().get("response", [])
+                        if items:
+                            h2h_result = cls._parse_apisports_h2h(home_clean, away_clean, items)
+                            if h2h_result:
+                                h2h_result["fuente"] = "api-sports (respaldo)"
+                except Exception as e:
+                    logger.warning("Fallo respaldo H2H en API-Sports: %s", e)
+
+        if not h2h_result:
+            return {
+                "victorias_local": 0,
+                "empates": 0,
+                "victorias_visitante": 0,
+                "total_partidos": 0,
+                "resumen": "Sin historial H2H verificado",
+                "partidos": [],
+                "fuente": "NO_DISPONIBLE",
+            }
 
         # Guardar en caché Firestore si está disponible
         if db and h2h_result:
@@ -1043,6 +1285,32 @@ class DualAIEngine:
         home_stars_txt = ", ".join([f"{p['nombre']} (Dorsal {p.get('dorsal', 9)}, {p.get('posicion', 'Delantero')})" for p in pl_home[:2]]) if pl_home else f"Alineación titular de {local}"
         away_stars_txt = ", ".join([f"{p['nombre']} (Dorsal {p.get('dorsal', 9)}, {p.get('posicion', 'Delantero')})" for p in pl_away[:2]]) if pl_away else f"Alineación titular de {visita}"
 
+        if p_princ.get("confianza_insuficiente") or p_princ.get("seleccion") in ("Confianza insuficiente", "Datos insuficientes", "", None):
+            msg_insuf = (
+                f"Datos insuficientes para {local} vs {visita} ({liga}): "
+                "no existen al menos 5 partidos oficiales verificados por equipo en football-data.org para emitir una tesis cuantitativa."
+            )
+            return {
+                "estado": "DATOS_INSUFICIENTES",
+                "gemini_rol": "Analista Cuantitativo (Generación de Tesis)",
+                "gemini_tesis": msg_insuf,
+                "deepseek_rol": "Razonamiento Lógico Profundo & Cálculo",
+                "deepseek_razonamiento": msg_insuf,
+                "grok_rol": "Auditor Crítico (Control de Riesgo & Red Team)",
+                "grok_auditoria": msg_insuf,
+                "seleccion_final_consenso": "Datos insuficientes",
+                "probabilidad_consenso": "—",
+                "jugadores_estrella_partido": {
+                    "local": pl_home[:2],
+                    "visitante": pl_away[:2],
+                    "es_seleccion": es_seleccion,
+                    "tag_local": tag_loc,
+                    "tag_visitante": tag_vis,
+                },
+                "nivel_seguridad": "Datos insuficientes para emitir recomendación",
+                "llaves_activas": {"gemini": False, "deepseek": False, "grok": False},
+            }
+
         gemini_key = cls.get_gemini_key()
         deepseek_key = cls.get_deepseek_key()
         grok_key = cls.get_grok_key()
@@ -1073,9 +1341,9 @@ Formula tu Tesis Cuantitativa en 2 oraciones exactas integrando el protagonismo 
                 logger.warning("Fallo en llamada live a Gemini: %s", e)
 
         if not gemini_thesis:
-            o15_val = round(float(probs.get("over_under_1_5", {}).get("over", 78.0)))
-            u35_val = round(float(probs.get("over_under_3_5", {}).get("under", 74.0)))
-            btts_val = round(float(probs.get("btts", {}).get("yes", 58.0)))
+            o15_val = round(float(probs.get("over_under_1_5", {}).get("over", 0.0)))
+            u35_val = round(float(probs.get("over_under_3_5", {}).get("under", 0.0)))
+            btts_val = round(float(probs.get("btts", {}).get("yes", 0.0)))
             sel_consenso = p_princ.get("seleccion", "Más de 1.5 goles")
             prob_consenso = p_princ.get("probabilidad", "82%")
             just_corta = p_princ.get("justificacion", "")
@@ -1083,7 +1351,7 @@ Formula tu Tesis Cuantitativa en 2 oraciones exactas integrando el protagonismo 
                 f"Tesis Cuantitativa (Gemini 2.5 • Poisson & Binomial Negativa): Flujo ofensivo proyectado de "
                 f"{p1.get('xg_proyectado_local', 1.5)} vs {p1.get('xg_proyectado_visitante', 1.5)} xG "
                 f"(Más de 1.5 goles: {o15_val}% · Menos de 3.5 goles: {u35_val}% · Ambos anotan: {btts_val}% · "
-                f"{p1.get('corners_proyectados', '9.8 córners')}). "
+                f"{p1.get('corners_proyectados', 'Datos insuficientes')}). "
                 f"Tras evaluar mercados al alza (Más de) y a la baja (Menos de), la señal óptima es '{sel_consenso}' ({prob_consenso}). {just_corta}"
             ).strip()
 
@@ -1125,9 +1393,8 @@ Tu misión de deducción matemática formal:
             cuota_ref = p_princ.get('cuota_calibrada', 1.58)
             margen_seg = p_princ.get('safety_margin', 'colchón estadístico verificado')
             deepseek_reasoning = (
-                f"Razonamiento Lógico (DeepSeek-V3 • Arbitraje +EV): Deducción matemática bidireccional completada ({margen_seg}). "
-                f"La selección principal '{sel_consenso}' presenta una probabilidad real de {prob_sel} frente a la cuota @{cuota_ref}, "
-                f"generando un Valor Esperado positivo (+8.4% EV) y superando en fiabilidad a las líneas alternativas."
+                f"Razonamiento Lógico (Modelo Cuantitativo): Evaluación bidireccional completada ({margen_seg}). "
+                f"La selección '{sel_consenso}' registra una estimación de {prob_sel} (cuota modelo interna {cuota_ref}; sin cuota real de mercado verificada)."
             )
 
         grok_verdict = None
@@ -1274,6 +1541,296 @@ class TheOddsAPIService:
         return {}
 
 
+
+# Compatibilidad de DualProviderH2HService sin eliminar integraciones heredadas
+DualProviderH2HService.get_h2h = FootballDataOrgClient.get_h2h
+DualProviderH2HService.get_h2h_remote = FootballDataOrgClient.get_h2h_remote
+
+
+class MatchEnrichmentCache:
+    """
+    Caché persistente (Firestore + memoria fallback) y coordinador controlado de fuentes secundarias
+    (SofaScore, ESPN, API-Sports).
+    - Fuente principal: football-data.org.
+    - Fuentes secundarias: únicamente respaldo para métricas ausentes en football-data.org.
+    - NUNCA se invoca desde /obtener-pronostico ni renderizado de cartelera; solo worker/tarea/admin.
+    - Registra por dato: fuente, fecha_consulta, fecha_vencimiento, nivel_verificacion, partido_asociado.
+    - Si dos fuentes difieren, registra discrepancia y NO escoge silenciosamente ni mezcla valores.
+    """
+    _LOCK = threading.RLock()
+    _STORE = {}
+    _CALENDAR_AUDIT_LOG = []
+    COLLECTION_NAME = "match_enrichment_cache"
+
+    @classmethod
+    def make_key(cls, fecha: str, home: str, away: str) -> str:
+        nf = globals().get("_norm_equipo")
+        h = nf(home) if nf else (home or "").lower().strip()
+        a = nf(away) if nf else (away or "").lower().strip()
+        return f"{str(fecha or '')[:10]}|{h}|{a}"
+
+    @classmethod
+    def _firestore_doc_id(cls, key: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_\-]", "_", key)[:120]
+
+    @classmethod
+    def get_match_enrichment(cls, fecha: str, home: str, away: str) -> dict:
+        key = cls.make_key(fecha, home, away)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with cls._LOCK:
+            entry = cls._STORE.get(key)
+            if not entry and "db" in globals() and db is not None:
+                try:
+                    doc_id = cls._firestore_doc_id(key)
+                    snap = db.collection(cls.COLLECTION_NAME).document(doc_id).get()
+                    if getattr(snap, "exists", False):
+                        loaded = snap.to_dict()
+                        if isinstance(loaded, dict) and loaded.get("metricas"):
+                            cls._STORE[key] = loaded
+                            entry = loaded
+                except Exception as e:
+                    logger.debug("Firestore enrichment read fallback a memoria: %s", e)
+
+            if not entry:
+                return {"disponible": False, "discrepancias": [], "metricas": {}}
+            exp = entry.get("fecha_vencimiento") or ""
+            if exp and now_iso > exp:
+                return {
+                    "disponible": False,
+                    "expirado": True,
+                    "discrepancias": entry.get("discrepancias", []),
+                    "metricas": {},
+                }
+            return dict(entry)
+
+    @classmethod
+    def store_observations(cls, match_data: dict, observations: list, ttl_seconds: int = 3600) -> dict:
+        fecha = str(match_data.get("fecha") or match_data.get("fecha_utc") or "")[:10]
+        home = match_data.get("local", "")
+        away = match_data.get("visitante", "")
+        key = cls.make_key(fecha, home, away)
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+        exp_iso = (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
+
+        partido_asoc = {
+            "id_partido": match_data.get("id_partido"),
+            "fecha": fecha,
+            "local": home,
+            "visitante": away,
+        }
+
+        consolidated = {}
+        discrepancias = []
+        target_metrics = (
+            "corners_home", "corners_away", "corners",
+            "tarjetas_home", "tarjetas_away", "tarjetas",
+            "tiros_home", "tiros_away", "tiros",
+            "tiros_puerta_home", "tiros_puerta_away", "tiros_puerta",
+            "arbitro", "arbitro_avg_cards", "resultado",
+        )
+
+        for metric in target_metrics:
+            seen_vals = []
+            for obs in observations:
+                val = (obs.get("metricas") or {}).get(metric)
+                if val is not None and val != "":
+                    seen_vals.append({
+                        "valor": val,
+                        "fuente": obs.get("fuente", "desconocida"),
+                        "nivel_verificacion": obs.get("nivel_verificacion", "RESPALDO_SECUNDARIO"),
+                    })
+            if not seen_vals:
+                consolidated[metric] = {
+                    "valor": None,
+                    "fuente": "NO_DISPONIBLE",
+                    "fecha_consulta": now_iso,
+                    "fecha_vencimiento": exp_iso,
+                    "nivel_verificacion": "NO_DISPONIBLE",
+                    "partido_asociado": partido_asoc,
+                }
+                continue
+
+            distinct_repr = {json.dumps(x["valor"], sort_keys=True, default=str) for x in seen_vals}
+            if len(distinct_repr) > 1:
+                discrepancias.append({
+                    "metrica": metric,
+                    "partido": partido_asoc,
+                    "fecha_deteccion": now_iso,
+                    "reportes": seen_vals,
+                })
+                consolidated[metric] = {
+                    "valor": None,
+                    "fuente": "DISCREPANCIA",
+                    "fecha_consulta": now_iso,
+                    "fecha_vencimiento": exp_iso,
+                    "nivel_verificacion": "DISCREPANCIA_DETECTADA",
+                    "partido_asociado": partido_asoc,
+                    "reportes": seen_vals,
+                }
+            else:
+                chosen = next((x for x in seen_vals if x["fuente"] == "football-data.org"), seen_vals[0])
+                consolidated[metric] = {
+                    "valor": chosen["valor"],
+                    "fuente": chosen["fuente"],
+                    "fecha_consulta": now_iso,
+                    "fecha_vencimiento": exp_iso,
+                    "nivel_verificacion": chosen["nivel_verificacion"],
+                    "partido_asociado": partido_asoc,
+                }
+
+        fuentes_activas = sorted({
+            m["fuente"] for m in consolidated.values()
+            if m.get("valor") is not None and m.get("fuente") not in ("NO_DISPONIBLE", "DISCREPANCIA")
+        })
+        nivel_global = (
+            "DISCREPANCIA_DETECTADA" if discrepancias
+            else ("PRIMARIO_OFICIAL" if "football-data.org" in fuentes_activas
+                  else ("RESPALDO_SECUNDARIO" if fuentes_activas else "NO_DISPONIBLE"))
+        )
+
+        record = {
+            "disponible": True,
+            "partido_asociado": partido_asoc,
+            "fuente": ", ".join(fuentes_activas) if fuentes_activas else "NO_DISPONIBLE",
+            "fecha_consulta": now_iso,
+            "fecha_vencimiento": exp_iso,
+            "nivel_verificacion": nivel_global,
+            "metricas": consolidated,
+            "discrepancias": discrepancias,
+            "tiene_discrepancia": len(discrepancias) > 0,
+        }
+        with cls._LOCK:
+            cls._STORE[key] = record
+            if "db" in globals() and db is not None:
+                try:
+                    doc_id = cls._firestore_doc_id(key)
+                    db.collection(cls.COLLECTION_NAME).document(doc_id).set(record, merge=True)
+                except Exception as e:
+                    logger.debug("Firestore enrichment write fallback a memoria: %s", e)
+        return record
+
+    @classmethod
+    def enrich_match_worker(cls, match_data: dict, ttl_seconds: int = 3600) -> dict:
+        """
+        Worker controlado de enriquecimiento:
+        1. Consulta football-data.org como fuente principal.
+        2. Si faltan métricas, consulta respaldos secundarios (SofaScore, ESPN, API-Sports)
+           SIN modificar ni sobrescribir el calendario manual.
+        """
+        fecha = str(match_data.get("fecha") or match_data.get("fecha_utc") or "")[:10]
+        home = match_data.get("local", "")
+        away = match_data.get("visitante", "")
+        code = match_data.get("codigo_liga", "")
+        observations = []
+
+        # 1. Fuente principal: football-data.org
+        fd_code = FootballDataOrgClient.COMPETITION_CODE_MAP.get(code, code)
+        if fd_code:
+            fd_res = FootballDataOrgClient.fetch_json(
+                f"/competitions/{fd_code}/matches",
+                competition_code=code,
+                params={"dateFrom": fecha, "dateTo": fecha} if fecha else None,
+                ttl_seconds=900,
+            )
+            if fd_res.get("ok") and fd_res.get("data"):
+                for m in (fd_res["data"].get("matches") or []):
+                    h_fd = (m.get("homeTeam") or {}).get("name", "")
+                    a_fd = (m.get("awayTeam") or {}).get("name", "")
+                    if matches_team_alias(home, h_fd) and matches_team_alias(away, a_fd):
+                        ft = (m.get("score") or {}).get("fullTime") or {}
+                        refs = m.get("referees") or []
+                        arb_name = refs[0].get("name") if refs else None
+                        res_str = f"{ft.get('home')}-{ft.get('away')}" if (m.get("status") == "FINISHED" and ft.get("home") is not None) else None
+                        observations.append({
+                            "fuente": "football-data.org",
+                            "nivel_verificacion": "PRIMARIO_OFICIAL",
+                            "metricas": {
+                                "resultado": res_str,
+                                "arbitro": arb_name,
+                            }
+                        })
+                        break
+
+        # 2. Respaldo secundario: SofaScore
+        if "SofascoreLiveService" in globals():
+            try:
+                sofa = SofascoreLiveService.fetch_match_stats(home, away, fecha)
+                if sofa:
+                    observations.append({
+                        "fuente": "sofascore",
+                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
+                        "metricas": {
+                            "corners_home": sofa.get("corners_home"),
+                            "corners_away": sofa.get("corners_away"),
+                            "corners": sofa.get("corners_total"),
+                            "tarjetas_home": sofa.get("cards_home"),
+                            "tarjetas_away": sofa.get("cards_away"),
+                            "tarjetas": sofa.get("cards_total"),
+                            "tiros_home": sofa.get("shots_home"),
+                            "tiros_away": sofa.get("shots_away"),
+                            "tiros": sofa.get("shots_total"),
+                            "tiros_puerta_home": sofa.get("shots_on_target_home"),
+                            "tiros_puerta_away": sofa.get("shots_on_target_away"),
+                            "tiros_puerta": sofa.get("shots_on_target"),
+                            "arbitro": sofa.get("referee"),
+                            "arbitro_avg_cards": sofa.get("referee_avg_cards"),
+                            "resultado": f"{sofa.get('score_home')}-{sofa.get('score_away')}" if sofa.get("finished") else None,
+                        }
+                    })
+            except Exception as e:
+                logger.debug("Worker SofaScore fallback error: %s", e)
+
+        # 3. Respaldo secundario: ESPN
+        if "ESPNLiveService" in globals() and hasattr(ESPNLiveService, "fetch_match_stats"):
+            try:
+                espn = ESPNLiveService.fetch_match_stats(home, away, fecha)
+                if espn:
+                    observations.append({
+                        "fuente": "espn",
+                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
+                        "metricas": {
+                            "corners_home": espn.get("corners_home"),
+                            "corners_away": espn.get("corners_away"),
+                            "corners": espn.get("corners_total"),
+                            "tarjetas_home": espn.get("cards_home"),
+                            "tarjetas_away": espn.get("cards_away"),
+                            "tarjetas": espn.get("cards_total"),
+                            "tiros_home": espn.get("shots_home"),
+                            "tiros_away": espn.get("shots_away"),
+                            "tiros": espn.get("shots_total"),
+                            "tiros_puerta_home": espn.get("shots_on_target_home"),
+                            "tiros_puerta_away": espn.get("shots_on_target_away"),
+                            "tiros_puerta": espn.get("shots_on_target"),
+                            "arbitro": espn.get("referee"),
+                            "arbitro_avg_cards": espn.get("referee_avg_cards"),
+                            "resultado": f"{espn.get('score_home')}-{espn.get('score_away')}" if espn.get("finished") else None,
+                        }
+                    })
+            except Exception as e:
+                logger.debug("Worker ESPN fallback error: %s", e)
+
+        return cls.store_observations(match_data, observations, ttl_seconds=ttl_seconds)
+
+    @classmethod
+    def enrich_calendar_worker(cls, target_date: str = "", limit: int = 20, ttl_seconds: int = 3600) -> dict:
+        """Enriquece partidos del calendario manual por adelantado (nunca invocado desde /obtener-pronostico)."""
+        fixtures = globals().get("ALL_FIXTURES_POOL", [])
+        procesados = 0
+        con_discrepancia = 0
+        for fix in fixtures:
+            f_str = str(fix.get("fecha_utc") or fix.get("fecha") or "")[:10]
+            if target_date and f_str != target_date[:10]:
+                continue
+            rec = cls.enrich_match_worker(fix, ttl_seconds=ttl_seconds)
+            procesados += 1
+            if rec.get("tiene_discrepancia"):
+                con_discrepancia += 1
+            if procesados >= limit:
+                break
+        return {"procesados": procesados, "con_discrepancia": con_discrepancia, "fecha": target_date or "TODAS"}
+
+
 class RefereeIntelligenceService:
     """
     Servicio de Inteligencia Arbitral (SofaScore / ESPN / Flashscore / Base Oficial):
@@ -1399,87 +1956,47 @@ class RefereeIntelligenceService:
     _SOFASCORE_DAY_EVENTS_CACHE = {}
 
     @classmethod
-    def get_referee_for_match(cls, home: str, away: str, code: str = "PD", date_str: str = "", allow_live_lookup: bool = True) -> dict:
-        import unicodedata as _ud
-        def _norm(s):
-            s_clean = (s or "").lower().strip()
-            nfkd = _ud.normalize("NFKD", s_clean)
-            return "".join(c for c in nfkd if not _ud.combining(c)).strip()
+    def get_referee_for_match(cls, home: str, away: str, code: str = "PD", date_str: str = "", allow_live_lookup: bool = False, match_data: dict = None) -> dict:
+        """
+        Obtiene el árbitro únicamente si existe dato oficial confirmado proveniente de football-data.org.
+        Nunca inventa árbitros ni usa promedios por hash; si no está disponible, retorna `arbitro_confirmado: False`.
+        """
+        league_avg = cls.LEAGUE_AVG_CARDS.get(code)
+        ref_from_match = None
+        if isinstance(match_data, dict):
+            refs = match_data.get("referees") or []
+            if isinstance(refs, list) and refs:
+                for r_obj in refs:
+                    if str(r_obj.get("type") or "REFEREE").upper() == "REFEREE" and r_obj.get("name"):
+                        ref_from_match = r_obj.get("name").strip()
+                        break
+            elif isinstance(match_data.get("arbitro_oficial"), str) and match_data.get("arbitro_oficial").strip():
+                ref_from_match = match_data["arbitro_oficial"].strip()
 
-        h_n = _norm(home)
-        a_n = _norm(away)
-        cache_key = f"{h_n}__{a_n}__{date_str}"
-        if cache_key in cls._REFEREE_MEMO_CACHE:
-            return cls._REFEREE_MEMO_CACHE[cache_key]
+        if ref_from_match:
+            return {
+                "arbitro_confirmado": True,
+                "nombre": ref_from_match,
+                "avg_cards": None,
+                "avg_fouls": None,
+                "perfil": "OFICIAL_SIN_MEDIA_TARJETAS",
+                "league_avg_cards": league_avg,
+                "factor_rigor": 1.0,
+                "fuente": "football-data.org",
+                "descripcion": f"Árbitro oficial reportado por football-data.org: {ref_from_match} (sin promedio histórico de tarjetas)."
+            }
 
-        league_avg = cls.LEAGUE_AVG_CARDS.get(code, 4.45)
-
-        # 1. Revisar designaciones verificadas en actas oficiales
-        for (vh, va), ref_info in cls.VERIFIED_MATCH_REFEREES.items():
-            if (vh in h_n or h_n in vh) and (va in a_n or a_n in va):
-                factor = round(ref_info["avg_cards"] / max(1.0, league_avg), 3)
-                res = dict(ref_info)
-                res["nombre"] = res["nombre"].strip()
-                res["league_avg_cards"] = league_avg
-                res["factor_rigor"] = factor
-                cls._REFEREE_MEMO_CACHE[cache_key] = res
-                return res
-
-        # 2. Consulta en vivo a SofaScore / ESPN API para fechas cercanas (ayer, hoy, mañana)
-        op_now = get_current_operational_date() if "get_current_operational_date" in globals() else "2026-11-07"
-        is_near_date = bool(date_str and abs((datetime.strptime(date_str[:10], "%Y-%m-%d") - datetime.strptime(op_now[:10], "%Y-%m-%d")).days) <= 2) if len(date_str) >= 10 else False
-
-        if allow_live_lookup and is_near_date:
-            try:
-                if date_str not in cls._SOFASCORE_DAY_EVENTS_CACHE:
-                    url = f"https://api.sofascore.com/api/v1/sport/football/scheduled-events/{date_str[:10]}"
-                    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=2.0)
-                    cls._SOFASCORE_DAY_EVENTS_CACHE[date_str] = r.json().get("events", []) if r.status_code == 200 else []
-                for ev in cls._SOFASCORE_DAY_EVENTS_CACHE.get(date_str, []):
-                    eh = _norm((ev.get("homeTeam") or {}).get("name", ""))
-                    ea = _norm((ev.get("awayTeam") or {}).get("name", ""))
-                    if (h_n[:5] in eh or eh[:5] in h_n) and (a_n[:5] in ea or ea[:5] in a_n):
-                        ev_id = ev.get("id")
-                        if ev_id:
-                            det = requests.get(f"https://api.sofascore.com/api/v1/event/{ev_id}", headers={"User-Agent": "Mozilla/5.0"}, timeout=2.0)
-                            if det.status_code == 200:
-                                ref_obj = (det.json().get("event") or {}).get("referee") or {}
-                                ref_name = (ref_obj.get("name") or "").strip()
-                                if ref_name:
-                                    yel = float(ref_obj.get("yellowCards", 0) or 0)
-                                    red = float(ref_obj.get("redCards", 0) or 0)
-                                    games = int(ref_obj.get("games", 0) or 0)
-                                    avg_c = round((yel + red * 1.5) / games, 2) if games >= 5 else league_avg
-                                    avg_c = max(2.8, min(6.2, avg_c))
-                                    factor = round(avg_c / max(1.0, league_avg), 3)
-                                    perfil = "ESTRICTO" if factor >= 1.07 else ("LIBERAL" if factor <= 0.92 else "EQUILIBRADO")
-                                    res = {
-                                        "nombre": ref_name,
-                                        "avg_cards": avg_c,
-                                        "avg_fouls": round(avg_c * 5.2, 1),
-                                        "perfil": perfil,
-                                        "league_avg_cards": league_avg,
-                                        "factor_rigor": factor,
-                                        "fuente": "SofaScore Live API",
-                                        "descripcion": f"{ref_name} • Árbitro {perfil.lower()} ({avg_c} tarj./partido vs {league_avg} media de liga)."
-                                    }
-                                    cls._REFEREE_MEMO_CACHE[cache_key] = res
-                                    return res
-            except Exception:
-                pass
-
-        # 3. Selección determinista del pool oficial de colegiados de la liga
-        pool = cls.OFFICIAL_REFEREE_POOLS.get(code, cls.OFFICIAL_REFEREE_POOLS["PD"])
-        idx = sum(ord(c) for c in (h_n + a_n + (date_str or ""))) % len(pool)
-        chosen = dict(pool[idx])
-        if chosen["nombre"].startswith("ánchez"):
-            chosen["nombre"] = "José María Sánchez Martínez"
-        factor = round(chosen["avg_cards"] / max(1.0, league_avg), 3)
-        chosen["league_avg_cards"] = league_avg
-        chosen["factor_rigor"] = factor
-        chosen["fuente"] = "Comité Técnico Oficial / Base Arbitral"
-        cls._REFEREE_MEMO_CACHE[cache_key] = chosen
-        return chosen
+        return {
+            "arbitro_confirmado": False,
+            "nombre": None,
+            "avg_cards": None,
+            "avg_fouls": None,
+            "perfil": "NO_DISPONIBLE",
+            "league_avg_cards": league_avg,
+            "factor_rigor": None,
+            "fuente": "NO_DISPONIBLE",
+            "descripcion": "Árbitro no confirmado en football-data.org."
+        }
 
 
 class SportsAnalyticsEngine:
@@ -11285,7 +11802,7 @@ class SportsAnalyticsEngine:
             "corners": 5.4, "tarjetas": 2.2, "observacion": "Dominador en Hungría con Barnabás Varga como referente de área.", "ultimos_partidos": []
         },
         "levski": {
-            "elo": 1735, "base_att": 1.38, "base_def": 1.35, "streak": "V-E-D-V-E",
+            "elo": 1735, "base_att": 1.38, "base_def": 1.35, "streak": "",
             "pts_last3": 4, "gf_last3": 4, "ga_last3": 3, "tiros_puerta": 4.4, "tiros_totales": 11.2,
             "corners": 4.9, "tarjetas": 2.5, "observacion": "Bloque físico e intenso en Sofía con fuerte juego aéreo.", "ultimos_partidos": []
         },
@@ -11335,7 +11852,7 @@ class SportsAnalyticsEngine:
             "corners": 5.7, "tarjetas": 2.4, "observacion": "Potencia ofensiva turca con Ciro Immobile y Rafa Silva.", "ultimos_partidos": []
         },
         "h beer sheva": {
-            "elo": 1740, "base_att": 1.40, "base_def": 1.38, "streak": "V-E-D-V-E",
+            "elo": 1740, "base_att": 1.40, "base_def": 1.38, "streak": "",
             "pts_last3": 4, "gf_last3": 4, "ga_last3": 4, "tiros_puerta": 4.5, "tiros_totales": 11.4,
             "corners": 5.0, "tarjetas": 2.4, "observacion": "Orden táctico y eficacia en balón detenido.", "ultimos_partidos": []
         },
@@ -11886,206 +12403,224 @@ class SportsAnalyticsEngine:
     }
 
     @classmethod
+    def _infer_entity_type(cls, team_name: str, competition_code: str = "") -> str:
+        if (competition_code or "").upper() in ("UNL", "WC", "EURO", "COPA_AMERICA"):
+            return "seleccion"
+        selecciones_conocidas = {
+            "espana", "españa", "francia", "alemania", "italia", "inglaterra", "portugal",
+            "paises bajos", "holanda", "belgica", "croacia", "suiza", "dinamarca", "austria",
+            "polonia", "escocia", "grecia", "turquia", "ucrania", "hungria", "serbia",
+            "noruega", "suecia", "gales", "chequia", "republica checa", "eslovaquia",
+            "rumania", "eslovenia", "argentina", "brasil", "colombia", "uruguay", "peru", "chile"
+        }
+        norm = (team_name or "").lower().strip()
+        return "seleccion" if norm in selecciones_conocidas else "club"
+
+    @classmethod
+    def get_verified_last_5_matches(cls, team_name: str, before_date: str = "", competition_code: str = "", entity_type: str = "") -> dict:
+        """
+        Fuente única de verdad para el Termómetro de Racha:
+        - Usa únicamente partidos oficiales finalizados previos a `before_date`.
+        - Separa estrictamente clubes vs selecciones y excluye amistosos y simulados.
+        - Ordena del más reciente al más antiguo, sin duplicados.
+        - Calcula V/E/D desde la perspectiva exacta del equipo (L/V).
+        - Si hay < 5 partidos válidos, retorna la cantidad real y `confianza_insuficiente: True`.
+        """
+        ent_type = entity_type or cls._infer_entity_type(team_name, competition_code)
+        norm_fn = globals().get("_norm_equipo")
+        eq_norm = norm_fn(team_name) if norm_fn else (team_name or "").lower().strip()
+
+        raw_candidates = []
+        # 1. Fuente primaria: VERIFIED_TEAM_HISTORY (Football-Data CSV oficial)
+        if "VERIFIED_TEAM_HISTORY" in globals() and ent_type == "club":
+            with _RATINGS_LOCK:
+                hist_list = VERIFIED_TEAM_HISTORY.get(eq_norm, [])
+                for item in hist_list:
+                    raw_candidates.append(dict(item))
+
+        # 2. Fuente verificada de actas en _VERIFIED_RESULTS_CACHE (solo oficiales no simulados)
+        if "_VERIFIED_RESULTS_CACHE" in globals():
+            for (f_c, h_c, a_c), res_c in _VERIFIED_RESULTS_CACHE.items():
+                if not res_c.get("finished") or res_c.get("simulado"):
+                    continue
+                if "amistoso" in str(res_c.get("competicion", "")).lower():
+                    continue
+                c_ent = res_c.get("tipo_entidad") or cls._infer_entity_type(h_c, res_c.get("codigo_liga", ""))
+                if c_ent != ent_type:
+                    continue
+                h_n = norm_fn(h_c) if norm_fn else h_c.lower().strip()
+                a_n = norm_fn(a_c) if norm_fn else a_c.lower().strip()
+                if eq_norm not in (h_n, a_n):
+                    continue
+                sh = int(res_c.get("score_home") or 0)
+                sa = int(res_c.get("score_away") or 0)
+                is_home = (eq_norm == h_n)
+                gf, gc = (sh, sa) if is_home else (sa, sh)
+                res_ved = "V" if gf > gc else ("E" if gf == gc else "D")
+                raw_candidates.append({
+                    "fecha": str(f_c)[:10],
+                    "competicion": res_c.get("competicion") or "Competición Oficial",
+                    "codigo_liga": res_c.get("codigo_liga", ""),
+                    "rival": a_c if is_home else h_c,
+                    "condicion": "L" if is_home else "V",
+                    "gf": gf, "gc": gc,
+                    "marcador": f"{sh} - {sa}",
+                    "resultado": res_ved,
+                    "corners": res_c.get("corners_total"),
+                    "tarjetas": res_c.get("cards_total"),
+                    "tipo_entidad": ent_type,
+                    "es_oficial": True,
+                    "simulado": False,
+                    "fuente": res_c.get("source") or "Acta Oficial Verificada"
+                })
+
+        # Filtrar: solo oficiales, no simulados, fecha estrictamente anterior a before_date, sin duplicados
+        cutoff = str(before_date or "")[:10]
+        seen = set()
+        valid = []
+        for m in raw_candidates:
+            if not m.get("es_oficial", True) or m.get("simulado", False):
+                continue
+            if "amistoso" in str(m.get("competicion", "")).lower():
+                continue
+            f_m = str(m.get("fecha") or "")[:10]
+            if not f_m:
+                continue
+            if cutoff and f_m >= cutoff:
+                continue
+            rival_n = norm_fn(m.get("rival", "")) if norm_fn else str(m.get("rival", "")).lower().strip()
+            dedup_k = (f_m, rival_n, m.get("condicion", ""))
+            if dedup_k in seen:
+                continue
+            seen.add(dedup_k)
+            valid.append(m)
+
+        # Ordenar del más reciente al más antiguo y tomar máximo 5
+        valid.sort(key=lambda x: x.get("fecha", ""), reverse=True)
+        last_5 = valid[:5]
+        n = len(last_5)
+        wins = sum(1 for x in last_5 if x.get("resultado") == "V")
+        draws = sum(1 for x in last_5 if x.get("resultado") == "E")
+        losses = sum(1 for x in last_5 if x.get("resultado") == "D")
+        gf_tot = sum(int(x.get("gf", 0)) for x in last_5)
+        gc_tot = sum(int(x.get("gc", 0)) for x in last_5)
+        streak_str = "-".join(x.get("resultado", "E") for x in last_5) if n > 0 else ""
+
+        return {
+            "partidos": last_5,
+            "muestra_n": n,
+            "streak": streak_str,
+            "resumen_ved": f"{wins}V-{draws}E-{losses}D" if n > 0 else "0V-0E-0D",
+            "wins": wins, "draws": draws, "losses": losses,
+            "pts": wins * 3 + draws,
+            "gf_total": gf_tot, "gc_total": gc_tot,
+            "confianza_insuficiente": (n < 5),
+            "tipo_entidad": ent_type,
+            "fuente": last_5[0].get("fuente", "Sin fuente") if n > 0 else "Sin partidos verificados"
+        }
+
+    @classmethod
     def _expand_streak_to_5(cls, raw_streak: str, normalized_name: str, elo_val: int = 1800) -> str:
-        """Garantiza que toda racha tenga exactamente 5 partidos realistas y balanceados (nunca rellenar con V-V artificial)."""
-        partes = [p.strip().upper() for p in (raw_streak or "").replace("W", "V").replace("L", "D").split("-") if p.strip()]
-        if len(partes) >= 5:
-            return "-".join(partes[:5])
-        h_val = sum(ord(c) for c in (normalized_name or "club"))
-        if elo_val >= 2020:
-            extra_pool = [["V", "E"], ["E", "V"], ["V", "D"], ["D", "V"]][h_val % 4]
-        elif elo_val >= 1860:
-            extra_pool = [["E", "D"], ["V", "D"], ["D", "V"], ["E", "V"]][h_val % 4]
-        elif elo_val >= 1760:
-            extra_pool = [["D", "E"], ["E", "D"], ["V", "D"], ["D", "V"]][h_val % 4]
-        else:
-            extra_pool = [["D", "E"], ["D", "D"], ["E", "D"], ["D", "V"]][h_val % 4]
-        while len(partes) < 5:
-            partes.append(extra_pool[len(partes) % 2])
-        return "-".join(partes[:5])
+        """Conserva únicamente los resultados reales presentes sin rellenar partidos ficticios."""
+        partes = [p.strip().upper() for p in (raw_streak or "").replace("W", "V").replace("L", "D").split("-") if p.strip() in ("V", "E", "D", "W", "L")]
+        norm_p = ["V" if p == "W" else ("D" if p == "L" else p) for p in partes[:5]]
+        return "-".join(norm_p)
 
     @classmethod
     def _normalizar_stats_5_partidos(cls, d: dict, normalized_name: str) -> dict:
-        """Asegura que gf_last3 y ga_last3 reflejen siempre el total de los últimos 5 partidos de la racha."""
+        """Nunca inventa partidos ni suma goles ficticios; preserva la muestra real."""
         raw_s = d.get("streak", "")
-        partes_orig = [p.strip().upper() for p in raw_s.split("-") if p.strip()]
+        partes_orig = [p.strip().upper() for p in raw_s.replace("W", "V").replace("L", "D").split("-") if p.strip()]
         d["streak"] = cls._expand_streak_to_5(raw_s, normalized_name, d.get("elo", 1800))
-        if len(partes_orig) < 5:
-            partes_5 = d["streak"].split("-")
-            ext = partes_5[len(partes_orig):5]
-            gf_add = sum(2 if x == "V" else (1 if x == "E" else 0) for x in ext)
-            ga_add = sum(0 if x == "V" else (1 if x == "E" else 2) for x in ext)
-            d["gf_last3"] = int(d.get("gf_last3", 4)) + gf_add
-            d["ga_last3"] = int(d.get("ga_last3", 3)) + ga_add
+        d["muestra_n"] = len(partes_orig[:5])
+        d["confianza_insuficiente"] = (d["muestra_n"] < 5)
         return d
 
     @classmethod
-    def get_team_stats(cls, team_name: str, competition_code: str = "") -> dict:
-        name_clean = (team_name or "").lower().strip()
-        import unicodedata as _ud
-        _nfkd = _ud.normalize("NFKD", name_clean.replace("ø", "o").replace("ł", "l"))
-        normalized = "".join(ch for ch in _nfkd if not _ud.combining(ch)).replace(".", "").replace("-", " ").strip()
+    def get_team_stats(cls, team_name: str, competition_code: str = "", before_date: str = "") -> dict:
+        """
+        Fuente única de producción para métricas de equipo:
+        - Consume únicamente datos oficiales provenientes de football-data.org (`RATINGS_REALES` + `VERIFIED_TEAM_HISTORY` + `_VERIFIED_RESULTS_CACHE` no simulado).
+        - NUNCA consume `REAL_FORM_2026_OVERRIDES`, `TEAM_HISTORICAL_DATABASE`, hashes ni valores ficticios.
+        - Si no existen datos oficiales suficientes, devuelve `nivel_verificacion = "DATOS_INSUFICIENTES"`.
+        """
+        real_rating = _ratings_para(team_name) if "_ratings_para" in globals() else None
+        hist_5 = cls.get_verified_last_5_matches(team_name, before_date=before_date, competition_code=competition_code)
+        n_real = int(hist_5.get("muestra_n", 0))
 
-        # 0. Verificar primero overrides oficiales actualizados 2026/2027
-        override_aliases = {
-            "psv": "psv", "psv eindhoven": "psv",
-            "club brujas": "club brugge", "club brugge": "club brugge", "brujas": "club brugge", "club bruge": "club brugge",
-            "feyenoord": "feyenoord",
-            "como": "como", "como 1907": "como",
-            "lens": "lens", "rc lens": "lens",
-            "slovan bratislava": "slovan bratislava", "slovan": "slovan bratislava",
-            "stuttgart": "stuttgart", "vfb stuttgart": "stuttgart",
-            "bodo/glimt": "bodo/glimt", "bodo glimt": "bodo/glimt", "bodo": "bodo/glimt",
-            "lille": "lille", "losc lille": "lille",
-            "borussia dortmund": "borussia dortmund", "dortmund": "borussia dortmund",
-            "lask": "lask", "lask linz": "lask",
-            "liverpool": "liverpool",
-            "aston villa": "aston villa",
-            "fenerbahce": "fenerbahce",
-            "manchester city": "manchester city", "man city": "manchester city",
-            "rb leipzig": "rb leipzig", "leipzig": "rb leipzig",
-            "psg": "paris saint germain", "paris saint germain": "paris saint germain", "paris sg": "paris saint germain",
-            "real betis": "real betis", "betis": "real betis",
-            "porto": "porto", "fc porto": "porto", "oporto": "porto",
-            "napoles": "napoli", "napoli": "napoli", "ssc napoli": "napoli",
-            "roma": "roma", "as roma": "roma",
-            "real madrid": "real madrid",
-            "shakhtar": "shakhtar donetsk", "shakhtar donetsk": "shakhtar donetsk",
-            "aek": "aek athens", "aek athens": "aek athens", "aek atenas": "aek athens",
-            "slavia praga": "slavia prague", "slavia prague": "slavia prague", "slavia praha": "slavia prague",
-            "arsenal": "arsenal",
-            "viking": "viking", "viking fk": "viking",
-            "sabah baku": "sabah baku", "sabah": "sabah baku", "sabah fk": "sabah baku",
-            "athletico paranaense": "athletico paranaense", "atletico paranaense": "athletico paranaense", "athletico pr": "athletico paranaense",
-            "vasco": "vasco da gama", "vasco da gama": "vasco da gama",
-            "flamengo": "flamengo", "cr flamengo": "flamengo",
-            "gremio": "gremio",
-            "botafogo": "botafogo", "botafogo rj": "botafogo",
-            "atletico mineiro": "atletico mineiro", "atletico mg": "atletico mineiro",
-            "sao paulo": "sao paulo",
-            "corinthians": "corinthians",
-            "bayern munich": "bayern munich", "bayern munchen": "bayern munich", "bayern": "bayern munich",
-            "barcelona": "barcelona", "fc barcelona": "barcelona",
-            "atletico de madrid": "atletico de madrid", "atletico madrid": "atletico de madrid",
-            "hamburgo": "hamburgo", "hamburger sv": "hamburgo", "hsv": "hamburgo",
-            "borussia m'gladbach": "borussia monchengladbach", "borussia monchengladbach": "borussia monchengladbach", "m'gladbach": "borussia monchengladbach", "gladbach": "borussia monchengladbach",
-            "venezia": "venezia", "udinese": "udinese",
-            "sassuolo": "sassuolo", "us sassuolo": "sassuolo",
-            "lazio": "lazio", "ss lazio": "lazio",
-        }
-        if normalized in override_aliases:
-            ov_key = override_aliases[normalized]
-            if ov_key in cls.REAL_FORM_2026_OVERRIDES:
-                res_ov = dict(cls.REAL_FORM_2026_OVERRIDES[ov_key])
-                res_ov["streak"] = cls._expand_streak_to_5(res_ov.get("streak", ""), normalized, res_ov.get("elo", 1850))
-                return res_ov
+        if real_rating and n_real > 0:
+            return {
+                "elo": real_rating.get("elo"),
+                "base_att": real_rating.get("gf_promedio"),
+                "base_def": real_rating.get("gc_promedio"),
+                "streak": hist_5["streak"],
+                "muestra_n": n_real,
+                "pts_last3": hist_5["pts"],
+                "gf_last3": hist_5["gf_total"],
+                "ga_last3": hist_5["gc_total"],
+                "corners": real_rating.get("corners_promedio"),
+                "corners_muestra": real_rating.get("corners_muestra", 0),
+                "tarjetas": real_rating.get("tarjetas_promedio"),
+                "tarjetas_muestra": real_rating.get("tarjetas_muestra", 0),
+                "tiros_puerta": None,
+                "tiros_totales": None,
+                "ultimos_partidos": hist_5["partidos"],
+                "confianza_insuficiente": hist_5["confianza_insuficiente"],
+                "fuente": real_rating.get("fuente", "football-data.org"),
+                "actualizado_en": real_rating.get("actualizado_en"),
+                "nivel_verificacion": "VERIFICADO_OFICIAL" if n_real >= 5 else "MUESTRA_PARCIAL",
+                "datos_suficientes": (n_real >= 5),
+                "observacion": f"Datos oficiales ({n_real} últimos partidos; {real_rating.get('partidos', n_real)} en temporada)."
+            }
 
-        # 1. Coincidencia directa en TEAM_HISTORICAL_DATABASE
-        if name_clean in cls.TEAM_HISTORICAL_DATABASE:
-            d = dict(cls.TEAM_HISTORICAL_DATABASE[name_clean])
-            return cls._normalizar_stats_5_partidos(d, normalized)
-        if normalized in cls.TEAM_HISTORICAL_DATABASE:
-            d = dict(cls.TEAM_HISTORICAL_DATABASE[normalized])
-            return cls._normalizar_stats_5_partidos(d, normalized)
-
-        keyword_aliases = {
-            'real madrid': 'real madrid', 'barcelona': 'barcelona', 'fc barcelona': 'barcelona',
-            'atletico': 'atletico de madrid', 'atleti': 'atletico de madrid',
-            'athletic': 'athletic club', 'sociedad': 'real sociedad',
-            'betis': 'real betis', 'villarreal': 'villarreal',
-            'valencia': 'valencia', 'sevilla': 'sevilla', 'girona': 'girona',
-            'osasuna': 'osasuna', 'celta': 'celta de vigo', 'mallorca': 'mallorca',
-            'las palmas': 'las palmas', 'rayo': 'rayo vallecano', 'getafe': 'getafe',
-            'alaves': 'alaves', 'leganes': 'leganes', 'valladolid': 'real valladolid',
-            'espanyol': 'espanyol',
-            'manchester city': 'manchester city', 'man city': 'manchester city',
-            'arsenal': 'arsenal', 'liverpool': 'liverpool', 'aston villa': 'aston villa',
-            'tottenham': 'tottenham', 'spurs': 'tottenham', 'chelsea': 'chelsea',
-            'newcastle': 'newcastle', 'manchester united': 'manchester united', 'man utd': 'manchester united',
-            'west ham': 'west ham', 'crystal palace': 'crystal palace', 'brighton': 'brighton',
-            'bournemouth': 'bournemouth', 'fulham': 'fulham', 'wolves': 'wolves', 'wolverhampton': 'wolves',
-            'everton': 'everton', 'brentford': 'brentford', 'nottingham': 'nottingham forest',
-            'leicester': 'leicester', 'ipswich': 'ipswich', 'southampton': 'southampton',
-            'inter milan': 'inter', 'internazionale': 'inter', 'ac milan': 'milan', 'milan': 'milan',
-            'juventus': 'juventus', 'atalanta': 'atalanta', 'bologna': 'bologna', 'bolonia': 'bologna',
-            'roma': 'roma', 'as roma': 'roma', 'lazio': 'lazio', 'fiorentina': 'fiorentina',
-            'torino': 'torino', 'napoli': 'napoli', 'napoles': 'napoli', 'genoa': 'genoa',
-            'monza': 'monza', 'verona': 'hellas verona', 'lecce': 'lecce', 'udinese': 'udinese',
-            'cagliari': 'cagliari', 'empoli': 'empoli', 'parma': 'parma', 'como': 'como', 'venezia': 'venezia',
-            'leverkusen': 'bayer leverkusen', 'stuttgart': 'stuttgart',
-            'bayern': 'bayern munich', 'leipzig': 'rb leipzig', 'dortmund': 'borussia dortmund',
-            'frankfurt': 'eintracht frankfurt', 'eintracht': 'eintracht frankfurt',
-            'hoffenheim': 'hoffenheim', 'heidenheim': 'heidenheim',
-            'werder': 'werder bremen', 'freiburg': 'freiburg', 'friburgo': 'freiburg',
-            'augsburg': 'augsburg', 'augsburgo': 'augsburg', 'wolfsburg': 'wolfsburg',
-            'mainz': 'mainz 05', 'gladbach': 'borussia monchengladbach', 'monchengladbach': 'borussia monchengladbach',
-            'union berlin': 'union berlin', 'bochum': 'bochum', 'st pauli': 'st pauli', 'kiel': 'holstein kiel',
-            'paris saint': 'paris saint germain', 'psg': 'paris saint germain',
-            'monaco': 'monaco', 'brest': 'brest', 'lille': 'lille', 'nice': 'nice', 'niza': 'nice',
-            'lyon': 'lyon', 'lens': 'lens', 'marseille': 'marseille', 'marsella': 'marseille',
-            'reims': 'reims', 'rennes': 'rennes', 'toulouse': 'toulouse', 'montpellier': 'montpellier',
-            'strasbourg': 'strasbourg', 'estrasburgo': 'strasbourg', 'nantes': 'nantes',
-            'le havre': 'le havre', 'auxerre': 'auxerre', 'angers': 'angers', 'saint etienne': 'saint etienne',
-            'psv': 'psv eindhoven', 'feyenoord': 'feyenoord', 'twente': 'twente', 'az alkmaar': 'az alkmaar',
-            'ajax': 'ajax', 'sporting': 'sporting cp', 'benfica': 'benfica', 'porto': 'porto', 'oporto': 'porto',
-            'braga': 'sc braga', 'vitoria guimaraes': 'vitoria sc', 'moreirense': 'moreirense',
-            'arouca': 'arouca', 'famalicao': 'famalicao', 'gil vicente': 'gil vicente',
-            'estoril': 'estoril', 'rio ave': 'rio ave', 'estrela': 'estrela da amadora',
-            'botafogo': 'botafogo', 'palmeiras': 'palmeiras', 'fortaleza': 'fortaleza',
-            'flamengo': 'flamengo', 'sao paulo': 'sao paulo', 'internacional': 'internacional',
-            'bahia': 'bahia', 'cruzeiro': 'cruzeiro', 'vasco': 'vasco da gama',
-            'atletico mineiro': 'atletico mineiro', 'gremio': 'gremio',
-            'bragantino': 'red bull bragantino', 'fluminense': 'fluminense',
-            'athletico paranaense': 'athletico paranaense', 'atletico paranaense': 'athletico paranaense',
-            'vitoria ba': 'vitoria', 'corinthians': 'corinthians',
-            'brugge': 'club brugge', 'brujas': 'club brugge', 'shakhtar': 'shakhtar donetsk',
-            'slavia praga': 'slavia prague', 'slavia prague': 'slavia prague',
-        }
-
-        for kw, target_k in keyword_aliases.items():
-            if kw in normalized:
-                if target_k in cls.REAL_FORM_2026_OVERRIDES:
-                    d = dict(cls.REAL_FORM_2026_OVERRIDES[target_k])
-                    d["streak"] = cls._expand_streak_to_5(d.get("streak", ""), normalized, d.get("elo", 1850))
-                    return d
-                if target_k in cls.TEAM_HISTORICAL_DATABASE:
-                    d = dict(cls.TEAM_HISTORICAL_DATABASE[target_k])
-                    return cls._normalizar_stats_5_partidos(d, normalized)
-
-        for key, data in cls.TEAM_HISTORICAL_DATABASE.items():
-            k_norm = (key.replace("á", "a").replace("é", "e")
-                        .replace("í", "i").replace("ó", "o")
-                        .replace("ú", "u").replace("ñ", "n")
-                        .replace("ü", "u").replace(".", "").replace("-", " "))
-            if len(k_norm) >= 4 and (k_norm in normalized or normalized in k_norm):
-                d = dict(data)
-                return cls._normalizar_stats_5_partidos(d, normalized)
-
-        base_elo = 1750
-        base_att = 1.38
-        base_def = 1.30
-        v_hash = (sum(ord(c) for c in normalized) % 11) - 5
-        elo_final = base_elo + (v_hash * 12)
-        att_final = round(base_att + (v_hash * 0.03), 2)
-        def_final = round(base_def - (v_hash * 0.02), 2)
-        racha_5 = cls._expand_streak_to_5("", normalized, elo_final)
+        if n_real > 0:
+            return {
+                "elo": None,
+                "base_att": round(hist_5["gf_total"] / n_real, 2),
+                "base_def": round(hist_5["gc_total"] / n_real, 2),
+                "streak": hist_5["streak"],
+                "muestra_n": n_real,
+                "pts_last3": hist_5["pts"],
+                "gf_last3": hist_5["gf_total"],
+                "ga_last3": hist_5["gc_total"],
+                "corners": None,
+                "corners_muestra": 0,
+                "tarjetas": None,
+                "tarjetas_muestra": 0,
+                "tiros_puerta": None,
+                "tiros_totales": None,
+                "ultimos_partidos": hist_5["partidos"],
+                "confianza_insuficiente": (n_real < 5),
+                "fuente": hist_5.get("fuente", "football-data.org"),
+                "actualizado_en": RATINGS_ESTADO.get("actualizado") if "RATINGS_ESTADO" in globals() else None,
+                "nivel_verificacion": "VERIFICADO_OFICIAL" if n_real >= 5 else "MUESTRA_PARCIAL",
+                "datos_suficientes": (n_real >= 5),
+                "observacion": f"Muestra verificada: {n_real}/5 partidos oficiales."
+            }
 
         return {
-            'elo': elo_final,
-            'base_att': att_final,
-            'base_def': def_final,
-            'streak': racha_5,
-            'pts_last3': 5,
-            'gf_last3': 4,
-            'ga_last3': 3,
-            'tiros_puerta': 4.5,
-            'tiros_totales': 11.5,
-            'corners': 5.1,
-            'tarjetas': 2.1,
-            'observacion': f'Rendimiento estadístico verificado en competición oficial.',
-            'ultimos_partidos': []
+            "elo": None,
+            "base_att": None,
+            "base_def": None,
+            "streak": "",
+            "muestra_n": 0,
+            "pts_last3": 0,
+            "gf_last3": 0,
+            "ga_last3": 0,
+            "corners": None,
+            "corners_muestra": 0,
+            "tarjetas": None,
+            "tarjetas_muestra": 0,
+            "tiros_puerta": None,
+            "tiros_totales": None,
+            "ultimos_partidos": [],
+            "confianza_insuficiente": True,
+            "fuente": "NO_DISPONIBLE",
+            "actualizado_en": None,
+            "nivel_verificacion": "DATOS_INSUFICIENTES",
+            "datos_suficientes": False,
+            "observacion": "DATOS_INSUFICIENTES: sin partidos oficiales verificados en football-data.org."
         }
-
     @staticmethod
     def calculate_poisson(k: int, lamb: float) -> float:
         if lamb <= 0:
@@ -12094,7 +12629,7 @@ class SportsAnalyticsEngine:
 
     @classmethod
     def _calcular_puntos_racha5(cls, streak_str: str) -> tuple:
-        partes = [p.strip().upper() for p in (streak_str or "V-E-D-V-E").split("-") if p.strip()][:5]
+        partes = [p.strip().upper() for p in (streak_str or "").split("-") if p.strip()][:5]
         wins = sum(1 for p in partes if p in ("V", "W"))
         draws = sum(1 for p in partes if p == "E")
         losses = sum(1 for p in partes if p in ("D", "L"))
@@ -12102,29 +12637,34 @@ class SportsAnalyticsEngine:
         return pts, wins, draws, losses
 
     @classmethod
-    def derive_team_ratings(cls, home_team: str, away_team: str, competition_code: str) -> tuple[float, float, int]:
-        h_stat = cls.get_team_stats(home_team, competition_code)
-        a_stat = cls.get_team_stats(away_team, competition_code)
+    def derive_team_ratings(cls, home_team: str, away_team: str, competition_code: str, before_date: str = "") -> tuple[float, float, int]:
+        h_stat = cls.get_team_stats(home_team, competition_code, before_date=before_date)
+        a_stat = cls.get_team_stats(away_team, competition_code, before_date=before_date)
 
         pts_h, wins_h, draws_h, losses_h = cls._calcular_puntos_racha5(h_stat.get("streak", ""))
         pts_a, wins_a, draws_a, losses_a = cls._calcular_puntos_racha5(a_stat.get("streak", ""))
 
-        # Goles anotados y concedidos por partido (últimos 5 encuentros + base estructural)
-        gf5_h = float(h_stat.get("gf_last3", 6))
-        ga5_h = float(h_stat.get("ga_last3", 5))
-        gf5_a = float(a_stat.get("gf_last3", 6))
-        ga5_a = float(a_stat.get("ga_last3", 5))
+        n_h = max(1, int(h_stat.get("muestra_n") or len([x for x in (h_stat.get("streak") or "").split("-") if x.strip()]) or 5))
+        n_a = max(1, int(a_stat.get("muestra_n") or len([x for x in (a_stat.get("streak") or "").split("-") if x.strip()]) or 5))
+        gf5_h = float(h_stat.get("gf_last3") or 0)
+        ga5_h = float(h_stat.get("ga_last3") or 0)
+        gf5_a = float(a_stat.get("gf_last3") or 0)
+        ga5_a = float(a_stat.get("ga_last3") or 0)
 
-        rate_gf_h = max(0.50, min(2.85, gf5_h / 5.0))
-        rate_ga_h = max(0.48, min(2.70, ga5_h / 5.0))
-        rate_gf_a = max(0.50, min(2.85, gf5_a / 5.0))
-        rate_ga_a = max(0.48, min(2.70, ga5_a / 5.0))
+        rate_gf_h = max(0.45, min(2.85, gf5_h / n_h)) if h_stat.get("muestra_n", n_h) > 0 else 1.35
+        rate_ga_h = max(0.45, min(2.70, ga5_h / n_h)) if h_stat.get("muestra_n", n_h) > 0 else 1.25
+        rate_gf_a = max(0.45, min(2.85, gf5_a / n_a)) if a_stat.get("muestra_n", n_a) > 0 else 1.20
+        rate_ga_a = max(0.45, min(2.70, ga5_a / n_a)) if a_stat.get("muestra_n", n_a) > 0 else 1.25
 
-        # Goles Anotados y Goles Concedidos ponderados del Local y del Visitante
-        goles_anotados_local = (float(h_stat.get("base_att", 1.45)) * 0.45) + (rate_gf_h * 0.55)
-        goles_concedidos_local = (float(h_stat.get("base_def", 1.30)) * 0.45) + (rate_ga_h * 0.55)
-        goles_anotados_visita = (float(a_stat.get("base_att", 1.35)) * 0.45) + (rate_gf_a * 0.55)
-        goles_concedidos_visita = (float(a_stat.get("base_def", 1.35)) * 0.45) + (rate_ga_a * 0.55)
+        b_att_h = float(h_stat.get("base_att") if h_stat.get("base_att") is not None else rate_gf_h)
+        b_def_h = float(h_stat.get("base_def") if h_stat.get("base_def") is not None else rate_ga_h)
+        b_att_a = float(a_stat.get("base_att") if a_stat.get("base_att") is not None else rate_gf_a)
+        b_def_a = float(a_stat.get("base_def") if a_stat.get("base_def") is not None else rate_ga_a)
+
+        goles_anotados_local = (b_att_h * 0.45) + (rate_gf_h * 0.55)
+        goles_concedidos_local = (b_def_h * 0.45) + (rate_ga_h * 0.55)
+        goles_anotados_visita = (b_att_a * 0.45) + (rate_gf_a * 0.55)
+        goles_concedidos_visita = (b_def_a * 0.45) + (rate_ga_a * 0.55)
 
         # Promedios Oficiales de Goles Local y Visitante de cada Liga
         league_goal_baselines = {
@@ -12171,7 +12711,7 @@ class SportsAnalyticsEngine:
         gd5_h = gf5_h - ga5_h
         gd5_a = gf5_a - ga5_a
         gd_diff = max(-10.0, min(10.0, gd5_h - gd5_a))
-        elo_diff = float(h_stat.get("elo", 1800)) - float(a_stat.get("elo", 1800))
+        elo_diff = float(h_stat.get("elo") or 1800) - float(a_stat.get("elo") or 1800)
 
         momentum_swing = (pts_diff * 0.022) + (gd_diff * 0.012) + ((elo_diff / 650.0) * 0.12)
         lh_calc += momentum_swing * 0.50
@@ -12185,7 +12725,7 @@ class SportsAnalyticsEngine:
         lh = max(0.55, min(2.55, round(lh_calc, 2)))
         la = max(0.50, min(2.35, round(la_calc, 2)))
 
-        fouls = int(round(18 + (float(h_stat.get('tarjetas', 2.0)) + float(a_stat.get('tarjetas', 2.0))) * 2.1))
+        fouls = int(round(18 + (float(h_stat.get('tarjetas') or 2.0) + float(a_stat.get('tarjetas') or 2.0)) * 2.1))
         return lh, la, fouls
 
     @classmethod
@@ -12368,33 +12908,11 @@ class SportsAnalyticsEngine:
     @classmethod
     def _calcular_cuota_rotativa_calibrada(cls, prob_pct: float, num_selecciones: int, match_hash: int, tipo_mercado: str) -> float:
         """
-        Calibra la cuota comercial realista dentro del rango [1.30, 2.20] máximo,
-        rotando según el tipo de jugada (1 o máximo 2 selecciones) y el mercado analizado.
+        Fase 3: Calcula la cuota justa implícita del modelo (100 / prob_pct) sin usar tablas
+        rotativas por hash ni simular cuotas reales de casas de apuestas.
         """
-        rotacion_slot = (match_hash % 7)
-        if num_selecciones == 2:
-            # Combinadas de 2 selecciones (Ganador + 1.5 goles / Doble Oportunidad + 1.5 goles): rotan entre 1.62 y 2.18
-            base_2sel = [1.64, 1.72, 1.80, 1.88, 1.96, 2.08, 2.16][rotacion_slot]
-            return round(min(2.20, max(1.55, base_2sel)), 2)
-        if tipo_mercado == "BTTS":
-            # Ambos anotan: rotan entre 1.62 y 2.05
-            base_btts = [1.62, 1.68, 1.75, 1.82, 1.90, 1.98, 2.05][rotacion_slot]
-            return round(base_btts, 2)
-        if tipo_mercado == "CORNERS":
-            # Córners Más/Menos: rotan entre 1.45 y 1.95
-            base_corn = [1.46, 1.54, 1.62, 1.70, 1.78, 1.86, 1.94][rotacion_slot]
-            return round(base_corn, 2)
-        if tipo_mercado == "CARDS":
-            # Tarjetas Más/Menos: rotan entre 1.34 y 1.84
-            base_cards = [1.34, 1.42, 1.50, 1.58, 1.66, 1.74, 1.84][rotacion_slot]
-            return round(base_cards, 2)
-        if tipo_mercado == "WINNER":
-            # Doble oportunidad o Ganador directo: rotan entre 1.38 y 1.92
-            base_win = [1.38, 1.46, 1.55, 1.64, 1.74, 1.84, 1.92][rotacion_slot]
-            return round(base_win, 2)
-        # Goles Más/Menos (Over 1.5 / Over 2.5 / Under 3.5): rotan entre 1.32 y 1.90
-        base_goals = [1.32, 1.40, 1.50, 1.60, 1.70, 1.80, 1.90][rotacion_slot]
-        return round(base_goals, 2)
+        p = max(5.0, min(95.0, float(prob_pct or 50.0)))
+        return round(100.0 / p, 2)
 
     @classmethod
     def generate_institutional_analysis(cls, match_data: dict) -> dict:
@@ -12403,10 +12921,10 @@ class SportsAnalyticsEngine:
         code = match_data.get("codigo_liga", "")
         fecha_partido = (match_data.get("fecha_utc") or match_data.get("fecha") or "2026-10-19")[:10]
 
-        h_stat = cls.get_team_stats(home, code)
-        a_stat = cls.get_team_stats(away, code)
+        h_stat = cls.get_team_stats(home, code, before_date=fecha_partido)
+        a_stat = cls.get_team_stats(away, code, before_date=fecha_partido)
 
-        lh, la, fouls = cls.derive_team_ratings(home, away, code)
+        lh, la, fouls = cls.derive_team_ratings(home, away, code, before_date=fecha_partido)
         probs = cls.evaluate_match_probabilities(lh, la)
         p1x2 = probs["1X2"]
         pGoles = probs["over_under_2_5"]
@@ -12449,106 +12967,197 @@ class SportsAnalyticsEngine:
         prom_corn_loc_liga, prom_corn_vis_liga = league_corners_split.get(code, (5.25, 4.35))
         league_corners_baseline = round(prom_corn_loc_liga + prom_corn_vis_liga, 1)
 
-        raw_corners_h = float(h_stat.get('corners', 5.1))
-        raw_corners_a = float(a_stat.get('corners', 4.7))
-        raw_corners_sum = raw_corners_h + raw_corners_a
+        enrichment_cache = MatchEnrichmentCache.get_match_enrichment(fecha_partido, home, away)
+        enr_valid = bool(enrichment_cache.get("disponible") and not enrichment_cache.get("expirado"))
+        enr_metricas = (enrichment_cache.get("metricas") or {}) if enr_valid else {}
+        enr_discrepancias = enrichment_cache.get("discrepancias") or []
 
-        # Córners concedidos por cada equipo según fragilidad defensiva (base_def y goles encajados) y estilo
-        def_weak_h = (float(h_stat.get("base_def", 1.30)) * 0.5) + ((float(h_stat.get("ga_last3", 5)) / 5.0) * 0.5)
-        def_weak_a = (float(a_stat.get("base_def", 1.30)) * 0.5) + ((float(a_stat.get("ga_last3", 5)) / 5.0) * 0.5)
+        def _enr_metric(m_key: str):
+            m_obj = enr_metricas.get(m_key) or {}
+            if (
+                m_obj.get("nivel_verificacion") in ("PRIMARIO_OFICIAL", "RESPALDO_SECUNDARIO")
+                and m_obj.get("valor") is not None
+                and m_obj.get("valor") != ""
+            ):
+                return m_obj.get("valor"), m_obj.get("fuente", "RESPALDO_SECUNDARIO"), m_obj.get("nivel_verificacion")
+            return None, "NO_DISPONIBLE", "NO_DISPONIBLE"
 
-        corners_concedidos_h = float(h_stat.get("corners_concedidos", round(prom_corn_vis_liga * max(0.75, min(1.35, def_weak_h / 1.30)), 2)))
-        corners_concedidos_a = float(a_stat.get("corners_concedidos", round(prom_corn_loc_liga * max(0.75, min(1.35, def_weak_a / 1.30)), 2)))
+        enr_ch, enr_ch_src, _ = _enr_metric("corners_home")
+        enr_ca, enr_ca_src, _ = _enr_metric("corners_away")
+        eff_corners_h = h_stat.get("corners") if h_stat.get("corners") is not None else enr_ch
+        eff_corners_a = a_stat.get("corners") if a_stat.get("corners") is not None else enr_ca
+        corners_fuente = (h_stat.get("fuente") if h_stat.get("corners") is not None else enr_ch_src)
+        corners_disponibles = (eff_corners_h is not None and eff_corners_a is not None)
 
-        # Aplicación exacta de la fórmula cruzada de córners
-        lambda_corners_h = (raw_corners_h / prom_corn_loc_liga) * (corners_concedidos_a / prom_corn_loc_liga) * prom_corn_loc_liga
-        lambda_corners_a = (raw_corners_a / prom_corn_vis_liga) * (corners_concedidos_h / prom_corn_vis_liga) * prom_corn_vis_liga
+        enr_sh_h, _, _ = _enr_metric("tiros_home")
+        enr_sh_a, _, _ = _enr_metric("tiros_away")
+        enr_sot_h, _, _ = _enr_metric("tiros_puerta_home")
+        enr_sot_a, _, _ = _enr_metric("tiros_puerta_away")
+        eff_shots_h = h_stat.get("tiros_totales") if h_stat.get("tiros_totales") is not None else enr_sh_h
+        eff_shots_a = a_stat.get("tiros_totales") if a_stat.get("tiros_totales") is not None else enr_sh_a
+        eff_sot_h = h_stat.get("tiros_puerta") if h_stat.get("tiros_puerta") is not None else enr_sot_h
+        eff_sot_a = a_stat.get("tiros_puerta") if a_stat.get("tiros_puerta") is not None else enr_sot_a
+        tiros_disponibles = (
+            eff_shots_h is not None and eff_shots_a is not None
+            and eff_sot_h is not None and eff_sot_a is not None
+        )
 
-        # Suavizado ponderado para mantener estabilidad estadística
-        lambda_corners_h = round(max(2.8, min(7.8, lambda_corners_h * 0.75 + raw_corners_h * 0.25)), 2)
-        lambda_corners_a = round(max(2.2, min(6.8, lambda_corners_a * 0.75 + raw_corners_a * 0.25)), 2)
-        corners_base = round(lambda_corners_h + lambda_corners_a, 1)
-
-        h2h_directo = DualProviderH2HService.get_h2h(home, away, code, match_data.get("id_partido", ""))
+        # Ruta H2H exclusivamente desde caché verificado (sin API-Sports, SofaScore, ESPN ni hashes)
+        h2h_directo = {
+            "victorias_local": 0,
+            "empates": 0,
+            "victorias_visitante": 0,
+            "total_partidos": 0,
+            "resumen": "Sin historial H2H verificado",
+            "partidos": [],
+            "fuente": "NO_DISPONIBLE",
+        }
 
         match_hash = sum(ord(c) for c in (home + away + code + fecha_partido))
         estilo_partido = match_hash % 6
 
-        tiros_comb = float(h_stat.get('tiros_totales', 11.5)) + float(a_stat.get('tiros_totales', 11.5))
-        tiros_arco_comb = float(h_stat.get('tiros_puerta', 4.5)) + float(a_stat.get('tiros_puerta', 4.5))
-        tasa_precision_interior = round(tiros_arco_comb / max(14.0, tiros_comb), 3)
-        es_ataque_interior_vertical = (
-            raw_corners_sum <= 8.4
-            or corners_base <= 8.5
-            or (suma_xg >= 2.65 and corners_base <= 9.0 and tasa_precision_interior >= 0.41)
-        )
-        es_asedio_bandas = (
-            corners_base >= 9.8
-            and (raw_corners_h >= 5.2 or corners_concedidos_a >= 5.2)
-            and not es_ataque_interior_vertical
-        )
-
-        if es_ataque_interior_vertical:
-            corners_estimados = round(max(7.2, min(8.9, corners_base - 0.3)), 1)
-        elif es_asedio_bandas:
-            corners_estimados = round(min(11.8, corners_base + 0.3), 1)
+        if tiros_disponibles:
+            tiros_comb = float(eff_shots_h) + float(eff_shots_a)
+            tiros_arco_comb = float(eff_sot_h) + float(eff_sot_a)
+            tasa_precision_interior = round(tiros_arco_comb / max(14.0, tiros_comb), 3)
         else:
-            corners_estimados = round(max(7.6, min(11.4, corners_base)), 1)
+            tiros_comb = None
+            tiros_arco_comb = None
+            tasa_precision_interior = 0.0
+
+        if corners_disponibles:
+            raw_corners_h = float(eff_corners_h)
+            raw_corners_a = float(eff_corners_a)
+            raw_corners_sum = raw_corners_h + raw_corners_a
+
+            def_weak_h = (float(h_stat.get("base_def") or 1.30) * 0.5) + ((float(h_stat.get("ga_last3") or 5) / 5.0) * 0.5)
+            def_weak_a = (float(a_stat.get("base_def") or 1.30) * 0.5) + ((float(a_stat.get("ga_last3") or 5) / 5.0) * 0.5)
+
+            corners_concedidos_h = float(h_stat.get("corners_concedidos", round(prom_corn_vis_liga * max(0.75, min(1.35, def_weak_h / 1.30)), 2)))
+            corners_concedidos_a = float(a_stat.get("corners_concedidos", round(prom_corn_loc_liga * max(0.75, min(1.35, def_weak_a / 1.30)), 2)))
+
+            lambda_corners_h = (raw_corners_h / prom_corn_loc_liga) * (corners_concedidos_a / prom_corn_loc_liga) * prom_corn_loc_liga
+            lambda_corners_a = (raw_corners_a / prom_corn_vis_liga) * (corners_concedidos_h / prom_corn_vis_liga) * prom_corn_vis_liga
+
+            lambda_corners_h = round(max(2.8, min(7.8, lambda_corners_h * 0.75 + raw_corners_h * 0.25)), 2)
+            lambda_corners_a = round(max(2.2, min(6.8, lambda_corners_a * 0.75 + raw_corners_a * 0.25)), 2)
+            corners_base = round(lambda_corners_h + lambda_corners_a, 1)
+
+            es_ataque_interior_vertical = (
+                raw_corners_sum <= 8.4
+                or corners_base <= 8.5
+                or (suma_xg >= 2.65 and corners_base <= 9.0 and tasa_precision_interior >= 0.41)
+            )
+            es_asedio_bandas = (
+                corners_base >= 9.8
+                and (raw_corners_h >= 5.2 or corners_concedidos_a >= 5.2)
+                and not es_ataque_interior_vertical
+            )
+
+            if es_ataque_interior_vertical:
+                corners_estimados = round(max(7.2, min(8.9, corners_base - 0.3)), 1)
+            elif es_asedio_bandas:
+                corners_estimados = round(min(11.8, corners_base + 0.3), 1)
+            else:
+                corners_estimados = round(max(7.6, min(11.4, corners_base)), 1)
+
+            p_corn_u85 = sum(cls.calculate_poisson(k, corners_estimados) for k in range(9))
+            p_corn_u95 = sum(cls.calculate_poisson(k, corners_estimados) for k in range(10))
+            p_corn_u105 = sum(cls.calculate_poisson(k, corners_estimados) for k in range(11))
+
+            prob_corners_75 = round(min(100.0, max(0.0, (1.0 - sum(cls.calculate_poisson(k, corners_estimados) for k in range(8))) * 100.0)), 1)
+            prob_corners_85 = round(min(100.0, max(0.0, (1.0 - p_corn_u85) * 100.0)), 1)
+            prob_corners_95 = round(min(100.0, max(0.0, (1.0 - p_corn_u95) * 100.0)), 1)
+            prob_corners_under_95 = round(min(100.0, max(0.0, p_corn_u95 * 100.0)), 1)
+            prob_corners_under_105 = round(min(100.0, max(0.0, p_corn_u105 * 100.0)), 1)
+        else:
+            raw_corners_h = None
+            raw_corners_a = None
+            corners_concedidos_h = None
+            corners_concedidos_a = None
+            lambda_corners_h = None
+            lambda_corners_a = None
+            corners_base = None
+            es_ataque_interior_vertical = False
+            es_asedio_bandas = False
+            corners_estimados = None
+            prob_corners_75 = None
+            prob_corners_85 = None
+            prob_corners_95 = None
+            prob_corners_under_95 = None
+            prob_corners_under_105 = None
 
         # =========================================================================
         # FÓRMULA 3: MODELO CRUZADO PARA TARJETAS + FACTOR ÁRBITRO OFICIAL
-        # λ_Tarjetas_Local = ((Tarjetas_Recibidas_Local + Tarjetas_Provocadas_Visita) / 2) * (Promedio_Árbitro / Promedio_Tarjetas_Liga)
-        # λ_Tarjetas_Visita = ((Tarjetas_Recibidas_Visita + Tarjetas_Provocadas_Local) / 2) * (Promedio_Árbitro / Promedio_Tarjetas_Liga)
         # =========================================================================
-        ref_info = RefereeIntelligenceService.get_referee_for_match(home, away, code, fecha_partido, allow_live_lookup=True)
-        promedio_arbitro = float(ref_info.get("avg_cards", 4.50))
-        promedio_tarjetas_liga = float(ref_info.get("league_avg_cards", 4.45))
-        factor_arbitro = promedio_arbitro / max(1.0, promedio_tarjetas_liga)
+        ref_info = RefereeIntelligenceService.get_referee_for_match(home, away, code, fecha_partido, allow_live_lookup=False, match_data=match_data)
+        enr_arb, enr_arb_src, _ = _enr_metric("arbitro")
+        enr_arb_avg, _, _ = _enr_metric("arbitro_avg_cards")
+        if enr_arb and not ref_info.get("arbitro_confirmado"):
+            ref_info = dict(ref_info)
+            ref_info["arbitro_confirmado"] = True
+            ref_info["nombre"] = enr_arb
+            ref_info["fuente"] = enr_arb_src
+            if enr_arb_avg is not None:
+                ref_info["avg_cards"] = float(enr_arb_avg)
+                ref_info["factor_rigor"] = round(float(enr_arb_avg) / max(1.0, float(ref_info.get("league_avg_cards") or 4.45)), 3)
 
-        tarjetas_recibidas_h = float(h_stat.get('tarjetas', 2.0))
-        tarjetas_recibidas_a = float(a_stat.get('tarjetas', 2.0))
+        arbitro_confirmado = bool(ref_info.get("arbitro_confirmado") and ref_info.get("nombre") and ref_info.get("avg_cards") is not None)
+        enr_cards_h, enr_cards_src, _ = _enr_metric("tarjetas_home")
+        enr_cards_a, _, _ = _enr_metric("tarjetas_away")
+        eff_cards_h = h_stat.get("tarjetas") if h_stat.get("tarjetas") is not None else enr_cards_h
+        eff_cards_a = a_stat.get("tarjetas") if a_stat.get("tarjetas") is not None else enr_cards_a
+        tarjetas_disponibles = (eff_cards_h is not None and eff_cards_a is not None)
+        tarjetas_activas = bool(tarjetas_disponibles and arbitro_confirmado)
 
-        # Tarjetas provocadas por cada equipo según su volumen ofensivo, regate/desborde y tiros
-        tarjetas_provocadas_h = float(h_stat.get('tarjetas_provocadas', round(max(1.3, min(2.7, tarjetas_recibidas_a * 0.52 + (lh / 1.45) * 0.78)), 2)))
-        tarjetas_provocadas_a = float(a_stat.get('tarjetas_provocadas', round(max(1.2, min(2.6, tarjetas_recibidas_h * 0.52 + (la / 1.35) * 0.78)), 2)))
+        if tarjetas_activas:
+            promedio_arbitro = float(ref_info.get("avg_cards"))
+            promedio_tarjetas_liga = float(ref_info.get("league_avg_cards") or 4.45)
+            factor_arbitro = promedio_arbitro / max(1.0, promedio_tarjetas_liga)
 
-        lambda_cards_h = ((tarjetas_recibidas_h + tarjetas_provocadas_a) / 2.0) * factor_arbitro
-        lambda_cards_a = ((tarjetas_recibidas_a + tarjetas_provocadas_h) / 2.0) * factor_arbitro
+            tarjetas_recibidas_h = float(eff_cards_h)
+            tarjetas_recibidas_a = float(eff_cards_a)
+            tarjetas_provocadas_h = float(h_stat.get('tarjetas_provocadas', round(max(1.3, min(2.7, tarjetas_recibidas_a * 0.52 + (lh / 1.45) * 0.78)), 2)))
+            tarjetas_provocadas_a = float(a_stat.get('tarjetas_provocadas', round(max(1.2, min(2.6, tarjetas_recibidas_h * 0.52 + (la / 1.35) * 0.78)), 2)))
 
-        raw_cards_h = round(max(1.1, min(3.0, lambda_cards_h)), 2)
-        raw_cards_a = round(max(1.1, min(3.0, lambda_cards_a)), 2)
-        tarjetas_esperadas = round(max(2.4, min(5.6, raw_cards_h + raw_cards_a)), 2)
+            lambda_cards_h = ((tarjetas_recibidas_h + tarjetas_provocadas_a) / 2.0) * factor_arbitro
+            lambda_cards_a = ((tarjetas_recibidas_a + tarjetas_provocadas_h) / 2.0) * factor_arbitro
 
-        # Probabilidades exactas de TARJETAS (Más de / Menos de) mediante Poisson/Binomial Negativa
-        p_cards_u35 = sum(cls.calculate_poisson(k, tarjetas_esperadas) for k in range(4))
-        p_cards_u45 = sum(cls.calculate_poisson(k, tarjetas_esperadas) for k in range(5))
-        p_cards_u55 = sum(cls.calculate_poisson(k, tarjetas_esperadas) for k in range(6))
+            raw_cards_h = round(max(1.1, min(3.0, lambda_cards_h)), 2)
+            raw_cards_a = round(max(1.1, min(3.0, lambda_cards_a)), 2)
+            tarjetas_esperadas = round(max(2.4, min(5.6, raw_cards_h + raw_cards_a)), 2)
 
-        prob_cards_over_35 = round(min(90.0, max(18.0, (1.0 - p_cards_u35) * 100.0 + 10.0)), 1)
-        prob_cards_over_45 = round(min(88.0, max(15.0, (1.0 - p_cards_u45) * 100.0 + 12.0)), 1)
-        prob_cards_under_45 = round(min(91.0, max(20.0, p_cards_u45 * 100.0 + 8.0)), 1)
-        prob_cards_under_55 = round(min(93.0, max(25.0, p_cards_u55 * 100.0 + 6.0)), 1)
+            p_cards_u35 = sum(cls.calculate_poisson(k, tarjetas_esperadas) for k in range(4))
+            p_cards_u45 = sum(cls.calculate_poisson(k, tarjetas_esperadas) for k in range(5))
+            p_cards_u55 = sum(cls.calculate_poisson(k, tarjetas_esperadas) for k in range(6))
 
-        # Probabilidades exactas de CÓRNERS (Más de / Menos de)
-        p_corn_u85 = sum(cls.calculate_poisson(k, corners_estimados) for k in range(9))
-        p_corn_u95 = sum(cls.calculate_poisson(k, corners_estimados) for k in range(10))
-        p_corn_u105 = sum(cls.calculate_poisson(k, corners_estimados) for k in range(11))
-
-        prob_corners_75 = round(min(90.0, max(25.0, (1.0 - sum(cls.calculate_poisson(k, corners_estimados) for k in range(8))) * 100.0 + 7.0)), 1)
-        prob_corners_85 = round(min(89.0, max(20.0, (1.0 - p_corn_u85) * 100.0 + 8.0)), 1)
-        prob_corners_95 = round(min(87.0, max(18.0, (1.0 - p_corn_u95) * 100.0 + 8.0)), 1)
-        prob_corners_under_95 = round(min(90.0, max(20.0, p_corn_u95 * 100.0 + 9.0)), 1)
-        prob_corners_under_105 = round(min(92.0, max(24.0, p_corn_u105 * 100.0 + 7.0)), 1)
+            prob_cards_over_35 = round(min(100.0, max(0.0, (1.0 - p_cards_u35) * 100.0)), 1)
+            prob_cards_over_45 = round(min(100.0, max(0.0, (1.0 - p_cards_u45) * 100.0)), 1)
+            prob_cards_under_45 = round(min(100.0, max(0.0, p_cards_u45 * 100.0)), 1)
+            prob_cards_under_55 = round(min(100.0, max(0.0, p_cards_u55 * 100.0)), 1)
+        else:
+            tarjetas_provocadas_h = None
+            tarjetas_provocadas_a = None
+            raw_cards_h = None
+            raw_cards_a = None
+            tarjetas_esperadas = None
+            p_cards_u35 = None
+            p_cards_u45 = None
+            p_cards_u55 = None
+            prob_cards_over_35 = None
+            prob_cards_over_45 = None
+            prob_cards_under_45 = None
+            prob_cards_under_55 = None
 
         # Probabilidades exactas de GOLES (Más de / Menos de) por matriz Poisson + Dixon-Coles
         p_under_35 = 0.0
         for g_h in range(4):
             for g_a in range(4 - g_h):
                 p_under_35 += cls.calculate_poisson(g_h, lh) * cls.calculate_poisson(g_a, la)
-        prob_under_35_pct = round(min(92.0, max(22.0, p_under_35 * 100.0 + 4.0)), 1)
-        prob_over_35_pct = round(max(8.0, 100.0 - prob_under_35_pct), 1)
-        prob_under_25_pct = round(min(89.0, max(15.0, float(pGoles.get("under", 40.0)))), 1)
-        prob_under_15_pct = round(min(78.0, max(8.0, float(pGoles15.get("under", 22.0)))), 1)
+        prob_under_35_pct = round(min(100.0, max(0.0, p_under_35 * 100.0)), 1)
+        prob_over_35_pct = round(min(100.0, max(0.0, 100.0 - prob_under_35_pct)), 1)
+        prob_under_25_pct = round(min(100.0, max(0.0, float(pGoles.get("under", 0.0)))), 1)
+        prob_under_15_pct = round(min(100.0, max(0.0, float(pGoles15.get("under", 0.0)))), 1)
         probs["over_under_3_5"] = {"over": prob_over_35_pct, "under": prob_under_35_pct}
 
         p_max_win = max(p1x2["1"], p1x2["2"])
@@ -12579,9 +13188,9 @@ class SportsAnalyticsEngine:
         safety_margin_label = f"Se esperan {suma_xg} goles (supera por +{round(max(0.4, suma_xg - 1.5), 2)} la línea de 1.5)"
 
         # Caso 1: JUEGO INTERIOR VERTICAL CON POCOS CÓRNERS (Ej. Sassuolo vs Lazio: muchos goles por dentro, <= 8.2 córners esp.)
-        if corners_estimados <= 8.2 and es_ataque_interior_vertical:
+        if corners_disponibles and corners_estimados <= 8.2 and es_ataque_interior_vertical:
             linea_c_under = "9.5" if corners_estimados <= 7.8 else "10.5"
-            conf_val = int(round(min(89.0, max(78.0, prob_corners_under_95 if linea_c_under == "9.5" else prob_corners_under_105))))
+            conf_val = int(round(prob_corners_under_95 if linea_c_under == "9.5" else prob_corners_under_105))
             mercado_sugerido = f"Menos de {linea_c_under} córners"
             prob_principal = f"{conf_val}%"
             justificacion_quant = (
@@ -12596,10 +13205,10 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Promedian {corners_estimados:.1f} córners ({round(float(linea_c_under) - corners_estimados, 1)} debajo del tope {linea_c_under})"
 
         # Caso 2: SEÑAL BIDIRECCIONAL EN TARJETAS (Menos de 4.5 / 5.5 en duelos limpios o Más de 3.5 / 4.5 en alta fricción)
-        elif tarjetas_esperadas <= 3.55 or (estilo_partido == 0 and tarjetas_esperadas <= 3.75):
+        elif tarjetas_activas and (tarjetas_esperadas <= 3.55 or (estilo_partido == 0 and tarjetas_esperadas <= 3.75)):
             linea_t_under = "4.5" if tarjetas_esperadas <= 3.15 else "5.5"
-            base_c_prob = (prob_cards_under_45 + 3.0) if tarjetas_esperadas <= 3.0 else (prob_cards_under_45 if linea_t_under == "4.5" else (prob_cards_under_55 - 1.0))
-            conf_val = int(round(min(92.0, max(78.0, base_c_prob))))
+            base_c_prob = prob_cards_under_45 if linea_t_under == "4.5" else prob_cards_under_55
+            conf_val = int(round(base_c_prob))
             mercado_sugerido = f"Menos de {linea_t_under} tarjetas"
             prob_principal = f"{conf_val}%"
             justificacion_quant = (
@@ -12612,9 +13221,9 @@ class SportsAnalyticsEngine:
             stat_projection_label = f"Promedio: {tarjetas_esperadas:.1f} tarjetas"
             safety_margin_label = f"Promedian {tarjetas_esperadas:.1f} tarjetas ({round(float(linea_t_under) - tarjetas_esperadas, 1)} debajo del límite {linea_t_under})"
 
-        elif (tarjetas_esperadas >= 5.05 and suma_xg < 2.95 and estilo_partido in (1, 4, 5)) or (tarjetas_esperadas >= 4.45 and diferencia_xg <= 0.45 and estilo_partido == 1):
+        elif tarjetas_activas and ((tarjetas_esperadas >= 5.05 and suma_xg < 2.95 and estilo_partido in (1, 4, 5)) or (tarjetas_esperadas >= 4.45 and diferencia_xg <= 0.45 and estilo_partido == 1)):
             linea_t = "4.5" if tarjetas_esperadas >= 5.30 else "3.5"
-            conf_val = int(round(min(89.0, max(77.0, prob_cards_over_45 if linea_t == "4.5" else prob_cards_over_35))))
+            conf_val = int(round(prob_cards_over_45 if linea_t == "4.5" else prob_cards_over_35))
             mercado_sugerido = f"Más de {linea_t} tarjetas"
             prob_principal = f"{conf_val}%"
             justificacion_quant = (
@@ -12629,7 +13238,7 @@ class SportsAnalyticsEngine:
 
         # Caso 3: GANADOR CON GOLES (2 selecciones máx.) en supremacía clara verificada o favorito sólido
         elif (p_max_win >= 58.0 and diferencia_xg >= 0.50 and fav_xg >= 1.70 and pGoles15["over"] >= 72.0) or (p_max_win >= 63.0 and fav_xg >= 1.80) or (p_max_win >= 67.0):
-            conf_val = int(round(min(90.0, max(78.0, (p_max_win * 0.56) + (pGoles15["over"] * 0.44)))))
+            conf_val = int(round(min(p_max_win, pGoles15["over"])))
             mercado_sugerido = f"{fav_team} gana y Más de 1.5 goles"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"{fav_team} presenta superioridad ofensiva clara ({fav_xg} xG vs {opp_xg} xG; racha {racha_fav}). Combinar ganador y +1.5 goles ofrece alta efectividad."
@@ -12640,9 +13249,9 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Ventaja de +{diferencia_xg} goles esperados y total de {suma_xg} goles"
 
         # Caso 4: CÓRNERS BIDIRECCIONAL (Más de 8.5/9.5 en asedio de bandas vs Menos de 9.5/10.5 en control interior)
-        elif es_asedio_bandas and corners_estimados >= 10.8 and (estilo_partido in (0, 2) or (fav_is_away and pts_h >= 9)):
+        elif corners_disponibles and es_asedio_bandas and corners_estimados >= 10.8 and (estilo_partido in (0, 2) or (fav_is_away and pts_h >= 9)):
             linea_c = "9.5" if corners_estimados >= 12.2 else "8.5"
-            conf_val = int(round(min(88.0, max(76.0, prob_corners_95 if linea_c == "9.5" else prob_corners_85))))
+            conf_val = int(round(prob_corners_95 if linea_c == "9.5" else prob_corners_85))
             mercado_sugerido = f"Más de {linea_c} córners"
             prob_principal = f"{conf_val}%"
             justificacion_quant = (
@@ -12655,9 +13264,9 @@ class SportsAnalyticsEngine:
             stat_projection_label = f"Promedio: {corners_estimados:.1f} córners"
             safety_margin_label = f"Promedian {corners_estimados:.1f} córners (supera por +{round(corners_estimados - float(linea_c), 1)} la línea {linea_c})"
 
-        elif corners_estimados <= 8.85 and (es_ataque_interior_vertical or estilo_partido in (2, 3)):
+        elif corners_disponibles and corners_estimados <= 8.85 and (es_ataque_interior_vertical or estilo_partido in (2, 3)):
             linea_c_u = "9.5" if corners_estimados <= 8.15 else "10.5"
-            conf_val = int(round(min(88.0, max(76.0, prob_corners_under_95 if linea_c_u == "9.5" else prob_corners_under_105))))
+            conf_val = int(round(prob_corners_under_95 if linea_c_u == "9.5" else prob_corners_under_105))
             mercado_sugerido = f"Menos de {linea_c_u} córners"
             prob_principal = f"{conf_val}%"
             justificacion_quant = (
@@ -12672,7 +13281,7 @@ class SportsAnalyticsEngine:
 
         # Caso 5: DOBLE OPORTUNIDAD + GOLES (Más de 1.5 goles o Menos de 3.5 goles según ritmo xG)
         elif p_do_fav >= 74.0 and pGoles15["over"] >= 75.5 and suma_xg >= 2.52 and diferencia_xg >= 0.28 and (estilo_partido in (1, 2, 4) or fav_is_away):
-            conf_val = int(round(min(87.0, max(76.0, (p_do_fav * 0.56) + (pGoles15["over"] * 0.44)))))
+            conf_val = int(round(min(p_do_fav, pGoles15["over"])))
             mercado_sugerido = f"{fav_team} gana o empata y Más de 1.5 goles"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"{fav_team} domina la estabilidad del cruce ({fav_xg} vs {opp_xg} xG) con un piso firme de {suma_xg} goles esperados. Cubre victoria o empate con goles."
@@ -12683,7 +13292,7 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Cubre victoria o empate ({p_do_fav}%) con {suma_xg} goles esp."
 
         elif p_do_fav >= 75.0 and prob_under_35_pct >= 74.0 and suma_xg <= 2.38 and diferencia_xg >= 0.22 and estilo_partido in (3, 5):
-            conf_val = int(round(min(87.0, max(76.0, (p_do_fav * 0.54) + (prob_under_35_pct * 0.46)))))
+            conf_val = int(round(min(p_do_fav, prob_under_35_pct)))
             mercado_sugerido = f"{fav_team} gana o empata y Menos de 3.5 goles"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"{fav_team} impone control táctico ({fav_xg} vs {opp_xg} xG) en un duelo de ritmo contenido ({suma_xg} goles esperados). Cubre {do_code_fav} bajo el techo de 3.5 goles."
@@ -12695,7 +13304,7 @@ class SportsAnalyticsEngine:
 
         # Caso 6: GOLES BIDIRECCIONAL (Más de 2.5 / Ambos Anotan / Menos de 2.5 o 3.5 / Más de 1.5)
         elif lh >= 1.30 and la >= 1.20 and suma_xg >= 2.80 and pGoles["over"] >= 55.0:
-            conf_val = int(round(min(88.0, max(78.0, pGoles["over"] + 18.0))))
+            conf_val = int(round(pGoles["over"]))
             mercado_sugerido = "Más de 2.5 goles"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"El techo ofensivo proyecta {suma_xg} goles esperados ({lh} vs {la} xG). Ritmo abierto de ambos ataques que respalda superar los 2.5 goles."
@@ -12706,7 +13315,7 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Se esperan {suma_xg} goles (supera por +{round(suma_xg - 2.5, 2)} la línea de 2.5)"
 
         elif lh >= 1.44 and la >= 1.38 and diferencia_xg <= 0.36 and pBtts["yes"] >= 63.0:
-            conf_val = int(round(min(86.0, max(75.0, pBtts["yes"] + 12.0))))
+            conf_val = int(round(pBtts["yes"]))
             mercado_sugerido = "Ambos equipos anotan: Sí"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"Ambos ataques registran alta conversión ({lh} xG {home} vs {la} xG {away}). El modelo proyecta gol en ambas áreas con margen sobre el promedio."
@@ -12718,7 +13327,7 @@ class SportsAnalyticsEngine:
 
         elif (es_duelo_rocoso and suma_xg <= 2.10 and fav_xg <= 1.35 and opp_xg <= 1.10 and p_max_win < 56.0) or (suma_xg <= 1.90 and p_max_win < 54.0):
             linea_g_under = "2.5" if suma_xg <= 1.75 else "3.5"
-            conf_val = int(round(min(88.0, max(76.0, prob_under_25_pct + 10.0 if linea_g_under == "2.5" else prob_under_35_pct))))
+            conf_val = int(round(prob_under_25_pct if linea_g_under == "2.5" else prob_under_35_pct))
             mercado_sugerido = f"Menos de {linea_g_under} goles"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"La proyección combinada es contenida ({suma_xg} xG totales: {lh} vs {la}). Dos bloques tácticos compactos que mantienen el marcador por debajo de {linea_g_under} goles."
@@ -12730,7 +13339,7 @@ class SportsAnalyticsEngine:
 
         # Caso 7: MÁS DE 1.5 GOLES (Piso Estadístico de Alta Efectividad)
         elif (suma_xg >= 2.15 and pGoles15["over"] >= 70.0) or (fav_xg >= 1.60 and pGoles15["over"] >= 68.0):
-            conf_val = int(round(min(88.0, max(75.0, pGoles15["over"]))))
+            conf_val = int(round(pGoles15["over"]))
             mercado_sugerido = "Más de 1.5 goles"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"El piso ofensivo proyecta {suma_xg} goles esperados ({lh} vs {la} xG). Más de 1.5 goles asegura alta efectividad sin exponer el pick al 2.5."
@@ -12744,7 +13353,7 @@ class SportsAnalyticsEngine:
         else:
             fav_do = home if p1X >= pX2 else away
             do_code = '1X' if p1X >= pX2 else 'X2'
-            conf_val = int(round(min(86.0, max(73.0, max(p1X, pX2)))))
+            conf_val = int(round(max(p1X, pX2)))
             mercado_sugerido = f"{fav_do} gana o empata"
             prob_principal = f"{conf_val}%"
             justificacion_quant = f"{fav_do} luce más sólido en el cruce estadístico ({lh} vs {la} xG). La doble oportunidad ({do_code}) protege el resultado ante un posible empate."
@@ -12772,16 +13381,16 @@ class SportsAnalyticsEngine:
                 n2_icono = "⚽"
             elif suma_xg >= 2.65 or (fav_xg >= 1.80 and suma_xg >= 2.35):
                 n2_mercado = "Más de 2.5 goles"
-                n2_prob = f"{round(min(87.0, max(pGoles['over'] + 8.0, 74.0)), 1)}%"
+                n2_prob = f"{round(pGoles['over'], 1)}%"
                 n2_icono = "⚽"
             else:
                 n2_mercado = "Más de 1.5 goles"
-                n2_prob = f"{round(min(88.0, max(76.0, pGoles15['over'])), 1)}%"
+                n2_prob = f"{round(pGoles15['over'], 1)}%"
                 n2_icono = "⚽"
         else:
             if suma_xg >= 2.48 and p_do_fav >= 73.0:
                 n2_mercado = f"{fav_team} gana o empata y Más de 1.5 goles"
-                n2_prob = f"{round(min(86.5, (p_do_fav * 0.55) + (pGoles15['over'] * 0.45)), 1)}%"
+                n2_prob = f"{round(min(p_do_fav, pGoles15['over']), 1)}%"
                 n2_icono = "🛡️"
             else:
                 n2_mercado = f"{fav_team} gana o empata ({do_code_fav})"
@@ -12791,63 +13400,75 @@ class SportsAnalyticsEngine:
         # Nivel 3 (Jugada de Cuota Competitiva 1.65 - 2.20 - Cero Hándicap):
         if p_max_win >= 60.0 and fav_xg >= 1.80:
             n3_mercado = f"{fav_team} gana y Más de 1.5 goles"
-            n3_prob_val = round(min(82.0, (p_max_win * 0.58) + (pGoles15["over"] * 0.42)), 1)
+            n3_prob_val = round(min(p_max_win, pGoles15["over"]), 1)
             n3_cuota = cls._calcular_cuota_rotativa_calibrada(n3_prob_val, 2, match_hash, "COMBO_WIN_GOALS")
             n3_icono = "🏆"
         elif suma_xg <= 2.30:
             n3_mercado = f"{fav_team} gana o empata y Menos de 3.5 goles"
-            n3_prob_val = round(min(82.0, (p_do_fav * 0.55) + (prob_under_35_pct * 0.45)), 1)
+            n3_prob_val = round(min(p_do_fav, prob_under_35_pct), 1)
             n3_cuota = cls._calcular_cuota_rotativa_calibrada(n3_prob_val, 2, match_hash, "COMBO_WIN_GOALS")
             n3_icono = "🛡️"
         elif suma_xg >= 2.95 and lh >= 1.30 and la >= 1.20:
             n3_mercado = "Más de 2.5 goles"
-            n3_prob_val = round(min(79.5, max(pGoles["over"], 68.0)), 1)
+            n3_prob_val = round(pGoles["over"], 1)
             n3_cuota = cls._calcular_cuota_rotativa_calibrada(n3_prob_val, 1, match_hash, "GOALS_OVER_25")
             n3_icono = "⚽"
         else:
             n3_mercado = f"{fav_team} gana o empata y Más de 1.5 goles"
-            n3_prob_val = round(min(80.0, max(p_do_fav - 4.0, 68.0)), 1)
+            n3_prob_val = round(min(p_do_fav, pGoles15["over"]), 1)
             n3_cuota = cls._calcular_cuota_rotativa_calibrada(n3_prob_val, 2, match_hash, "COMBO_WIN_GOALS")
             n3_icono = "🏆"
 
-        # Nivel 4: Micromercado Especializado Bidireccional (Córners o Tarjetas Más/Menos)
-        if tipo_mercado_code in ("CORNERS", "CARDS"):
+        # Nivel 4: Micromercado Especializado Bidireccional (solo si hay datos reales verificados)
+        if tipo_mercado_code == "CORNERS" and corners_disponibles:
             micro_mercado = mercado_sugerido
             micro_prob = prob_principal
-            micro_tipo = "CÓRNERS" if tipo_mercado_code == "CORNERS" else "TARJETAS"
-            micro_icono = "🚩" if tipo_mercado_code == "CORNERS" else "🟨"
+            micro_tipo = "CÓRNERS"
+            micro_icono = "🚩"
             micro_motivo = justificacion_quant
-        elif corners_estimados <= 8.5:
+        elif tipo_mercado_code == "CARDS" and tarjetas_activas:
+            micro_mercado = mercado_sugerido
+            micro_prob = prob_principal
+            micro_tipo = "TARJETAS"
+            micro_icono = "🟨"
+            micro_motivo = justificacion_quant
+        elif corners_disponibles and corners_estimados <= 8.5:
             linea_cm = "9.5" if corners_estimados <= 7.9 else "10.5"
             micro_mercado = f"Menos de {linea_cm} córners"
             micro_prob = f"{prob_corners_under_95 if linea_cm == '9.5' else prob_corners_under_105}%"
             micro_tipo = "CÓRNERS"
             micro_icono = "🚩"
             micro_motivo = f"Promedio controlado de {corners_estimados:.1f} córners por juego interior vertical."
-        elif tarjetas_esperadas <= 3.60:
+        elif tarjetas_activas and tarjetas_esperadas <= 3.60:
             micro_mercado = "Menos de 5.5 tarjetas"
             micro_prob = f"{prob_cards_under_55}%"
             micro_tipo = "TARJETAS"
             micro_icono = "🟨"
             micro_motivo = f"El promedio combinado de tarjetas ({tarjetas_esperadas:.2f}) está muy por debajo de 5.5."
-        elif tarjetas_esperadas >= 4.25:
+        elif tarjetas_activas and tarjetas_esperadas >= 4.25:
             micro_mercado = "Más de 3.5 tarjetas"
             micro_prob = f"{prob_cards_over_35}%"
             micro_tipo = "TARJETAS"
             micro_icono = "🟨"
             micro_motivo = f"Promedio de {tarjetas_esperadas:.2f} tarjetas combinadas en duelo de alta fricción."
-        elif corners_estimados >= 10.2:
+        elif corners_disponibles and corners_estimados >= 10.2:
             micro_mercado = "Más de 8.5 córners"
             micro_prob = f"{prob_corners_85}%"
             micro_tipo = "CÓRNERS"
             micro_icono = "🚩"
             micro_motivo = f"Media combinada de {corners_estimados:.1f} córners por ataque constante en bandas."
-        else:
+        elif corners_disponibles:
             micro_mercado = "Menos de 10.5 córners"
             micro_prob = f"{prob_corners_under_105}%"
             micro_tipo = "CÓRNERS"
             micro_icono = "🚩"
             micro_motivo = f"Promedio equilibrado de {corners_estimados:.1f} córners debajo del techo de 10.5."
+        else:
+            micro_mercado = "Datos insuficientes"
+            micro_prob = None
+            micro_tipo = "NO_DISPONIBLE"
+            micro_icono = "⚠️"
+            micro_motivo = "Sin datos oficiales de córners, tarjetas ni árbitro confirmado en football-data.org."
 
         stakazos = {
             "nivel_1_base": {
@@ -12881,9 +13502,9 @@ class SportsAnalyticsEngine:
             "pilar_1_volumen_ofensivo": {
                 "xg_proyectado_local": lh,
                 "xg_proyectado_visitante": la,
-                "tiros_a_puerta": f"{h_stat.get('tiros_puerta', round(lh * 3.1, 1))} vs {a_stat.get('tiros_puerta', round(la * 2.9, 1))} proy.",
-                "tiros_totales": f"{h_stat.get('tiros_totales', 11.5)} vs {a_stat.get('tiros_totales', 11.5)} prom.",
-                "corners_proyectados": f"{corners_estimados} córners totales (Promedios: {h_stat.get('corners', 5.0)} local / {a_stat.get('corners', 5.0)} visita)"
+                "tiros_a_puerta": f"{h_stat.get('tiros_puerta')} vs {a_stat.get('tiros_puerta')} prom." if tiros_disponibles else "Datos insuficientes",
+                "tiros_totales": f"{h_stat.get('tiros_totales')} vs {a_stat.get('tiros_totales')} prom." if tiros_disponibles else "Datos insuficientes",
+                "corners_proyectados": f"{corners_estimados} córners totales (Promedios: {h_stat.get('corners')} local / {a_stat.get('corners')} visita)" if corners_disponibles else "Datos insuficientes"
             },
             "pilar_2_solidez_defensiva": {
                 "xga_local": la,
@@ -12896,11 +13517,14 @@ class SportsAnalyticsEngine:
                 "explicacion": f"Solidez defensiva: {home} concede {la} xGA y {away} concede {lh} xGA."
             },
             "pilar_3_forma_momentum": {
-                "dinamica": f"Últimos 5 partidos: {home} [{h_stat.get('streak', 'V-E-D-V-E')}] ({pts_h}/15 pts) vs {away} [{a_stat.get('streak', 'V-E-D-V-E')}] ({pts_a}/15 pts).",
+                "dinamica": f"Últimos 5 partidos: {home} [{h_stat.get('streak') or 'Sin partidos verificados'}] ({pts_h}/{max(0, int(h_stat.get('muestra_n') or 0) * 3)} pts) vs {away} [{a_stat.get('streak') or 'Sin partidos verificados'}] ({pts_a}/{max(0, int(a_stat.get('muestra_n') or 0) * 3)} pts).",
                 "tendencia": f"Mejor momento competitivo para {away}" if (la > lh + 0.25 or pts_a >= pts_h + 3) else (f"Mejor momento competitivo para {home}" if (lh > la + 0.25 or pts_h >= pts_a + 3) else "Rendimiento reciente equilibrado")
             },
             "pilar_4_historial_h2h": {
-                "friccion": f"Árbitro: {ref_info.get('nombre')} ({ref_info.get('perfil')} • {ref_info.get('avg_cards')} tarj./p vs {ref_info.get('league_avg_cards')} liga) | λ Tarjetas: {tarjetas_esperadas:.2f}.",
+                "friccion": (
+                    f"Árbitro: {ref_info.get('nombre')} ({ref_info.get('perfil')} • {ref_info.get('avg_cards')} tarj./p vs {ref_info.get('league_avg_cards')} liga) | λ Tarjetas: {tarjetas_esperadas:.2f}."
+                    if tarjetas_activas else "Árbitro y tarjetas: Datos insuficientes (no provistos por football-data.org)."
+                ),
                 "antecedente_directo": h2h_directo.get("resumen", ""),
                 "balance_duelos": f"{h2h_directo.get('victorias_local', 0)}V local - {h2h_directo.get('empates', 0)}E - {h2h_directo.get('victorias_visitante', 0)}V visita"
             },
@@ -12915,34 +13539,55 @@ class SportsAnalyticsEngine:
                 "seguridad_senal": f"{signal_hash} • {safety_margin_label}"
             },
             "pilar_7_micromercados_friccion": {
-                "tarjetas_proyectadas": f"λ Tarjetas: {tarjetas_esperadas:.2f} (Árbitro {ref_info.get('nombre')}: {ref_info.get('avg_cards')}/p - {ref_info.get('perfil')}) | λ Córners: {corners_estimados:.1f}",
+                "tarjetas_proyectadas": (
+                    f"λ Tarjetas: {tarjetas_esperadas:.2f} (Árbitro {ref_info.get('nombre')}: {ref_info.get('avg_cards')}/p)"
+                    if tarjetas_activas else "Tarjetas: Datos insuficientes"
+                ) + " | " + (
+                    f"λ Córners: {corners_estimados:.1f}" if corners_disponibles else "Córners: Datos insuficientes"
+                ),
                 "verde_seguro": micro_mercado,
                 "arbitro": ref_info
             }
         }
 
+        muestra_h = int(h_stat.get("muestra_n") or len([x for x in (h_stat.get("streak") or "").split("-") if x.strip()]))
+        muestra_a = int(a_stat.get("muestra_n") or len([x for x in (a_stat.get("streak") or "").split("-") if x.strip()]))
+        confianza_insuficiente_global = (muestra_h < 5 or muestra_a < 5 or h_stat.get("confianza_insuficiente", False) or a_stat.get("confianza_insuficiente", False))
+        fuente_h = h_stat.get("fuente", "Base Histórica Oficial")
+        fuente_a = a_stat.get("fuente", "Base Histórica Oficial")
+        actualizado_global = h_stat.get("actualizado_en") or a_stat.get("actualizado_en") or RATINGS_ESTADO.get("actualizado")
+
         analisis_partidos_anteriores = {
+            "confianza_insuficiente": confianza_insuficiente_global,
             "local": {
                 "equipo": home,
-                "racha": h_stat.get("streak", "V-E-V-D-V"),
+                "racha": h_stat.get("streak", ""),
+                "muestra_n": muestra_h,
+                "confianza_insuficiente": (muestra_h < 5 or h_stat.get("confianza_insuficiente", False)),
+                "fuente": fuente_h,
+                "actualizado_en": h_stat.get("actualizado_en"),
                 "gf_ultimos3": h_stat.get("gf_last3", 6),
                 "gc_ultimos3": h_stat.get("ga_last3", 4),
-                "tiros_puerta_prom": h_stat.get("tiros_puerta", 4.5),
-                "tiros_totales_prom": h_stat.get("tiros_totales", 11.5),
-                "corners_prom": h_stat.get("corners", 5.2),
-                "tarjetas_prom": h_stat.get("tarjetas", 2.0),
+                "tiros_puerta_prom": h_stat.get("tiros_puerta"),
+                "tiros_totales_prom": h_stat.get("tiros_totales"),
+                "corners_prom": h_stat.get("corners"),
+                "tarjetas_prom": h_stat.get("tarjetas"),
                 "observacion": h_stat.get("observacion", ""),
                 "ultimos_partidos": h_stat.get("ultimos_partidos", [])
             },
             "visitante": {
                 "equipo": away,
-                "racha": a_stat.get("streak", "V-E-D-V-E"),
+                "racha": a_stat.get("streak", ""),
+                "muestra_n": muestra_a,
+                "confianza_insuficiente": (muestra_a < 5 or a_stat.get("confianza_insuficiente", False)),
+                "fuente": fuente_a,
+                "actualizado_en": a_stat.get("actualizado_en"),
                 "gf_ultimos3": a_stat.get("gf_last3", 6),
                 "gc_ultimos3": a_stat.get("ga_last3", 4),
-                "tiros_puerta_prom": a_stat.get("tiros_puerta", 4.5),
-                "tiros_totales_prom": a_stat.get("tiros_totales", 11.5),
-                "corners_prom": a_stat.get("corners", 5.2),
-                "tarjetas_prom": a_stat.get("tarjetas", 2.0),
+                "tiros_puerta_prom": a_stat.get("tiros_puerta"),
+                "tiros_totales_prom": a_stat.get("tiros_totales"),
+                "corners_prom": a_stat.get("corners"),
+                "tarjetas_prom": a_stat.get("tarjetas"),
                 "observacion": a_stat.get("observacion", ""),
                 "ultimos_partidos": a_stat.get("ultimos_partidos", [])
             }
@@ -12989,113 +13634,132 @@ class SportsAnalyticsEngine:
         }
         l_avg = league_averages_table.get(code, league_averages_table["PD"])
 
-        # Normalización realista de remates totales y tiros a puerta (compartiendo 90 min de posesión)
-        raw_sh_h = float(h_stat.get("tiros_totales", 12.2))
-        raw_sh_a = float(a_stat.get("tiros_totales", 11.4))
-        shots_h = round(max(7.5, min(17.5, raw_sh_h * 0.88 + (lh - 1.25) * 1.1)), 1)
-        shots_a = round(max(6.5, min(16.0, raw_sh_a * 0.85 + (la - 1.10) * 1.1)), 1)
-        shots_tot_match = round(shots_h + shots_a, 1)
+        if tiros_disponibles:
+            raw_sh_h = float(eff_shots_h)
+            raw_sh_a = float(eff_shots_a)
+            shots_h = round(max(7.5, min(17.5, raw_sh_h * 0.88 + (lh - 1.25) * 1.1)), 1)
+            shots_a = round(max(6.5, min(16.0, raw_sh_a * 0.85 + (la - 1.10) * 1.1)), 1)
+            shots_tot_match = round(shots_h + shots_a, 1)
 
-        raw_sot_h = float(h_stat.get("tiros_puerta", 4.5))
-        raw_sot_a = float(a_stat.get("tiros_puerta", 4.1))
-        shots_ot_h = round(max(2.4, min(7.4, raw_sot_h * 0.82 + (lh - 1.25) * 0.5)), 1)
-        shots_ot_a = round(max(2.0, min(6.8, raw_sot_a * 0.80 + (la - 1.10) * 0.5)), 1)
-        shots_ot_match = round(shots_ot_h + shots_ot_a, 1)
+            raw_sot_h = float(eff_sot_h)
+            raw_sot_a = float(eff_sot_a)
+            shots_ot_h = round(max(2.4, min(7.4, raw_sot_h * 0.82 + (lh - 1.25) * 0.5)), 1)
+            shots_ot_a = round(max(2.0, min(6.8, raw_sot_a * 0.80 + (la - 1.10) * 0.5)), 1)
+            shots_ot_match = round(shots_ot_h + shots_ot_a, 1)
+        else:
+            shots_h = shots_a = shots_tot_match = None
+            shots_ot_h = shots_ot_a = shots_ot_match = None
 
-        corners_h = round(lambda_corners_h * (corners_estimados / max(1.0, lambda_corners_h + lambda_corners_a)), 1)
-        corners_a = round(max(2.0, corners_estimados - corners_h), 1)
-        corners_match = round(corners_h + corners_a, 1)
+        if corners_disponibles:
+            corners_h = round(lambda_corners_h * (corners_estimados / max(1.0, lambda_corners_h + lambda_corners_a)), 1)
+            corners_a = round(max(2.0, corners_estimados - corners_h), 1)
+            corners_match = round(corners_h + corners_a, 1)
+        else:
+            corners_h = corners_a = corners_match = None
 
-        cards_h = round(raw_cards_h, 2)
-        cards_a = round(raw_cards_a, 2)
+        cards_h = round(raw_cards_h, 2) if tarjetas_activas else None
+        cards_a = round(raw_cards_a, 2) if tarjetas_activas else None
 
         # Selección calculada por consenso de las 3 IAs para GOLES TOTALES según el promedio real (suma_xg)
         if (suma_xg >= 2.65 and pGoles["over"] >= 52.0) or (fav_xg >= 1.80 and suma_xg >= 2.35):
             rec_goals_line = "Más de 2.5 goles"
-            rec_goals_prob = int(round(min(88.0, max(72.0, pGoles["over"] + 10.0))))
+            rec_goals_prob = int(round(pGoles["over"]))
         elif (es_duelo_rocoso and suma_xg <= 2.05 and fav_xg <= 1.30 and opp_xg <= 1.05 and p_max_win < 55.0):
             if suma_xg <= 1.75:
                 rec_goals_line = "Menos de 2.5 goles"
-                rec_goals_prob = int(round(min(86.0, max(74.0, prob_under_25_pct + 8.0))))
+                rec_goals_prob = int(round(prob_under_25_pct))
             else:
                 rec_goals_line = "Menos de 3.5 goles"
-                rec_goals_prob = int(round(min(89.0, max(77.0, prob_under_35_pct))))
+                rec_goals_prob = int(round(prob_under_35_pct))
         elif suma_xg >= 2.15 or fav_xg >= 1.55 or pGoles15["over"] >= 70.0:
             rec_goals_line = "Más de 1.5 goles"
-            rec_goals_prob = int(round(min(88.0, max(75.0, pGoles15["over"] + 3.0))))
+            rec_goals_prob = int(round(pGoles15["over"]))
         else:
             rec_goals_line = "Más de 1.5 goles"
-            rec_goals_prob = int(round(min(86.0, max(74.0, pGoles15["over"]))))
+            rec_goals_prob = int(round(pGoles15["over"]))
 
-        # Selección calculada por las 3 IAs para CÓRNERS TOTALES según el promedio real (corners_match)
-        if corners_match <= 7.8:
+        # Selección para CÓRNERS TOTALES: solo si existen datos reales verificados
+        if not corners_disponibles:
+            rec_corners_line = "Datos insuficientes"
+            rec_corners_prob = None
+        elif corners_match <= 7.8:
             rec_corners_line = "Menos de 8.5 córners"
-            rec_corners_prob = int(round(min(88.0, max(76.0, prob_corners_under_95 + 3.0))))
+            rec_corners_prob = int(round(prob_corners_under_95))
         elif corners_match <= 8.6:
             rec_corners_line = "Menos de 9.5 córners"
-            rec_corners_prob = int(round(min(89.0, max(77.0, prob_corners_under_95))))
+            rec_corners_prob = int(round(prob_corners_under_95))
         elif corners_match <= 9.2 and es_ataque_interior_vertical:
             rec_corners_line = "Menos de 10.5 córners"
-            rec_corners_prob = int(round(min(90.0, max(78.0, prob_corners_under_105))))
+            rec_corners_prob = int(round(prob_corners_under_105))
         elif corners_match >= 10.4:
             rec_corners_line = "Más de 9.5 córners"
-            rec_corners_prob = int(round(min(87.0, max(76.0, prob_corners_95 + 6.0))))
+            rec_corners_prob = int(round(prob_corners_95))
         elif corners_match >= 9.5:
             rec_corners_line = "Más de 8.5 córners"
-            rec_corners_prob = int(round(min(88.0, max(76.0, prob_corners_85 + 4.0))))
+            rec_corners_prob = int(round(prob_corners_85))
         else:
             rec_corners_line = "Más de 7.5 córners"
-            rec_corners_prob = int(round(min(89.0, max(77.0, prob_corners_75))))
+            rec_corners_prob = int(round(prob_corners_75))
 
-        # Selección calculada por las 3 IAs para TARJETAS TOTALES según el promedio real (tarjetas_esperadas)
-        if tarjetas_esperadas <= 2.95:
+        # Selección para TARJETAS TOTALES: solo si existen datos reales de tarjetas y árbitro confirmado
+        if not tarjetas_disponibles or not ref_info.get("arbitro_confirmado"):
+            rec_cards_line = "Datos insuficientes"
+            rec_cards_prob = None
+        elif tarjetas_esperadas <= 2.95:
             rec_cards_line = "Menos de 3.5 tarjetas"
-            rec_cards_prob = int(round(min(87.0, max(75.0, p_cards_u35 * 100.0 + 14.0))))
+            rec_cards_prob = int(round(p_cards_u35 * 100.0))
         elif tarjetas_esperadas <= 3.55:
             rec_cards_line = "Menos de 4.5 tarjetas"
-            rec_cards_prob = int(round(min(90.0, max(78.0, prob_cards_under_45))))
+            rec_cards_prob = int(round(prob_cards_under_45))
         elif tarjetas_esperadas <= 3.95:
             rec_cards_line = "Menos de 5.5 tarjetas"
-            rec_cards_prob = int(round(min(91.0, max(79.0, prob_cards_under_55))))
+            rec_cards_prob = int(round(prob_cards_under_55))
         elif tarjetas_esperadas >= 5.10:
             rec_cards_line = "Más de 4.5 tarjetas"
-            rec_cards_prob = int(round(min(88.0, max(76.0, prob_cards_over_45 + 6.0))))
+            rec_cards_prob = int(round(prob_cards_over_45))
         elif tarjetas_esperadas >= 4.25:
             rec_cards_line = "Más de 3.5 tarjetas"
-            rec_cards_prob = int(round(min(89.0, max(77.0, prob_cards_over_35))))
+            rec_cards_prob = int(round(prob_cards_over_35))
         else:
             rec_cards_line = "Más de 2.5 tarjetas"
-            rec_cards_prob = int(round(min(90.0, max(78.0, prob_cards_over_35 + 7.0))))
+            rec_cards_prob = int(round(prob_cards_over_35))
 
-        # Selección calculada por las 3 IAs para REMATES TOTALES y TIROS A PUERTA
-        if shots_tot_match >= l_avg["shots"] + 0.8:
+        # Selección para REMATES TOTALES y TIROS A PUERTA (solo si existen datos reales)
+        if not tiros_disponibles:
+            rec_shots_line = "Datos insuficientes"
+            rec_shots_prob = None
+            rec_sot_line = "Datos insuficientes"
+            rec_sot_prob = None
+        elif shots_tot_match >= l_avg["shots"] + 0.8:
             linea_sh = int(math.floor(shots_tot_match - 2.0)) + 0.5
             rec_shots_line = f"Más de {linea_sh} remates"
-            rec_shots_prob = int(min(87, max(75, round(76 + (shots_tot_match - linea_sh) * 2.2))))
+            rec_shots_prob = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, shots_tot_match) for k in range(int(linea_sh) + 1))) * 100.0))))
         elif shots_tot_match <= l_avg["shots"] - 1.2:
             linea_sh = int(math.ceil(shots_tot_match + 2.0)) + 0.5
             rec_shots_line = f"Menos de {linea_sh} remates"
-            rec_shots_prob = int(min(87, max(75, round(76 + (linea_sh - shots_tot_match) * 2.2))))
+            rec_shots_prob = int(round(max(0.0, min(100.0, sum(cls.calculate_poisson(k, shots_tot_match) for k in range(int(linea_sh) + 1)) * 100.0))))
         else:
             linea_sh = int(math.floor(shots_tot_match - 2.5)) + 0.5
             rec_shots_line = f"Más de {linea_sh} remates"
-            rec_shots_prob = 80
+            rec_shots_prob = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, shots_tot_match) for k in range(int(linea_sh) + 1))) * 100.0))))
 
-        if shots_ot_match >= l_avg["shots_on_target"] + 0.4:
+        if not tiros_disponibles:
+            pass
+        elif shots_ot_match >= l_avg["shots_on_target"] + 0.4:
             linea_sot = max(5.5, int(math.floor(shots_ot_match - 1.2)) + 0.5)
             rec_sot_line = f"Más de {linea_sot} tiros a puerta"
-            rec_sot_prob = int(min(88, max(76, round(75 + (shots_ot_match - linea_sot) * 4.5))))
+            rec_sot_prob = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, shots_ot_match) for k in range(int(linea_sot) + 1))) * 100.0))))
         elif shots_ot_match <= l_avg["shots_on_target"] - 0.8:
             linea_sot = int(math.ceil(shots_ot_match + 1.2)) + 0.5
             rec_sot_line = f"Menos de {linea_sot} tiros a puerta"
-            rec_sot_prob = int(min(87, max(75, round(75 + (linea_sot - shots_ot_match) * 4.5))))
+            rec_sot_prob = int(round(max(0.0, min(100.0, sum(cls.calculate_poisson(k, shots_ot_match) for k in range(int(linea_sot) + 1)) * 100.0))))
         else:
             linea_sot = max(5.5, int(math.floor(shots_ot_match - 1.5)) + 0.5)
             rec_sot_line = f"Más de {linea_sot} tiros a puerta"
-            rec_sot_prob = 81
+            rec_sot_prob = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, shots_ot_match) for k in range(int(linea_sot) + 1))) * 100.0))))
 
         btts_rec_line = "Ambos anotan: Sí" if (pBtts["yes"] >= 55.0 and lh >= 1.15 and la >= 1.05) else "Ambos anotan: No"
-        btts_rec_prob = int(round(min(86.0, max(72.0, (pBtts["yes"] + 10.0) if "Sí" in btts_rec_line else (pBtts["no"] + 10.0)))))
+        btts_rec_prob = int(round(pBtts["yes"] if "Sí" in btts_rec_line else pBtts["no"]))
 
         key_probabilities = {
             "over_2_5": {"value": int(round(pGoles["over"])), "under_value": int(round(prob_under_25_pct)), "league_avg": l_avg["over_2_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob},
@@ -13103,36 +13767,86 @@ class SportsAnalyticsEngine:
             "btts": {"value": int(round(pBtts["yes"])), "no_value": int(round(pBtts["no"])), "prob_pct": btts_rec_prob, "league_avg": l_avg["btts"], "unit": "%", "recommended": btts_rec_line},
             "avg_goals": {"value": round(suma_xg, 2), "home": lh, "away": la, "prob_pct": rec_goals_prob, "under_3_5_pct": int(round(prob_under_35_pct)), "league_avg": l_avg["goals"], "unit": "", "recommended": rec_goals_line},
             "avg_cards": {
-                "value": round(tarjetas_esperadas, 2), "home": round(cards_h, 1), "away": round(cards_a, 1),
-                "lambda_home": cards_h, "lambda_away": cards_a,
-                "provoked_home": round(tarjetas_provocadas_h, 1), "provoked_away": round(tarjetas_provocadas_a, 1),
-                "referee_name": ref_info.get("nombre", "Árbitro Oficial"),
-                "referee_avg": ref_info.get("avg_cards", 4.5),
-                "referee_profile": ref_info.get("perfil", "EQUILIBRADO"),
-                "referee_factor": ref_info.get("factor_rigor", 1.0),
-                "prob_pct": rec_cards_prob,
-                "over_3_5_pct": int(round(prob_cards_over_35)), "over_4_5_pct": int(round(prob_cards_over_45)),
-                "under_4_5_pct": int(round(prob_cards_under_45)), "under_5_5_pct": int(round(prob_cards_under_55)),
-                "league_avg": l_avg["cards"], "unit": "", "recommended": rec_cards_line
+                "value": round(tarjetas_esperadas, 2) if tarjetas_activas else None,
+                "home": round(cards_h, 1) if tarjetas_activas else None,
+                "away": round(cards_a, 1) if tarjetas_activas else None,
+                "datos_insuficientes": not tarjetas_activas,
+                "fuente": ref_info.get("fuente", "NO_DISPONIBLE") if tarjetas_activas else "NO_DISPONIBLE",
+                "lambda_home": cards_h if tarjetas_activas else None,
+                "lambda_away": cards_a if tarjetas_activas else None,
+                "provoked_home": round(tarjetas_provocadas_h, 1) if tarjetas_activas else None,
+                "provoked_away": round(tarjetas_provocadas_a, 1) if tarjetas_activas else None,
+                "referee_name": ref_info.get("nombre") if arbitro_confirmado else None,
+                "referee_avg": ref_info.get("avg_cards") if arbitro_confirmado else None,
+                "referee_profile": ref_info.get("perfil") if arbitro_confirmado else None,
+                "referee_factor": ref_info.get("factor_rigor") if arbitro_confirmado else None,
+                "prob_pct": rec_cards_prob if tarjetas_activas else None,
+                "over_3_5_pct": int(round(prob_cards_over_35)) if tarjetas_activas else None,
+                "over_4_5_pct": int(round(prob_cards_over_45)) if tarjetas_activas else None,
+                "under_4_5_pct": int(round(prob_cards_under_45)) if tarjetas_activas else None,
+                "under_5_5_pct": int(round(prob_cards_under_55)) if tarjetas_activas else None,
+                "league_avg": l_avg["cards"], "unit": "",
+                "recommended": rec_cards_line if tarjetas_activas else "Datos insuficientes"
             },
             "avg_corners": {
-                "value": corners_match, "home": corners_h, "away": corners_a,
-                "conceded_home": round(corners_concedidos_h, 1), "conceded_away": round(corners_concedidos_a, 1),
-                "prob_pct": rec_corners_prob,
-                "over_8_5_pct": int(round(prob_corners_85)), "over_9_5_pct": int(round(prob_corners_95)),
-                "under_9_5_pct": int(round(prob_corners_under_95)), "under_10_5_pct": int(round(prob_corners_under_105)),
-                "style_note": "Juego Interior (Tendencia Under)" if es_ataque_interior_vertical else ("Desborde por Bandas (Tendencia Over)" if es_asedio_bandas else "Flujo Equilibrado"),
-                "league_avg": l_avg["corners"], "unit": "", "recommended": rec_corners_line
+                "value": corners_match if corners_disponibles else None,
+                "home": corners_h if corners_disponibles else None,
+                "away": corners_a if corners_disponibles else None,
+                "datos_insuficientes": not corners_disponibles,
+                "fuente": corners_fuente if corners_disponibles else "NO_DISPONIBLE",
+                "conceded_home": round(corners_concedidos_h, 1) if corners_disponibles else None,
+                "conceded_away": round(corners_concedidos_a, 1) if corners_disponibles else None,
+                "prob_pct": rec_corners_prob if corners_disponibles else None,
+                "over_8_5_pct": int(round(prob_corners_85)) if corners_disponibles else None,
+                "over_9_5_pct": int(round(prob_corners_95)) if corners_disponibles else None,
+                "under_9_5_pct": int(round(prob_corners_under_95)) if corners_disponibles else None,
+                "under_10_5_pct": int(round(prob_corners_under_105)) if corners_disponibles else None,
+                "style_note": ("Juego Interior (Tendencia Under)" if es_ataque_interior_vertical else ("Desborde por Bandas (Tendencia Over)" if es_asedio_bandas else "Flujo Equilibrado")) if corners_disponibles else "Datos insuficientes",
+                "league_avg": l_avg["corners"], "unit": "",
+                "recommended": rec_corners_line if corners_disponibles else "Datos insuficientes"
             },
-            "avg_shots": {"value": shots_tot_match, "home": shots_h, "away": shots_a, "prob_pct": rec_shots_prob, "league_avg": l_avg["shots"], "unit": "", "recommended": rec_shots_line},
-            "avg_shots_on_target": {"value": shots_ot_match, "home": shots_ot_h, "away": shots_ot_a, "prob_pct": rec_sot_prob, "league_avg": l_avg["shots_on_target"], "unit": "", "recommended": rec_sot_line}
+            "avg_shots": {
+                "value": shots_tot_match if tiros_disponibles else None,
+                "home": shots_h if tiros_disponibles else None, "away": shots_a if tiros_disponibles else None,
+                "prob_pct": rec_shots_prob if tiros_disponibles else None,
+                "league_avg": l_avg["shots"], "unit": "",
+                "recommended": rec_shots_line if tiros_disponibles else "Datos insuficientes",
+                "datos_insuficientes": not tiros_disponibles
+            },
+            "avg_shots_on_target": {
+                "value": shots_ot_match if tiros_disponibles else None,
+                "home": shots_ot_h if tiros_disponibles else None, "away": shots_ot_a if tiros_disponibles else None,
+                "prob_pct": rec_sot_prob if tiros_disponibles else None,
+                "league_avg": l_avg["shots_on_target"], "unit": "",
+                "recommended": rec_sot_line if tiros_disponibles else "Datos insuficientes",
+                "datos_insuficientes": not tiros_disponibles
+            },
+            "_meta": {
+                "fuente_local": fuente_h,
+                "fuente_visitante": fuente_a,
+                "discrepancias": enr_discrepancias,
+                "tiene_discrepancia": len(enr_discrepancias) > 0,
+                "muestra_local": muestra_h,
+                "muestra_visitante": muestra_a,
+                "actualizado_en": actualizado_global,
+                "confianza_insuficiente": confianza_insuficiente_global,
+                "corners_disponibles": corners_disponibles,
+                "tarjetas_disponibles": tarjetas_disponibles,
+                "tiros_disponibles": tiros_disponibles
+            }
         }
 
         pronostico_principal_obj = {
-            "seleccion": mercado_sugerido,
-            "probabilidad": prob_principal,
-            "confidence_pct": conf_val,
+            "seleccion": "Confianza insuficiente" if (muestra_h == 0 or muestra_a == 0) else mercado_sugerido,
+            "probabilidad": "—" if (muestra_h == 0 or muestra_a == 0) else prob_principal,
+            "confidence_pct": 0 if (muestra_h == 0 or muestra_a == 0) else conf_val,
+            "cuota_justa_modelo": cuota_calibrada,
+            "cuota_modelo": cuota_calibrada,
             "cuota_calibrada": cuota_calibrada,
+            "cuota_real": None,
+            "es_cuota_real": False,
+            "confianza_insuficiente": confianza_insuficiente_global,
+            "muestra_n": min(muestra_h, muestra_a),
             "num_selecciones": num_selecciones,
             "categoria_oddster": tipo_mercado_code,
             "tipster_model": tipster_model_name,
@@ -13194,7 +13908,7 @@ class SportsAnalyticsEngine:
 def _extraer_consenso_5_modelos(home: str, away: str, lh: float, la: float, corners_est: float, tarjetas_esp: float, p1X: float, pX2: float, pGoles15_over: float, pBtts_yes: float, cuota_cal: float, safety_margin: str, conf_val: int) -> list:
     """Extrae los 5 indicadores de cálculo del motor con explicación clara en español (sin nombres de terceros)."""
     suma_xg = round(lh + la, 2)
-    edge_ev = round(max(4.2, min(14.8, (conf_val / 100.0 * cuota_cal - 1.0) * 100.0 + 6.5)), 1)
+    edge_ev = None
     fav_do_label = f"1X ({p1X}%)" if p1X >= pX2 else f"X2 ({pX2}%)"
     explicacion_margen = safety_margin or f"Se esperan {suma_xg} goles (supera por +{round(max(0.4, suma_xg - 1.5), 2)} la línea de 1.5)"
     # Si viene un texto corto antiguo como '+0.9 sobre línea', convertirlo en explicación clara
@@ -13221,23 +13935,23 @@ def _extraer_consenso_5_modelos(home: str, away: str, lh: float, la: float, corn
             "id": "calculo_poisson",
             "nombre": "3. Cálculo Poisson",
             "autor": "Piso de Goles y Córners",
-            "metrica": f"Más de 1.5 goles: {round(pGoles15_over, 1)}% · Córners prom: {corners_est:.1f}",
+            "metrica": f"Más de 1.5 goles: {round(pGoles15_over, 1)}%" + (f" · Córners prom: {corners_est:.1f}" if corners_est is not None else " · Córners: Datos insuficientes"),
             "estado": "VERDE",
             "confianza": f"Probabilidad: {max(74, conf_val - 1)}%"
         },
         {
             "id": "valor_cuota",
-            "nombre": "4. Ventaja Estadística (+EV)",
-            "autor": "Diferencial vs Media de Liga",
-            "metrica": f"Supera en +{edge_ev}% la media histórica del torneo",
-            "estado": "VERDE",
-            "confianza": f"Ventaja +{edge_ev}% ✓"
+            "nombre": "4. Cuota Justa del Modelo",
+            "autor": "Probabilidad Implícita Interna",
+            "metrica": f"Cuota justa modelo @{cuota_cal:.2f} (sin cuota real de mercado para calcular +EV)",
+            "estado": "NEUTRO",
+            "confianza": "Modelo interno (no es cuota real)"
         },
         {
             "id": "balance_promedio",
             "nombre": "5. Balance y Promedio",
             "autor": "Estabilidad del Partido",
-            "metrica": f"Doble oport. {fav_do_label} · Tarjetas prom: {tarjetas_esp:.1f}",
+            "metrica": f"Doble oport. {fav_do_label}" + (f" · Tarjetas prom: {tarjetas_esp:.1f}" if tarjetas_esp is not None else " · Tarjetas: Datos insuficientes"),
             "estado": "VERDE",
             "confianza": "Tendencia Firme ✓"
         }
@@ -13283,14 +13997,18 @@ def _enriquecer_pick_con_estado_auditoria(item: dict, target_date: str) -> dict:
     xg_p = an_d.get("parametros_xg") or {}
 
     tot_xg_est = round(float(item.get("xg_local", xg_p.get("lambda_home", 1.45))) + float(item.get("xg_visita", xg_p.get("lambda_away", 1.15))), 2)
-    cards_est = round(float((kp_d.get("avg_cards") or {}).get("value") or xg_p.get("expected_cards") or 3.6), 1)
-    corners_est = round(float((kp_d.get("avg_corners") or {}).get("value") or xg_p.get("expected_corners") or 9.4), 1)
+    cards_raw = (kp_d.get("avg_cards") or {}).get("value")
+    if cards_raw is None:
+        cards_raw = xg_p.get("expected_cards")
+    corners_raw = (kp_d.get("avg_corners") or {}).get("value")
+    if corners_raw is None:
+        corners_raw = xg_p.get("expected_corners")
 
     if cat == "CARDS":
-        prom_val = f"{cards_est} tarjetas"
+        prom_val = f"{round(float(cards_raw), 1)} tarjetas" if cards_raw is not None else "Datos insuficientes"
         prom_lbl = "Promedio de tarjetas"
     elif cat == "CORNERS":
-        prom_val = f"{corners_est} córners"
+        prom_val = f"{round(float(corners_raw), 1)} córners" if corners_raw is not None else "Datos insuficientes"
         prom_lbl = "Promedio de córners"
     else:
         prom_val = f"{tot_xg_est} goles"
@@ -13314,7 +14032,7 @@ def _enriquecer_pick_con_estado_auditoria(item: dict, target_date: str) -> dict:
         else:
             stat_sub = f"{tot_g} goles totales"
 
-        item["estado_partido"] = graded.get("estado", "GANADA")
+        item["estado_partido"] = graded.get("estado", "PENDIENTE")
         item["marcador_final"] = f"{sh} - {sa}"
         item["stat_resultado_label"] = stat_sub
     else:
@@ -13325,76 +14043,29 @@ def _enriquecer_pick_con_estado_auditoria(item: dict, target_date: str) -> dict:
     return item
 
 
-def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: int = 5) -> list:
-    """Construye el Top 5 diario estilo Oddster + Top 5 Tipsters Mundiales:
-    - Cero Hándicap.
-    - 1 o máximo 2 selecciones por partido.
-    - Cuotas rotativas calibradas entre 1.30 y 2.20 como máximo.
-    - Diversidad de señales: Tarjetas (Más/Menos), Goles (Más/Menos), Ganador/Doble Oportunidad (+Goles), Córners (Más/Menos), Ambos Anotan."""
-    if target_date in _LOCKED_TOP5_PICKS_BY_DATE:
-        return [_enriquecer_pick_con_estado_auditoria(dict(x), target_date) for x in _LOCKED_TOP5_PICKS_BY_DATE[target_date][:limit]]
-
-    # Si es una fecha histórica con picks emitidos en _HISTORICAL_ISSUED_TOP5, usarlos con formato Oddster completo
-    if "_HISTORICAL_ISSUED_TOP5" in globals() and target_date in _HISTORICAL_ISSUED_TOP5:
-        hist_items = []
-        for idx, h in enumerate(_HISTORICAL_ISSUED_TOP5[target_date][:limit], 1):
-            sel_t = h.get("seleccion", "")
-            cat, cat_ico = _clasificar_categoria_mercado(sel_t)
-            num_s = 2 if " y " in sel_t.lower() else 1
-            conf_v = int(float(str(h.get("probabilidad", "84")).replace("%", "") or 84))
-            sig_hash = "ODD-" + hashlib.sha256(f"oddster_lock_{target_date}_{h.get('local')}_{h.get('visitante')}_{sel_t}".encode("utf-8")).hexdigest()[:8].upper()
-            item_h = {
-                "rank": idx,
-                "match_id": h.get("id_partido") or f"hist_{target_date}_{idx}",
-                "partido": h.get("partido") or f"{h.get('local')} vs {h.get('visitante')}",
-                "local": h.get("local"),
-                "visitante": h.get("visitante"),
-                "liga": h.get("liga"),
-                "codigo_liga": h.get("codigo_liga", "OFL"),
-                "fecha": target_date,
-                "fecha_utc": h.get("fecha_utc") or f"{target_date}T14:00:00Z",
-                "hora_est": (h.get("fecha_utc") or "2026-10-16T14:00:00Z")[11:16] or "14:00",
-                "categoria": cat,
-                "icono_categoria": cat_ico,
-                "mercado": sel_t,
-                "seleccion": sel_t,
-                "num_selecciones": num_s,
-                "probabilidad": f"{conf_v}%",
-                "prob_num": float(conf_v),
-                "confidence_pct": conf_v,
-                "cuota_justa": float(h.get("cuota", 1.55)),
-                "cuota": str(h.get("cuota", "1.55")),
-                "justificacion": h.get("justificacion") or "Señal estadística validada por el motor de predicción.",
-                "tipster_model": "Motor PredicXion IA • Señal Verificada",
-                "stat_projection_label": h.get("stat_projection_label") or "Línea estadística verificada",
-                "safety_margin": h.get("safety_margin") or f"Se esperan {round(float(h.get('xg_local', 1.58)) + float(h.get('xg_visita', 1.12)), 2)} goles en el partido",
-                "signal_hash": sig_hash,
-                "xg_local": h.get("xg_local", 1.55),
-                "xg_visita": h.get("xg_visita", 1.15),
-                "consenso_5_modelos": _extraer_consenso_5_modelos(
-                    h.get("local", "Local"), h.get("visitante", "Visita"),
-                    float(h.get("xg_local", 1.58)), float(h.get("xg_visita", 1.12)),
-                    10.2, 3.8, 78.5, 64.0, 82.0, 58.0,
-                    float(h.get("cuota", 1.55)), h.get("safety_margin") or "Margen verificado", conf_v
-                ),
-                "exclusivo_vip": idx in [1, 2, 3, 4],
-                "es_gratis_telegram": idx == 5
-            }
-            hist_items.append(_enriquecer_pick_con_estado_auditoria(item_h, target_date))
-        return hist_items
-
+def _seleccionar_top3_verificado(matches_day: list, target_date: str, limit: int = 3) -> list:
+    """Construye el Top 3 verificado por día (Fase 3):
+    - Máximo 3 selecciones verificadas por día (sin rellenar cupos).
+    - Cero selecciones si no hay partidos con datos verificados.
+    - No utiliza picks históricos escritos manualmente ni plantillas hardcodeadas.
+    - Cuota justa del modelo separada de cuota real (`cuota_real: None`, `es_cuota_real: False`)."""
+    max_items = min(3, max(1, int(limit or 3)))
     candidates = []
     for m in matches_day:
         an = SportsAnalyticsEngine.generate_institutional_analysis(m)
         p_princ = an.get("pronostico_principal", {})
-        prob_raw = p_princ.get("probabilidad", "80%")
-        prob_num = float(re.sub(r'[^0-9.]', '', str(prob_raw)) or 80.0)
-        conf_pct = int(p_princ.get("confidence_pct") or round(prob_num))
         sel_text = p_princ.get("seleccion", "")
+        if p_princ.get("confianza_insuficiente") or not sel_text or sel_text == "Confianza insuficiente":
+            continue
+        prob_raw = p_princ.get("probabilidad", "")
+        prob_clean = re.sub(r'[^0-9.]', '', str(prob_raw))
+        if not prob_clean:
+            continue
+        prob_num = float(prob_clean)
+        conf_pct = int(p_princ.get("confidence_pct") or round(prob_num))
         cat, cat_ico = _clasificar_categoria_mercado(sel_text)
         num_sel = int(p_princ.get("num_selecciones") or (2 if " y " in sel_text.lower() else 1))
-        odd_val = float(p_princ.get("cuota_calibrada") or 1.55)
-        odd_val = max(1.30, min(2.20, round(odd_val, 2)))
+        odd_val = float(p_princ.get("cuota_justa_modelo") or p_princ.get("cuota_calibrada") or round(100.0 / max(5.0, prob_num), 2))
 
         candidates.append({
             "match_id": m.get("id_partido"),
@@ -13414,7 +14085,10 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
             "probabilidad": f"{conf_pct}%",
             "prob_num": float(conf_pct),
             "confidence_pct": conf_pct,
+            "cuota_justa_modelo": odd_val,
             "cuota_justa": odd_val,
+            "cuota_real": None,
+            "es_cuota_real": False,
             "cuota": f"{odd_val:.2f}",
             "justificacion": p_princ.get("justificacion", "Proyección cuantitativa fundamentada en piso estadístico xG."),
             "tipster_model": p_princ.get("tipster_model", "Motor PredicXion IA"),
@@ -13435,12 +14109,12 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
     # Priorizar diversidad de señales como en Oddster: Tarjetas, Goles, Ganador/Doble Oportunidad, Córners, Ambos Anotan
     for pref_cat in ("CARDS", "GOALS", "WINNER", "CORNERS", "BTTS"):
         cat_matches = [c for c in candidates if c["categoria"] == pref_cat and c not in selected]
-        if cat_matches and len(selected) < limit:
+        if cat_matches and len(selected) < max_items:
             selected.append(cat_matches[0])
             cat_counts[pref_cat] = cat_counts.get(pref_cat, 0) + 1
 
     for c in candidates:
-        if len(selected) >= limit:
+        if len(selected) >= max_items:
             break
         if c in selected:
             continue
@@ -13449,9 +14123,9 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
             selected.append(c)
             cat_counts[cat] = cat_counts.get(cat, 0) + 1
 
-    if len(selected) < limit:
+    if len(selected) < max_items:
         for c in candidates:
-            if len(selected) >= limit:
+            if len(selected) >= max_items:
                 break
             if c not in selected:
                 selected.append(c)
@@ -13460,7 +14134,7 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
     selected.sort(key=lambda x: x["prob_num"], reverse=True)
 
     result = []
-    final_slice = selected[:limit]
+    final_slice = selected[:max_items]
     total_sel = len(final_slice)
     for idx, item in enumerate(final_slice):
         rank = idx + 1
@@ -13480,6 +14154,9 @@ def _seleccionar_top5_diversificado(matches_day: list, target_date: str, limit: 
 # FIXTURES OFICIALES UEFA NATIONS LEAGUE 2026/2027 (JORNADAS 4, 5, 6 Y PLAY-OFFS)
 # Para desactivar al finalizar el torneo, cambiar ENABLE_UNL a False o definir ENABLE_UNL="false" en Render
 ENABLE_UEFA_NATIONS_LEAGUE = os.getenv("ENABLE_UNL", "true").lower() == "true"
+
+# Alias de compatibilidad hacia Top 3 verificado (Fase 3)
+_seleccionar_top5_diversificado = _seleccionar_top3_verificado
 
 def build_all_unl_fixtures():
     if not ENABLE_UEFA_NATIONS_LEAGUE:
@@ -14522,6 +15199,222 @@ CLUB_INTEGRATED_FIXTURES = build_all_club_fixtures()
 ALL_FIXTURES_POOL = CLUB_INTEGRATED_FIXTURES
 
 
+class CalendarSyncService:
+    """
+    Fase 2: Auditoría y sincronización segura del Calendario Maestro.
+    - Respeta el calendario manual (ALL_FIXTURES_POOL) como fuente propia de fixtures:
+      NUNCA sobrescribe ni borra partidos manuales automáticamente.
+    - Detecta duplicados, partidos mal asignados, faltantes y desfases de fecha vs football-data.org.
+    - Expone overlay O(1) en memoria para /obtener-pronostico sin llamadas HTTP en vivo.
+    """
+    _LOCK = threading.RLock()
+    _STATUS_OVERLAY = {}
+    _LAST_AUDIT = None
+    VALID_COMPETITION_CODES = {"BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "UCL", "UEL", "UNL"}
+
+    @classmethod
+    def canonical_fixture_key(cls, local: str, visitante: str, fecha: str) -> str:
+        nf = globals().get("_norm_equipo")
+        h = nf(local) if nf else (local or "").lower().strip()
+        a = nf(visitante) if nf else (visitante or "").lower().strip()
+        return f"{str(fecha or '')[:10]}|{h}|{a}"
+
+    @classmethod
+    def audit_manual_calendar(cls, fixtures: list = None) -> dict:
+        pool = fixtures if fixtures is not None else globals().get("ALL_FIXTURES_POOL", [])
+        start_date, end_date = get_active_calendar_window()
+        seen_keys = {}
+        seen_ids = set()
+        duplicados = []
+        mal_asignados = []
+        fuera_de_ventana = []
+
+        for fix in pool:
+            fid = fix.get("id_partido")
+            loc = (fix.get("local") or "").strip()
+            vis = (fix.get("visitante") or "").strip()
+            f_utc = str(fix.get("fecha_utc") or fix.get("fecha") or "")
+            fecha = f_utc[:10]
+            cod = (fix.get("codigo_liga") or "").strip().upper()
+
+            if not loc or not vis or len(fecha) != 10 or cod not in cls.VALID_COMPETITION_CODES:
+                mal_asignados.append({
+                    "id_partido": fid,
+                    "local": loc,
+                    "visitante": vis,
+                    "fecha": fecha,
+                    "codigo_liga": cod,
+                    "motivo": "campos_incompletos_o_liga_invalida",
+                })
+
+            if fecha and not (start_date <= fecha <= end_date):
+                fuera_de_ventana.append({"id_partido": fid, "local": loc, "visitante": vis, "fecha": fecha})
+
+            ckey = cls.canonical_fixture_key(loc, vis, fecha)
+            if ckey in seen_keys or (fid and fid in seen_ids):
+                duplicados.append({
+                    "id_partido": fid,
+                    "key": ckey,
+                    "duplicado_de": seen_keys.get(ckey),
+                })
+            else:
+                seen_keys[ckey] = fid
+                if fid:
+                    seen_ids.add(fid)
+
+        return {
+            "total_manual": len(pool),
+            "ventana_activa": {"inicio": start_date, "fin": end_date},
+            "duplicados": duplicados,
+            "mal_asignados": mal_asignados,
+            "fuera_de_ventana": fuera_de_ventana,
+            "total_duplicados": len(duplicados),
+            "total_mal_asignados": len(mal_asignados),
+            "total_fuera_de_ventana": len(fuera_de_ventana),
+        }
+
+    @classmethod
+    def sync_verify_with_football_data(cls, competition_codes: list = None, date_from: str = "", date_to: str = "", fixtures: list = None) -> dict:
+        """
+        Cruza los fixtures manuales contra football-data.org SIN modificar ni eliminar partidos manuales.
+        Registra faltantes, desfases de fecha y estados actualizados en _STATUS_OVERLAY.
+        """
+        pool = fixtures if fixtures is not None else globals().get("ALL_FIXTURES_POOL", [])
+        codes = competition_codes or sorted(cls.VALID_COMPETITION_CODES)
+
+        # Indexar calendario manual por clave canónica y por par de equipos
+        manual_by_key = {}
+        manual_by_pair = {}
+        nf = globals().get("_norm_equipo")
+        for fix in pool:
+            loc = fix.get("local", "")
+            vis = fix.get("visitante", "")
+            fecha = str(fix.get("fecha_utc") or fix.get("fecha") or "")[:10]
+            ckey = cls.canonical_fixture_key(loc, vis, fecha)
+            manual_by_key[ckey] = fix
+            h_n = nf(loc) if nf else loc.lower().strip()
+            a_n = nf(vis) if nf else vis.lower().strip()
+            manual_by_pair.setdefault(f"{h_n}|{a_n}", []).append(fix)
+
+        faltantes_en_manual = []
+        fechas_discrepantes = []
+        verificados = 0
+        errores_proveedor = []
+
+        for cod in codes:
+            fd_code = FootballDataOrgClient.COMPETITION_CODE_MAP.get(cod, cod)
+            params = {}
+            if date_from:
+                params["dateFrom"] = date_from[:10]
+            if date_to:
+                params["dateTo"] = date_to[:10]
+            res = FootballDataOrgClient.fetch_json(
+                f"/competitions/{fd_code}/matches",
+                competition_code=cod,
+                params=params or None,
+                ttl_seconds=900,
+            )
+            if not res.get("ok") or not res.get("data"):
+                errores_proveedor.append({"competicion": cod, "error": res.get("error")})
+                continue
+
+            for m in (res["data"].get("matches") or []):
+                h_fd = (m.get("homeTeam") or {}).get("name", "")
+                a_fd = (m.get("awayTeam") or {}).get("name", "")
+                utc_fd = str(m.get("utcDate") or "")
+                f_fd = utc_fd[:10]
+                st_fd = m.get("status", "SCHEDULED")
+                if not h_fd or not a_fd or not f_fd:
+                    continue
+
+                ckey_fd = cls.canonical_fixture_key(h_fd, a_fd, f_fd)
+                if ckey_fd in manual_by_key:
+                    verificados += 1
+                    with cls._LOCK:
+                        cls._STATUS_OVERLAY[ckey_fd] = {
+                            "estado_verificado": st_fd,
+                            "fecha_utc_fd": utc_fd,
+                            "discrepancia_fecha": False,
+                            "origen": "calendario_manual",
+                            "fuente_verificacion": "football-data.org",
+                            "actualizado_en": datetime.now(timezone.utc).isoformat(),
+                        }
+                else:
+                    # Buscar si existe el mismo duelo en otra fecha (posible partido adelantado/aplazado/erróneo)
+                    h_n = nf(h_fd) if nf else h_fd.lower().strip()
+                    a_n = nf(a_fd) if nf else a_fd.lower().strip()
+                    candidates = manual_by_pair.get(f"{h_n}|{a_n}", [])
+                    if candidates:
+                        man_fix = candidates[0]
+                        man_fecha = str(man_fix.get("fecha_utc") or man_fix.get("fecha") or "")[:10]
+                        man_key = cls.canonical_fixture_key(man_fix.get("local", ""), man_fix.get("visitante", ""), man_fecha)
+                        fechas_discrepantes.append({
+                            "id_partido_manual": man_fix.get("id_partido"),
+                            "local": man_fix.get("local"),
+                            "visitante": man_fix.get("visitante"),
+                            "fecha_manual": man_fecha,
+                            "fecha_football_data": f_fd,
+                            "estado_football_data": st_fd,
+                            "accion": "REGISTRADO_SIN_SOBRESCRIBIR",
+                        })
+                        with cls._LOCK:
+                            cls._STATUS_OVERLAY[man_key] = {
+                                "estado_verificado": st_fd,
+                                "fecha_utc_fd": utc_fd,
+                                "discrepancia_fecha": True,
+                                "fecha_manual": man_fecha,
+                                "fecha_football_data": f_fd,
+                                "origen": "calendario_manual",
+                                "fuente_verificacion": "football-data.org",
+                                "actualizado_en": datetime.now(timezone.utc).isoformat(),
+                            }
+                    else:
+                        faltantes_en_manual.append({
+                            "local": h_fd,
+                            "visitante": a_fd,
+                            "fecha": f_fd,
+                            "codigo_liga": cod,
+                            "estado": st_fd,
+                        })
+
+        report = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "auditoria_local": cls.audit_manual_calendar(pool),
+            "verificados_con_fd": verificados,
+            "fechas_discrepantes": fechas_discrepantes,
+            "faltantes_en_manual": faltantes_en_manual,
+            "errores_proveedor": errores_proveedor,
+            "calendario_manual_intacto": True,
+        }
+        with cls._LOCK:
+            cls._LAST_AUDIT = report
+            if "db" in globals() and db is not None:
+                try:
+                    db.collection("calendar_sync_audit").document("latest").set(report, merge=True)
+                except Exception as e:
+                    logger.debug("Firestore calendar audit write fallback a memoria: %s", e)
+        return report
+
+    @classmethod
+    def get_fixture_overlay(cls, fix: dict) -> dict:
+        loc = fix.get("local", "")
+        vis = fix.get("visitante", "")
+        fecha = str(fix.get("fecha_utc") or fix.get("fecha") or "")[:10]
+        ckey = cls.canonical_fixture_key(loc, vis, fecha)
+        with cls._LOCK:
+            ov = cls._STATUS_OVERLAY.get(ckey)
+        if ov:
+            return dict(ov)
+        return {
+            "estado_verificado": fix.get("estado", "SCHEDULED"),
+            "discrepancia_fecha": False,
+            "origen": "calendario_manual",
+            "fuente_verificacion": "calendario_manual",
+        }
+
+
+
+
 # ======================================================================================
 # ETL OFICIAL API-SPORTS / API-FOOTBALL (UEFA NATIONS LEAGUE, MUNDIAL, COPAS)
 # ======================================================================================
@@ -15387,71 +16280,27 @@ def _generar_acta_partido_realista(local: str, visitante: str, fecha_str: str, a
 
 
 def obtener_resultado_real_verificado(local: str, visitante: str, fecha_str: str, liga: str = "", fecha_utc_completa: str = "", an_data: dict = None) -> dict:
-    """Consulta en cascada las fuentes oficiales en tiempo real para un partido:
-    1. Caché de resultados verificados en firme (_VERIFIED_RESULTS_CACHE)
-    2. SofaScore API (marcador, córners y tarjetas)
-    3. ESPN API + Boxscore Summary (marcador, córners y tarjetas)
-    4. Si el partido ya cumplió sus 2 horas reglamentarias de juego y las APIs externas no devolvieron acta,
-       resuelve el acta con los parámetros estadísticos reales de ambos clubes."""
-    k_loc = _norm_equipo(local) if "_norm_equipo" in globals() else local.lower().strip()
-    k_vis = _norm_equipo(visitante) if "_norm_equipo" in globals() else visitante.lower().strip()
-    cache_key = (fecha_str, k_loc, k_vis)
+    """
+    Obtiene resultados reales verificados exclusivamente desde _VERIFIED_RESULTS_CACHE
+    (alimentado por football-data.org y actas oficiales reales).
+    Nunca ingresa ni devuelve actas simuladas.
+    """
+    loc_n = _norm_equipo(local) if "_norm_equipo" in globals() else (local or "").lower().strip()
+    vis_n = _norm_equipo(visitante) if "_norm_equipo" in globals() else (visitante or "").lower().strip()
+    cache_key = ((fecha_str or "")[:10], loc_n, vis_n)
 
-    # 1. Revisar caché de partidos ya finalizados y verificados
-    cached = _VERIFIED_RESULTS_CACHE.get(cache_key)
-    if cached and cached.get("finished"):
-        return cached
+    if cache_key in _VERIFIED_RESULTS_CACHE:
+        entry = _VERIFIED_RESULTS_CACHE[cache_key]
+        if not entry.get("simulado", False):
+            return entry
 
-    for (f_k, h_k, a_k), val in list(_VERIFIED_RESULTS_CACHE.items()):
-        if f_k == fecha_str and val.get("finished"):
-            if matches_team_alias(local, h_k) and matches_team_alias(visitante, a_k):
-                return val
-
-    ya_termino_reloj = _partido_finalizado_por_reloj(fecha_utc_completa or f"{fecha_str}T14:00:00Z")
-    hoy_pe = datetime.now(timezone(timedelta(hours=-5))).strftime("%Y-%m-%d")
-
-    # Si el partido es futuro o aún no termina por reloj hoy, no consultar actas cerradas
-    if fecha_str > hoy_pe or (fecha_str == hoy_pe and not ya_termino_reloj):
-        return {"finished": False}
-
-    # 2. Intentar SofaScore Live Service (solo para fechas recientes/actuales)
-    res_sofa = SofascoreLiveService.fetch_match_stats(local, visitante, fecha_str)
-    res_espn = None
-    if not res_sofa or not res_sofa.get("finished") or res_sofa.get("corners_total") is None or res_sofa.get("cards_total") is None:
-        res_espn = ESPNLiveService.fetch_match_stats(local, visitante, fecha_str, liga=liga)
-
-    final_res = None
-    if res_sofa and res_sofa.get("finished"):
-        final_res = dict(res_sofa)
-        if res_espn and res_espn.get("finished"):
-            if final_res.get("corners_total") is None and res_espn.get("corners_total") is not None:
-                final_res["corners_total"] = res_espn["corners_total"]
-            if final_res.get("cards_total") is None and res_espn.get("cards_total") is not None:
-                final_res["cards_total"] = res_espn["cards_total"]
-                final_res["yellow_cards"] = res_espn.get("yellow_cards")
-                final_res["red_cards"] = res_espn.get("red_cards")
-    elif res_espn and res_espn.get("finished"):
-        final_res = dict(res_espn)
-
-    # 3. Si el partido ya terminó por horario oficial y faltan datos del acta externa, completar con el modelo estadístico del club
-    if ya_termino_reloj and ALLOW_SIMULATED_ACTA:
-        acta_respaldo = _generar_acta_partido_realista(local, visitante, fecha_str, an_data=an_data)
-        if not final_res or not final_res.get("finished"):
-            final_res = acta_respaldo
-        else:
-            if final_res.get("corners_total") is None:
-                final_res["corners_total"] = acta_respaldo["corners_total"]
-            if final_res.get("cards_total") is None:
-                final_res["cards_total"] = acta_respaldo["cards_total"]
-                final_res["yellow_cards"] = acta_respaldo["yellow_cards"]
-                final_res["red_cards"] = acta_respaldo["red_cards"]
-
-    if final_res and final_res.get("finished"):
-        _VERIFIED_RESULTS_CACHE[cache_key] = final_res
-        return final_res
+    # Búsqueda flexible por alias dentro de _VERIFIED_RESULTS_CACHE para la fecha dada
+    for (f_c, h_c, a_c), entry in _VERIFIED_RESULTS_CACHE.items():
+        if str(f_c)[:10] == (fecha_str or "")[:10] and not entry.get("simulado", False):
+            if matches_team_alias(local, h_c) and matches_team_alias(visitante, a_c):
+                return entry
 
     return {"finished": False}
-
 
 class SportsResultsAuditor:
     """Motor de liquidación y auditoría matemática contrastada con datos reales oficiales.
@@ -15638,33 +16487,20 @@ class SportsResultsAuditor:
             if found_stat is not None:
                 tiros_totales = int(found_stat.get("total_shots") if found_stat.get("total_shots") is not None else found_stat.get("tiros_totales", 0))
                 tiros_puerta = int(found_stat.get("shots_on_target") if found_stat.get("shots_on_target") is not None else found_stat.get("tiros_puerta", 0))
+                valor_evaluado = tiros_puerta if es_tiros_puerta else tiros_totales
+                estado = "GANADA" if valor_evaluado > linea else "PERDIDA"
             else:
-                # Determinación determinista basada en si es suplente habitual o titular
-                es_suplente = ("vitinha" in j_clean)
-                if not es_suplente and "MASTER_PLAYERS_PROPS" in globals():
-                    for cand in MASTER_PLAYERS_PROPS:
-                        c_nom = _clean_str_j(cand.get("nombre", ""))
-                        if c_nom in j_clean or j_clean in c_nom:
-                            prob_t = float(re.sub(r'[^0-9.]', '', str(cand.get("prob_titular", "90"))) or 90)
-                            if prob_t < 60 or "suplente" in str(cand.get("rol_plantilla", "")).lower():
-                                es_suplente = True
-                            break
-
-                match_id_str = str(pick.get("id") or pick.get("partido") or "")
-                seed_p = int(hashlib.md5(f"{match_id_str}_{j_clean}".encode('utf-8')).hexdigest()[:8], 16)
-                if es_suplente:
-                    tiros_totales = 0 if (seed_p % 10 < 8) else 1
-                    tiros_puerta = 0
-                else:
-                    tiros_totales = max(2, 2 + (seed_p % 3))
-                    tiros_puerta = max(1, 1 + (seed_p % 2))
-
-            valor_evaluado = tiros_puerta if es_tiros_puerta else tiros_totales
-            estado = "GANADA" if valor_evaluado > linea else "PERDIDA"
+                tiros_totales = None
+                tiros_puerta = None
+                valor_evaluado = None
+                estado = "NO_VERIFICABLE"
+                resultado_str = f"{score_home} - {score_away} (Sin estadística oficial de jugador)"
 
             tipo_str = "Tiros al arco" if es_tiros_puerta else "Tiros Totales"
-            if estado == "GANADA":
-                if not es_tiros_puerta and tiros_puerta > 0:
+            if estado == "NO_VERIFICABLE":
+                pass
+            elif estado == "GANADA":
+                if not es_tiros_puerta and tiros_puerta and tiros_puerta > 0:
                     resultado_str = f"{tiros_totales} {tipo_str} ({tiros_puerta} a puerta)"
                 else:
                     resultado_str = f"{valor_evaluado} {tipo_str}"
@@ -16899,6 +17735,7 @@ ALIAS_EQUIPOS_RATINGS = {
 }
 
 RATINGS_REALES = {}
+VERIFIED_TEAM_HISTORY = {}
 RATINGS_ESTADO = {
     "actualizado": None,
     "equipos_con_datos": 0,
@@ -17033,116 +17870,175 @@ def _descargar_csv(temporada, codigo):
     return r.text
 
 def actualizar_ratings_reales(descargar=None):
-    """Descarga los CSV de football-data.co.uk, calcula ataque/defensa/Elo/córners/tarjetas reales."""
-    import csv as _csv
-    import io as _io
-    descargar = descargar or _descargar_csv
+    """
+    Sincroniza partidos oficiales finalizados desde football-data.org (única fuente externa),
+    calculando ataque, defensa, Elo, muestra real y el índice cronológico VERIFIED_TEAM_HISTORY.
+    Si un dato (córners/tarjetas/árbitro) no es provisto por football-data.org, queda en None.
+    """
     partidos, ok, fallos = [], [], []
-    for temp in TEMPORADAS_RATINGS:
-        for cod, liga in LIGAS_RATINGS.items():
-            antes = len(partidos)
-            try:
-                texto = descargar(temp, cod)
-                for row in _csv.DictReader(_io.StringIO(texto)):
-                    f = _fecha_csv(row.get("Date", ""))
-                    try:
-                        gh, ga = int(row["FTHG"]), int(row["FTAG"])
-                    except (KeyError, TypeError, ValueError):
-                        continue
-                    if not f or not row.get("HomeTeam") or not row.get("AwayTeam"):
-                        continue
+    actualizado_ts = datetime.now(timezone.utc).isoformat()
 
-                    def _num(clave):
-                        try:
-                            return float(row.get(clave))
-                        except (TypeError, ValueError):
-                            return None
+    for cod_interno, fd_code in FootballDataOrgClient.COMPETITION_CODE_MAP.items():
+        liga_nombre = FootballDataOrgClient.COMPETITION_NAMES.get(cod_interno, cod_interno)
+        antes = len(partidos)
+        try:
+            if descargar is not None:
+                # Permite inyectar función en pruebas unitarias sin red
+                matches_raw = descargar(cod_interno, fd_code)
+                res_ok = isinstance(matches_raw, list)
+                err_msg = None if res_ok else "Error en proveedor de prueba"
+            else:
+                res = FootballDataOrgClient.fetch_json(
+                    f"/competitions/{fd_code}/matches",
+                    competition_code=cod_interno,
+                    params={"status": "FINISHED"},
+                    ttl_seconds=900,
+                    timeout_sec=12
+                )
+                res_ok = res.get("ok", False)
+                err_msg = res.get("error")
+                matches_raw = (res.get("data") or {}).get("matches", []) if res_ok else []
 
-                    hc_v, ac_v = _num("HC"), _num("AC")
-                    hy_v, ay_v = _num("HY"), _num("AY")
-                    hr_v, ar_v = _num("HR") or 0, _num("AR") or 0
-                    partidos.append({
-                        "f": f, "h": row["HomeTeam"].strip(), "a": row["AwayTeam"].strip(),
-                        "gh": gh, "ga": ga,
-                        "hc": hc_v, "ac": ac_v, "hy": hy_v, "ay": ay_v,
-                    })
-                    if "_VERIFIED_RESULTS_CACHE" in globals():
-                        c_tot = int(hc_v + ac_v) if (hc_v is not None and ac_v is not None) else None
-                        y_tot = int(hy_v + ay_v) if (hy_v is not None and ay_v is not None) else None
-                        r_tot = int(hr_v + ar_v)
-                        cards_tot = (y_tot + r_tot * 2) if y_tot is not None else None
-                        _VERIFIED_RESULTS_CACHE[(f.isoformat(), _norm_equipo(row["HomeTeam"]), _norm_equipo(row["AwayTeam"]))] = {
-                            "finished": True, "score_home": gh, "score_away": ga,
-                            "corners_total": c_tot, "cards_total": cards_tot,
-                            "yellow_cards": y_tot, "red_cards": r_tot,
-                            "source": "Football-Data Official CSV"
-                        }
-                if len(partidos) > antes:
-                    ok.append(f"{liga} {temp}")
-                else:
-                    fallos.append(f"{liga} {temp}: sin partidos válidos")
-            except Exception as exc:
-                fallos.append(f"{liga} {temp}: {type(exc).__name__}")
+            if not res_ok:
+                fallos.append(f"{liga_nombre}: {err_msg or 'sin respuesta'}")
+                continue
+
+            for m in matches_raw:
+                if str(m.get("status") or "").upper() != "FINISHED":
+                    continue
+                utc_dt = str(m.get("utcDate") or "")
+                f_iso = utc_dt[:10]
+                if not f_iso:
+                    continue
+                h_name = ((m.get("homeTeam") or {}).get("name") or "").strip()
+                a_name = ((m.get("awayTeam") or {}).get("name") or "").strip()
+                if not h_name or not a_name:
+                    continue
+                score_ft = ((m.get("score") or {}).get("fullTime") or {})
+                gh, ga = score_ft.get("home"), score_ft.get("away")
+                if gh is None or ga is None:
+                    continue
+                gh, ga = int(gh), int(ga)
+
+                stage = str(m.get("stage") or "").upper()
+                if "FRIENDLY" in stage:
+                    continue
+
+                ent_type = "seleccion" if cod_interno == "UNL" else "club"
+                partidos.append({
+                    "f": datetime.strptime(f_iso, "%Y-%m-%d").date(),
+                    "f_iso": f_iso,
+                    "h": h_name, "a": a_name,
+                    "gh": gh, "ga": ga,
+                    "liga": liga_nombre, "cod": cod_interno,
+                    "tipo_entidad": ent_type,
+                    "referees": m.get("referees") or [],
+                })
+                if "_VERIFIED_RESULTS_CACHE" in globals():
+                    _VERIFIED_RESULTS_CACHE[(f_iso, _norm_equipo(h_name), _norm_equipo(a_name))] = {
+                        "finished": True, "score_home": gh, "score_away": ga,
+                        "corners_total": None, "cards_total": None,
+                        "yellow_cards": None, "red_cards": None,
+                        "competicion": liga_nombre, "codigo_liga": cod_interno,
+                        "tipo_entidad": ent_type, "es_oficial": True, "simulado": False,
+                        "source": "football-data.org"
+                    }
+
+            if len(partidos) > antes:
+                ok.append(f"{liga_nombre} ({len(partidos) - antes})")
+            else:
+                ok.append(f"{liga_nombre} (0 finalizados)")
+        except Exception as exc:
+            fallos.append(f"{liga_nombre}: {type(exc).__name__}")
+
+    with FootballDataOrgClient._LOCK:
+        FootballDataOrgClient._STATUS["ultima_sincronizacion"] = actualizado_ts
 
     if not partidos:
         with _RATINGS_LOCK:
             RATINGS_ESTADO.update({
-                "actualizado": datetime.now(timezone.utc).isoformat(),
-                "ligas_ok": ok, "ligas_fallidas": fallos, "temporadas": TEMPORADAS_RATINGS,
+                "actualizado": actualizado_ts,
+                "ligas_ok": ok, "ligas_fallidas": fallos,
+                "temporadas": ["football-data.org-v4"],
             })
             return dict(RATINGS_ESTADO)
 
     partidos.sort(key=lambda p: p["f"])
     elo, agg = {}, {}
+    nuevo_hist = {}
+    seen_hist = set()
+
     for p in partidos:
-        h, a = _norm_equipo(p["h"]), _norm_equipo(p["a"])
-        rh, ra = elo.get(h, 1500.0), elo.get(a, 1500.0)
-        elo[h], elo[a] = _elo_partido(rh, ra, p["gh"], p["ga"])
-        for eq, gf, gc, cor, tar in (
-            (h, p["gh"], p["ga"], p["hc"], p["hy"]),
-            (a, p["ga"], p["gh"], p["ac"], p["ay"]),
-        ):
-            d = agg.setdefault(eq, {
-                "n": 0, "gf": 0, "gc": 0,
-                "cor_sum": 0.0, "cor_n": 0,
-                "tar_sum": 0.0, "tar_n": 0,
-            })
+        h_n, a_n = _norm_equipo(p["h"]), _norm_equipo(p["a"])
+        rh, ra = elo.get(h_n, 1500.0), elo.get(a_n, 1500.0)
+        elo[h_n], elo[a_n] = _elo_partido(rh, ra, p["gh"], p["ga"])
+
+        for eq, gf, gc in ((h_n, p["gh"], p["ga"]), (a_n, p["ga"], p["gh"])):
+            d = agg.setdefault(eq, {"n": 0, "gf": 0, "gc": 0})
             d["n"] += 1
             d["gf"] += gf
             d["gc"] += gc
-            if cor is not None:
-                d["cor_sum"] += cor
-                d["cor_n"] += 1
-            if tar is not None:
-                d["tar_sum"] += tar
-                d["tar_n"] += 1
+
+        dedup_k = (p["f_iso"], h_n, a_n)
+        if dedup_k in seen_hist:
+            continue
+        seen_hist.add(dedup_k)
+
+        marcador_str = f"{p['gh']} - {p['ga']}"
+        res_h = "V" if p["gh"] > p["ga"] else ("E" if p["gh"] == p["ga"] else "D")
+        res_a = "V" if p["ga"] > p["gh"] else ("E" if p["ga"] == p["gh"] else "D")
+
+        nuevo_hist.setdefault(h_n, []).append({
+            "fecha": p["f_iso"], "competicion": p["liga"], "codigo_liga": p["cod"],
+            "rival": p["a"], "condicion": "L", "gf": p["gh"], "gc": p["ga"],
+            "marcador": marcador_str, "resultado": res_h,
+            "corners": None, "tarjetas": None, "tiros": None, "tiros_puerta": None,
+            "tipo_entidad": p["tipo_entidad"], "es_oficial": True, "simulado": False,
+            "fuente": "football-data.org"
+        })
+        nuevo_hist.setdefault(a_n, []).append({
+            "fecha": p["f_iso"], "competicion": p["liga"], "codigo_liga": p["cod"],
+            "rival": p["h"], "condicion": "V", "gf": p["ga"], "gc": p["gh"],
+            "marcador": marcador_str, "resultado": res_a,
+            "corners": None, "tarjetas": None, "tiros": None, "tiros_puerta": None,
+            "tipo_entidad": p["tipo_entidad"], "es_oficial": True, "simulado": False,
+            "fuente": "football-data.org"
+        })
 
     prom_gf = sum(p["gh"] + p["ga"] for p in partidos) / (2.0 * len(partidos)) if partidos else 1.35
     nuevos = {}
     for eq, d in agg.items():
-        if d["n"] < 3:
+        if d["n"] < 1:
             continue
         nuevos[eq] = {
             "ataque": round((d["gf"] / d["n"]) / max(0.5, prom_gf), 3),
             "defensa": round((d["gc"] / d["n"]) / max(0.5, prom_gf), 3),
+            "gf_promedio": round(d["gf"] / d["n"], 3),
+            "gc_promedio": round(d["gc"] / d["n"], 3),
             "elo": round(elo.get(eq, 1500.0), 1),
             "partidos": d["n"],
-            "corners_promedio": round(d["cor_sum"] / d["cor_n"], 2) if d["cor_n"] else 5.0,
-            "tarjetas_promedio": round(d["tar_sum"] / d["tar_n"], 2) if d["tar_n"] else 2.0,
+            "corners_promedio": None,
+            "corners_muestra": 0,
+            "tarjetas_promedio": None,
+            "tarjetas_muestra": 0,
+            "fuente": "football-data.org",
+            "actualizado_en": actualizado_ts,
         }
 
     with _RATINGS_LOCK:
         RATINGS_REALES.clear()
         RATINGS_REALES.update(nuevos)
+        VERIFIED_TEAM_HISTORY.clear()
+        VERIFIED_TEAM_HISTORY.update(nuevo_hist)
         RATINGS_ESTADO.update({
-            "actualizado": datetime.now(timezone.utc).isoformat(),
+            "actualizado": actualizado_ts,
             "equipos_con_datos": len(nuevos),
             "partidos_usados": len(partidos),
             "ligas_ok": ok,
             "ligas_fallidas": fallos,
-            "temporadas": TEMPORADAS_RATINGS,
+            "temporadas": ["football-data.org-v4"],
         })
-    logger.info("Ratings reales recalculados con éxito: %d equipos, %d partidos.", len(nuevos), len(partidos))
+    logger.info("Ratings reales sincronizados desde football-data.org: %d equipos, %d partidos.", len(nuevos), len(partidos))
     return dict(RATINGS_ESTADO)
 
 def _ratings_para(nombre):
@@ -17156,7 +18052,8 @@ def _arranque_ratings():
     except Exception as exc:
         logger.warning("No se pudieron cargar ratings de football-data.co.uk al arrancar: %s", exc)
 
-threading.Thread(target=_arranque_ratings, daemon=True).start()
+if os.getenv("DISABLE_BACKGROUND_WORKERS", "false").lower() != "true":
+    threading.Thread(target=_arranque_ratings, daemon=True).start()
 
 
 def _plan_de_peticion() -> str:
@@ -17663,7 +18560,8 @@ def _loop_mantenimiento_quincenal_y_calendario():
             logger.debug("Aviso en loop de mantenimiento automático: %s", e_maint)
         time.sleep(1800)  # Revisa cada 30 minutos
 
-threading.Thread(target=_loop_mantenimiento_quincenal_y_calendario, daemon=True).start()
+if os.getenv("DISABLE_BACKGROUND_WORKERS", "false").lower() != "true":
+    threading.Thread(target=_loop_mantenimiento_quincenal_y_calendario, daemon=True).start()
 
 
 def create_app() -> Flask:
@@ -18177,7 +19075,7 @@ def create_app() -> Flask:
                 fix["liga"] = div_name
                 loc = fix.get("local", "").strip()
                 vis = fix.get("visitante", "").strip()
-                m_key = f"{loc.lower()[:5]}_{vis.lower()[:5]}_{fecha_dia_solo}"
+                m_key = CalendarSyncService.canonical_fixture_key(loc, vis, fecha_dia_solo)
 
                 if m_key in seen_matches or fix["id_partido"] in seen_matches:
                     continue
@@ -18209,6 +19107,7 @@ def create_app() -> Flask:
                     "fecha": fecha_dia_solo,
                     "hora_utc": (f_utc[11:16] if len(f_utc) >= 16 else "14:00"),
                     "estado": fix.get("estado", "SCHEDULED"),
+                    "estado_calendario": CalendarSyncService.get_fixture_overlay(fix),
                     "jornada": fix.get("jornada"),
                     "probabilidades": analisis["probabilidades"],
                     "key_probabilities": analisis.get("key_probabilities", {}),
@@ -18234,7 +19133,7 @@ def create_app() -> Flask:
                     destacados.append(item)
 
             for k in todos:
-                todos[k] = sorted(todos[k], key=lambda x: str(x.get("fecha") or ""))
+                todos[k] = sorted(todos[k], key=lambda x: (str(x.get("fecha") or ""), str(x.get("hora_utc") or "")))
 
             def _extract_prob(p_item):
                 p_raw = p_item.get("pronostico_principal", {}).get("probabilidad", "50%")
@@ -18318,8 +19217,10 @@ def create_app() -> Flask:
                 probs = analysis["probabilidades"]["1X2"]
                 fair = analysis["probabilidades"]["fair_odds"]
 
-                odds_1 = round(fair["1"] * 1.09, 2)
-                odds_2 = round(fair["2"] * 1.09, 2)
+                odds_1 = float(m.get("cuota_1") or 0)
+                odds_2 = float(m.get("cuota_2") or 0)
+                if odds_1 <= 1.0 and odds_2 <= 1.0:
+                    continue
 
                 k1 = analytics.evaluate_kelly_stake(probs["1"], odds_1)
                 if k1["value_detected"]:
@@ -18522,6 +19423,68 @@ def create_app() -> Flask:
             logger.error("Error en /api/v1/ai/triple-analysis: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
 
+    
+    @app.route("/api/v1/admin/calendar/audit", methods=["GET"])
+    @require_auth
+    def admin_calendar_audit():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        local_audit = CalendarSyncService.audit_manual_calendar()
+        return jsonify({
+            "success": True,
+            "auditoria_local": local_audit,
+            "ultima_sincronizacion_fd": CalendarSyncService._LAST_AUDIT,
+        }), 200
+
+    @app.route("/api/v1/admin/calendar/sync-verify", methods=["POST"])
+    @require_auth
+    def admin_calendar_sync_verify():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        body = request.get_json(silent=True) or {}
+        codes = body.get("competiciones")
+        d_from = str(body.get("dateFrom") or "").strip()
+        d_to = str(body.get("dateTo") or "").strip()
+        report = CalendarSyncService.sync_verify_with_football_data(
+            competition_codes=codes,
+            date_from=d_from,
+            date_to=d_to,
+        )
+        return jsonify({"success": True, "report": report}), 200
+
+    @app.route("/api/v1/admin/enrichment/run", methods=["POST"])
+    @require_auth
+    def admin_run_enrichment():
+        user_email = (g.user_email or "").strip().lower()
+        if user_email not in OWNER_EMAILS:
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        body = request.get_json(silent=True) or {}
+        target_date = str(body.get("fecha") or "").strip()
+        limit = int(body.get("limit") or 15)
+        threading.Thread(
+            target=MatchEnrichmentCache.enrich_calendar_worker,
+            kwargs={"target_date": target_date, "limit": limit},
+            daemon=True,
+        ).start()
+        return jsonify({
+            "success": True,
+            "message": "Worker de enriquecimiento controlado iniciado en segundo plano.",
+            "fecha": target_date or "TODAS",
+        }), 200
+
+    @app.route("/api/v1/admin/football-data-status", methods=["GET"])
+    @require_auth
+    def admin_football_data_status():
+        if not _verificar_es_admin():
+            return jsonify({"success": False, "error": "Acceso restringido al administrador."}), 403
+        return jsonify({
+            "success": True,
+            "estado_ratings": dict(RATINGS_ESTADO),
+            "football_data_org": FootballDataOrgClient.get_status_report(),
+        }), 200
+
     @app.route("/api/v1/top3/daily", methods=["GET"])
     def get_daily_top3():
         try:
@@ -18542,7 +19505,7 @@ def create_app() -> Flask:
                     target_date = fechas_futuras[0]
                     matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
 
-            limite_top = int(request.args.get("limit", 5))
+            limite_top = min(3, max(1, int(request.args.get("limit", 3))))
             # Respetar estrictamente los partidos programados en target_date sin mezclar partidos de otros días
             top3_list = _seleccionar_top5_diversificado(matches_day, target_date, limit=limite_top)
             for item in top3_list:
@@ -18739,66 +19702,14 @@ def create_app() -> Flask:
             return jsonify({"success": False, "error": str(e)}), 500
     # VIP 6: Historial de Auditoría Transparente (Estilo Oddster & Consenso Top 5 Tipsters Mundiales)
     global _HISTORICAL_ISSUED_TOP5
-    _HISTORICAL_ISSUED_TOP5 = {
-        "2026-10-12": [
-            {"local": "Levante", "visitante": "Sevilla", "partido": "Levante vs Sevilla", "liga": "España · LaLiga", "seleccion": "Más de 3.5 tarjetas", "probabilidad": "88%", "cuota": "1.42", "justificacion": "El promedio combinado de tarjetas (4.60) supera con holgura la línea de 3.5 en duelo de alta fricción.", "tipster_model": "Motor PredicXion IA • Línea Arbitral", "stat_projection_label": "Proy. tarjetas: 4.6", "fecha": "2026-10-12", "fecha_utc": "2026-10-12T19:00:00Z"},
-            {"local": "Atalanta", "visitante": "Venezia", "partido": "Atalanta vs Venezia", "liga": "Italia · Serie A", "seleccion": "Atalanta gana y Más de 1.5 goles", "probabilidad": "85%", "cuota": "1.62", "justificacion": "Atalanta domina el cruce ofensivo (2.35 vs 0.72 xG). Combinada de 2 selecciones con piso de goles firme.", "tipster_model": "Motor PredicXion IA • Supremacía xG", "stat_projection_label": "xG: 2.35 vs 0.72", "fecha": "2026-10-12", "fecha_utc": "2026-10-12T18:45:00Z"},
-            {"local": "Red Bull Bragantino", "visitante": "Cruzeiro", "partido": "Red Bull Bragantino vs Cruzeiro", "liga": "Brasil · Brasileirão", "seleccion": "Más de 8.5 córners", "probabilidad": "82%", "cuota": "1.54", "justificacion": "El flujo por bandas proyecta 10.8 córners combinados, superando el piso de 8.5 sin forzar líneas altas.", "tipster_model": "Motor PredicXion IA • Volumen de Bandas", "stat_projection_label": "Proy. córners: 10.8", "fecha": "2026-10-12", "fecha_utc": "2026-10-12T21:00:00Z"},
-            {"local": "Coritiba", "visitante": "Botafogo", "partido": "Coritiba vs Botafogo", "liga": "Brasil · Brasileirão", "seleccion": "Botafogo gana o empata y Más de 1.5 goles", "probabilidad": "79%", "cuota": "1.68", "justificacion": "Botafogo luce más estable en el cruce estadístico y el piso de goles (2.60 xG) respalda +1.5 goles.", "tipster_model": "Motor PredicXion IA • Cobertura + Goles", "stat_projection_label": "Proy. goles: 2.60 xG", "fecha": "2026-10-12", "fecha_utc": "2026-10-12T14:00:00Z"},
-            {"local": "Torino", "visitante": "Udinese", "partido": "Torino vs Udinese", "liga": "Italia · Serie A", "seleccion": "Más de 3.5 tarjetas", "probabilidad": "74%", "cuota": "1.58", "justificacion": "El promedio histórico del cruce apuntaba a 4.1 tarjetas, aunque el partido tuvo ritmo inusualmente limpio.", "tipster_model": "Motor PredicXion IA • Fricción H2H", "stat_projection_label": "Proy. tarjetas: 4.1", "fecha": "2026-10-12", "fecha_utc": "2026-10-12T18:45:00Z"},
-        ],
-        "2026-10-13": [
-            {"local": "Galatasaray", "visitante": "Barcelona", "partido": "Galatasaray vs Barcelona", "liga": "UEFA Champions League", "seleccion": "Barcelona gana y Más de 1.5 goles", "probabilidad": "89%", "cuota": "1.68", "justificacion": "Superioridad ofensiva de Barcelona (2.35 xG) con piso de goles activo. Jugada de 2 selecciones de alto valor.", "tipster_model": "Motor PredicXion IA • Supremacía xG", "stat_projection_label": "xG: 1.15 vs 2.35", "fecha": "2026-10-13", "fecha_utc": "2026-10-13T19:00:00Z"},
-            {"local": "Arsenal", "visitante": "Lille", "partido": "Arsenal vs Lille", "liga": "UEFA Champions League", "seleccion": "Arsenal gana y Más de 1.5 goles", "probabilidad": "86%", "cuota": "1.64", "justificacion": "Arsenal impone dominio territorial en casa (2.15 vs 0.80 xG). El piso de 1.5 goles acompaña la victoria local.", "tipster_model": "Motor PredicXion IA • Matriz Poisson", "stat_projection_label": "xG: 2.15 vs 0.80", "fecha": "2026-10-13", "fecha_utc": "2026-10-13T14:00:00Z"},
-            {"local": "Viking", "visitante": "Bayern Múnich", "partido": "Viking vs Bayern Múnich", "liga": "UEFA Champions League", "seleccion": "Más de 2.5 goles", "probabilidad": "84%", "cuota": "1.52", "justificacion": "El techo de goles proyecta 3.45 xG combinados. Ritmo vertical en ambas áreas que supera la línea de 2.5.", "tipster_model": "Motor PredicXion IA • Calidad de Tiro xG", "stat_projection_label": "Proy. goles: 3.45 xG", "fecha": "2026-10-13", "fecha_utc": "2026-10-13T16:45:00Z"},
-            {"local": "Atlético de Madrid", "visitante": "Manchester United", "partido": "Atlético de Madrid vs Manchester United", "liga": "UEFA Champions League", "seleccion": "Atlético de Madrid gana o empata y Menos de 3.5 goles", "probabilidad": "81%", "cuota": "1.72", "justificacion": "Solidez de bloque de Simeone en casa (0.88 xGA) ante un rival de bajo ritmo goleador.", "tipster_model": "Motor PredicXion IA • Ajuste Dixon-Coles", "stat_projection_label": "Proy. goles: 2.25 xG", "fecha": "2026-10-13", "fecha_utc": "2026-10-13T19:00:00Z"},
-            {"local": "Villarreal", "visitante": "Nápoles", "partido": "Villarreal vs Nápoles", "liga": "UEFA Champions League", "seleccion": "Más de 8.5 córners", "probabilidad": "75%", "cuota": "1.65", "justificacion": "El promedio de desborde por bandas apuntaba a 9.8 córners, quedándose en 7 saques de esquina.", "tipster_model": "Motor PredicXion IA • Volumen de Bandas", "stat_projection_label": "Proy. córners: 9.8", "fecha": "2026-10-13", "fecha_utc": "2026-10-13T19:00:00Z"},
-        ],
-        "2026-10-14": [
-            {"local": "LASK", "visitante": "Liverpool", "partido": "LASK vs Liverpool", "liga": "UEFA Champions League", "seleccion": "Liverpool gana y Más de 1.5 goles", "probabilidad": "90%", "cuota": "1.55", "justificacion": "Diferencial ofensivo abrumador de Liverpool (2.45 xG) frente a una zaga de LASK que concede 1.85 xGA.", "tipster_model": "Motor PredicXion IA • Supremacía xG", "stat_projection_label": "xG: 0.95 vs 2.45", "fecha": "2026-10-14", "fecha_utc": "2026-10-14T11:45:00Z"},
-            {"local": "Slovan Bratislava", "visitante": "Stuttgart", "partido": "Slovan Bratislava vs Stuttgart", "liga": "UEFA Champions League", "seleccion": "Stuttgart gana y Más de 1.5 goles", "probabilidad": "86%", "cuota": "1.62", "justificacion": "Stuttgart llega con 3 victorias seguidas y 2.20 xG proyectado frente a una defensa permeable.", "tipster_model": "Motor PredicXion IA • Ganador + Goles", "stat_projection_label": "xG: 0.85 vs 2.20", "fecha": "2026-10-14", "fecha_utc": "2026-10-14T14:00:00Z"},
-            {"local": "Manchester City", "visitante": "PSG", "partido": "Manchester City vs PSG", "liga": "UEFA Champions League", "seleccion": "Ambos equipos anotan: Sí", "probabilidad": "84%", "cuota": "1.66", "justificacion": "Ambos ataques generan peligro constante (2.10 xG City vs 1.95 xG PSG). Señal de gol en ambas porterías.", "tipster_model": "Motor PredicXion IA • Transición Ofensiva", "stat_projection_label": "Proy. goles: 4.05 xG", "fecha": "2026-10-14", "fecha_utc": "2026-10-14T14:00:00Z"},
-            {"local": "Feyenoord", "visitante": "Como", "partido": "Feyenoord vs Como", "liga": "UEFA Champions League", "seleccion": "Más de 2.5 goles", "probabilidad": "81%", "cuota": "1.74", "justificacion": "Choque abierto entre dos ataques dinámicos (3.15 xG combinados). Sigue la proyección de alta anotación.", "tipster_model": "Motor PredicXion IA • Techo de Goles", "stat_projection_label": "Proy. goles: 3.15 xG", "fecha": "2026-10-14", "fecha_utc": "2026-10-14T11:45:00Z"},
-            {"local": "Bodo/Glimt", "visitante": "Borussia Dortmund", "partido": "Bodo/Glimt vs Borussia Dortmund", "liga": "UEFA Champions League", "seleccion": "Más de 9.5 córners", "probabilidad": "78%", "cuota": "1.82", "justificacion": "Césped sintético rápido y amplitud de bandas proyectan 11.4 córners sin arriesgar el 1X2 visitante.", "tipster_model": "Motor PredicXion IA • Volumen de Bandas", "stat_projection_label": "Proy. córners: 11.4", "fecha": "2026-10-14", "fecha_utc": "2026-10-14T14:00:00Z"},
-        ],
-        "2026-10-16": [
-            {"local": "Deportivo de La Coruña", "visitante": "Levante", "partido": "Deportivo de La Coruña vs Levante", "liga": "España · LaLiga", "seleccion": "Menos de 5.5 tarjetas", "probabilidad": "92%", "cuota": "1.38", "justificacion": "El promedio combinado de tarjetas (3.00) está por debajo de 5.5. El contexto del partido no justifica una línea alta.", "tipster_model": "Motor PredicXion IA • Control de Línea Arbitral", "stat_projection_label": "Proy. tarjetas: 3.0", "fecha": "2026-10-16", "fecha_utc": "2026-10-16T14:00:00Z"},
-            {"local": "Eintracht Frankfurt", "visitante": "Colonia", "partido": "Eintracht Frankfurt vs Colonia", "liga": "Alemania · Bundesliga", "seleccion": "Más de 2.5 goles", "probabilidad": "85%", "cuota": "1.65", "justificacion": "El piso ofensivo en Frankfurt proyecta 3.25 xG combinados. La señal respalda superar la línea de 2.5 goles.", "tipster_model": "Motor PredicXion IA • Volumen Ofensivo", "stat_projection_label": "Proy. goles: 3.25 xG", "fecha": "2026-10-16", "fecha_utc": "2026-10-16T13:30:00Z"},
-            {"local": "Mirassol", "visitante": "Internacional", "partido": "Mirassol vs Internacional", "liga": "Brasil · Brasileirão", "seleccion": "Internacional gana o empata y Más de 1.5 goles", "probabilidad": "81%", "cuota": "1.62", "justificacion": "Internacional llega invicto con 1.80 xG proyectado. La doble oportunidad + 1.5 goles protege el empate.", "tipster_model": "Motor PredicXion IA • Doble Oportunidad + Goles", "stat_projection_label": "Proy. goles: 2.75 xG", "fecha": "2026-10-16", "fecha_utc": "2026-10-16T18:00:00Z"},
-            {"local": "Le Mans", "visitante": "Toulouse", "partido": "Le Mans vs Toulouse", "liga": "Francia · Ligue 1", "seleccion": "Más de 1.5 goles", "probabilidad": "76%", "cuota": "1.40", "justificacion": "El piso de goles luce estable (2.50 xG). Más de 1.5 goles sigue la proyección sin forzar la línea de 2.5.", "tipster_model": "Motor PredicXion IA • Piso de Goles", "stat_projection_label": "Proy. goles: 2.50 xG", "fecha": "2026-10-16", "fecha_utc": "2026-10-16T13:45:00Z"},
-            {"local": "Frosinone", "visitante": "Sassuolo", "partido": "Frosinone vs Sassuolo", "liga": "Italia · Serie A", "seleccion": "Frosinone gana o empata", "probabilidad": "68%", "cuota": "1.58", "justificacion": "Frosinone luce más estable en el cruce estadístico como local. La doble oportunidad evita forzar la victoria directa.", "tipster_model": "Motor PredicXion IA • Cobertura de Varianza", "stat_projection_label": "Señal 1X: 68%", "fecha": "2026-10-16", "fecha_utc": "2026-10-16T13:45:00Z"}
-        ],
-        "2026-10-17": [
-            {"local": "Hamburgo", "visitante": "Stuttgart", "partido": "Hamburgo vs Stuttgart", "liga": "Alemania · Bundesliga", "seleccion": "Más de 3.5 tarjetas", "probabilidad": "89%", "cuota": "1.48", "justificacion": "El promedio combinado de tarjetas (4.55) supera con margen la línea de 3.5 en un duelo de alta fricción.", "tipster_model": "Motor PredicXion IA • Línea Arbitral", "stat_projection_label": "Proy. tarjetas: 4.5", "fecha": "2026-10-17", "fecha_utc": "2026-10-17T13:30:00Z"},
-            {"local": "Brentford", "visitante": "Liverpool", "partido": "Brentford vs Liverpool", "liga": "Inglaterra · Premier League", "seleccion": "Liverpool gana y Más de 1.5 goles", "probabilidad": "85%", "cuota": "1.74", "justificacion": "Liverpool promedia 2.25 xG y Brentford concede espacios en transición. Combinada de 2 selecciones con alto valor.", "tipster_model": "Motor PredicXion IA • Ganador + Goles", "stat_projection_label": "xG: 1.15 vs 2.25", "fecha": "2026-10-17", "fecha_utc": "2026-10-17T14:00:00Z"},
-            {"local": "Everton", "visitante": "Chelsea", "partido": "Everton vs Chelsea", "liga": "Inglaterra · Premier League", "seleccion": "Más de 2.5 goles", "probabilidad": "82%", "cuota": "1.78", "justificacion": "El piso ofensivo combinado alcanza 3.10 xG. La proyección respalda superar los 2.5 goles totales.", "tipster_model": "Motor PredicXion IA • Volumen xG", "stat_projection_label": "Proy. goles: 3.10 xG", "fecha": "2026-10-17", "fecha_utc": "2026-10-17T11:30:00Z"},
-            {"local": "Roma", "visitante": "Genoa", "partido": "Roma vs Genoa", "liga": "Italia · Serie A", "seleccion": "Roma gana y Más de 1.5 goles", "probabilidad": "80%", "cuota": "1.66", "justificacion": "Roma llega invicta y domina el cruce en el Olímpico (2.05 vs 0.78 xG) ante una zaga visitante vulnerable.", "tipster_model": "Motor PredicXion IA • Matriz Poisson", "stat_projection_label": "xG: 2.05 vs 0.78", "fecha": "2026-10-17", "fecha_utc": "2026-10-17T13:45:00Z"},
-            {"local": "Valencia", "visitante": "Athletic Club", "partido": "Valencia vs Athletic Club", "liga": "España · LaLiga", "seleccion": "Más de 1.5 goles", "probabilidad": "72%", "cuota": "1.44", "justificacion": "El piso de goles proyectaba 2.40 xG, pero ambos equipos cerraron líneas en un 0-0 sin conversión.", "tipster_model": "Motor PredicXion IA • Piso de Goles", "stat_projection_label": "Proy. goles: 2.40 xG", "fecha": "2026-10-17", "fecha_utc": "2026-10-17T14:00:00Z"}
-        ],
-        "2026-10-18": [
-            {"local": "Real Madrid", "visitante": "Sevilla", "partido": "Real Madrid vs Sevilla", "liga": "España · LaLiga", "seleccion": "Real Madrid gana y Más de 1.5 goles", "probabilidad": "91%", "cuota": "1.56", "justificacion": "Real Madrid domina ampliamente en el Bernabéu (2.45 vs 0.85 xG). Combinada de 2 selecciones con señal máxima.", "tipster_model": "Motor PredicXion IA • Ganador + Goles", "stat_projection_label": "xG: 2.45 vs 0.85", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T14:00:00Z"},
-            {"local": "Juventus", "visitante": "Lazio", "partido": "Juventus vs Lazio", "liga": "Italia · Serie A", "seleccion": "Menos de 5.5 tarjetas", "probabilidad": "88%", "cuota": "1.36", "justificacion": "El promedio combinado de tarjetas (3.20) está muy por debajo de 5.5. El control táctico en Turín modera las faltas.", "tipster_model": "Motor PredicXion IA • Control de Línea Arbitral", "stat_projection_label": "Proy. tarjetas: 3.2", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T13:45:00Z"},
-            {"local": "AC Milan", "visitante": "Atalanta", "partido": "AC Milan vs Atalanta", "liga": "Italia · Serie A", "seleccion": "Ambos equipos anotan: Sí", "probabilidad": "84%", "cuota": "1.68", "justificacion": "Dos de las delanteras más incisivas de Serie A (1.85 vs 1.78 xG). Señal de gol en ambas porterías.", "tipster_model": "Motor PredicXion IA • Gol en Ambas Áreas", "stat_projection_label": "Proy. goles: 3.63 xG", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T11:00:00Z"},
-            {"local": "Nottingham Forest", "visitante": "Arsenal", "partido": "Nottingham Forest vs Arsenal", "liga": "Inglaterra · Premier League", "seleccion": "Arsenal gana o empata y Más de 1.5 goles", "probabilidad": "82%", "cuota": "1.52", "justificacion": "Arsenal presenta superioridad estructural (2.05 xG) y el piso de 1.5 goles se sostiene con solvencia.", "tipster_model": "Motor PredicXion IA • Doble Oportunidad + Goles", "stat_projection_label": "Proy. goles: 2.85 xG", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T10:30:00Z"},
-            {"local": "Bayer Leverkusen", "visitante": "Friburgo", "partido": "Bayer Leverkusen vs Friburgo", "liga": "Alemania · Bundesliga", "seleccion": "Más de 2.5 goles", "probabilidad": "79%", "cuota": "1.64", "justificacion": "El ritmo ofensivo de Leverkusen en casa proyecta 3.20 xG combinados, superando la línea de 2.5 goles.", "tipster_model": "Motor PredicXion IA • Techo de Goles", "stat_projection_label": "Proy. goles: 3.20 xG", "fecha": "2026-10-18", "fecha_utc": "2026-10-18T08:30:00Z"}
-        ],
-        "2026-10-19": [
-            {"local": "Getafe", "visitante": "Rayo Vallecano", "partido": "Getafe vs Rayo Vallecano", "liga": "Primera División", "seleccion": "Más de 4.5 tarjetas", "probabilidad": "88%", "cuota": "1.42", "justificacion": "El promedio combinado de tarjetas en el derbi madrileño supera la línea de 4.5 por alta fricción táctica.", "tipster_model": "Motor PredicXion IA • Índice de Fricción H2H", "stat_projection_label": "Promedio: 5.2 tarjetas", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T14:00:00Z"},
-            {"local": "Parma", "visitante": "Torino", "partido": "Parma vs Torino", "liga": "Serie A", "seleccion": "Torino gana o empata y Más de 1.5 goles", "probabilidad": "84%", "cuota": "1.68", "justificacion": "Torino llega con mejor bloque competitivo y el piso ofensivo proyecta 2.75 xG combinados.", "tipster_model": "Motor PredicXion IA • Doble Oportunidad + Goles", "stat_projection_label": "Proy. goles: 2.75 xG", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T13:45:00Z"},
-            {"local": "Sporting Braga", "visitante": "Gil Vicente", "partido": "Sporting Braga vs Gil Vicente", "liga": "Primeira Liga", "seleccion": "Sporting Braga gana y Más de 1.5 goles", "probabilidad": "81%", "cuota": "2.16", "justificacion": "Braga domina el volumen ofensivo local (1.95 xG) en un duelo con piso de 1.5 goles.", "tipster_model": "Motor PredicXion IA • Supremacía xG + Goles", "stat_projection_label": "Goles esp.: 1.95 vs 0.95 xG", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T14:15:00Z"},
-            {"local": "Tottenham", "visitante": "Coventry", "partido": "Tottenham vs Coventry", "liga": "Premier League", "seleccion": "Ambos equipos anotan: Sí", "probabilidad": "80%", "cuota": "1.62", "justificacion": "Ritmo alto y defensa adelantada de Tottenham que favorece goles en ambas áreas.", "tipster_model": "Motor PredicXion IA • Gol en Ambas Áreas", "stat_projection_label": "Proy. goles: 3.45 xG", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T14:00:00Z"},
-            {"local": "Monza", "visitante": "Cagliari", "partido": "Monza vs Cagliari", "liga": "Serie A", "seleccion": "Más de 1.5 goles", "probabilidad": "78%", "cuota": "1.60", "justificacion": "El piso de goles proyecta 2.55 xG combinados sin necesidad de forzar el 2.5.", "tipster_model": "Motor PredicXion IA • Piso de Goles Seguro", "stat_projection_label": "Proyección: 2.55 goles esp.", "fecha": "2026-10-19", "fecha_utc": "2026-10-19T11:30:00Z"}
-        ]
-    }
+    _HISTORICAL_ISSUED_TOP5 = {}
 
     def _construir_top5_de_fecha(target_date: str) -> list:
-        """Obtiene exactamente las 5 selecciones del Top 5 oficial para cualquier fecha dada."""
-        if target_date in _HISTORICAL_ISSUED_TOP5:
-            return [dict(x) for x in _HISTORICAL_ISSUED_TOP5[target_date]]
+        """Obtiene hasta 3 selecciones verificadas para `target_date` (nunca usa históricos hardcodeados)."""
         matches_fecha = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
         if not matches_fecha:
             return []
-        return _seleccionar_top5_diversificado(matches_fecha, target_date, limit=5)
+        return _seleccionar_top3_verificado(matches_fecha, target_date, limit=3)
 
     def _auditar_y_liquidar_fecha(fecha_str: str) -> list:
         """Evalúa los 5 partidos del Top 5 de `fecha_str` contra resultados reales (Firestore, SofaScore, ESPN, CSV).
@@ -18908,7 +19819,8 @@ def create_app() -> Flask:
                 logger.debug("Ciclo auto-auditoría: %s", ex_aud)
             time.sleep(300)  # Revisa cada 5 minutos para enviar resultados apenas terminen todos los partidos
 
-    threading.Thread(target=_loop_auto_auditoria, daemon=True).start()
+    if os.getenv("DISABLE_BACKGROUND_WORKERS", "false").lower() != "true":
+        threading.Thread(target=_loop_auto_auditoria, daemon=True).start()
 
     @app.route("/api/v1/vip/auditoria", methods=["GET"])
     def get_auditoria():
@@ -18966,7 +19878,7 @@ def create_app() -> Flask:
         yield_str = f"+{yield_pct}%" if yield_pct >= 0 else f"{yield_pct}%"
 
         # Construir lista de todas las fechas históricas auditadas disponibles para navegar hacia atrás y adelante
-        fechas_hist_set = set(_HISTORICAL_ISSUED_TOP5.keys())
+        fechas_hist_set = set()
         for f_fix in ALL_FIXTURES_POOL:
             f_d = (f_fix.get("fecha_utc") or "")[:10]
             if "2026-10-12" <= f_d < op_date:
@@ -19409,10 +20321,10 @@ def create_app() -> Flask:
         user_email = (g.user_email or "").strip().lower()
         if user_email not in OWNER_EMAILS:
             return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
-        threading.Thread(target=apisports_service.sync_nations_league).start()
+        threading.Thread(target=apisports_service.sync_nations_league, daemon=True).start()
         return jsonify({
             "success": True,
-            "message": "Sincronización de UEFA Nations League iniciada en segundo plano."
+            "message": "Sincronización secundaria API-Sports iniciada en segundo plano (sin sobrescribir calendario manual)."
         }), 200
 
     @app.route("/api/v1/admin/etl/trigger", methods=["POST"])
