@@ -284,14 +284,14 @@
                                 </button>
                                 <div class="px-3 flex items-center gap-2 font-mono text-xs sm:text-sm font-bold text-white">
                                     <i class="fa-regular fa-calendar text-[#00e676]"></i>
-                                    <span id="top3-fecha-display">26.10.2026</span>
+                                    <span id="top3-fecha-display">2026-11-15</span>
                                 </div>
                                 <button onclick="navegarFechaTop3(1)" class="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Día siguiente">
                                     <i class="fa-solid fa-chevron-right text-xs"></i>
                                 </button>
                             </div>
 
-                            <button onclick="cargarTop3('')" class="px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-950/90 text-[#00e676] border border-emerald-500/50 hover:bg-emerald-900/80 transition cursor-pointer flex items-center gap-1.5">
+                            <button onclick="irAHoyTop3()" class="px-3.5 py-2 rounded-xl text-xs font-black bg-emerald-950/90 text-[#00e676] border border-emerald-500/50 hover:bg-emerald-900/80 transition cursor-pointer flex items-center gap-1.5">
                                 <span class="w-2 h-2 rounded-full bg-[#00e676] animate-ping"></span> Hoy
                             </button>
                         </div>
@@ -3333,14 +3333,24 @@
             `;
         }
 
+        function obtenerFechaActualPeruIso() {
+            return new Date().toLocaleDateString("en-CA", { timeZone: "America/Lima" });
+        }
+
         function navegarFechaTop3(delta) {
-            const fechas = (FECHAS_DISPONIBLES_SISTEMA && FECHAS_DISPONIBLES_SISTEMA.length > 0)
-                ? FECHAS_DISPONIBLES_SISTEMA
-                : ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31'];
-            let idx = fechas.indexOf(fechaTop3Activa);
-            if (idx === -1) idx = fechas.length - 1;
-            const nuevoIdx = Math.max(0, Math.min(fechas.length - 1, idx + delta));
-            cargarTop3(fechas[nuevoIdx]);
+            const baseIso = (fechaTop3Activa && /^\d{4}-\d{2}-\d{2}$/.test(fechaTop3Activa))
+                ? fechaTop3Activa
+                : obtenerFechaActualPeruIso();
+            const partes = baseIso.split('-').map(Number);
+            const dt = new Date(Date.UTC(partes[0], partes[1] - 1, partes[2]));
+            dt.setUTCDate(dt.getUTCDate() + Number(delta || 0));
+            const nextIso = dt.toISOString().slice(0, 10);
+            cargarTop3(nextIso);
+        }
+
+        function irAHoyTop3() {
+            const hoyPeru = obtenerFechaActualPeruIso();
+            cargarTop3(hoyPeru);
         }
 
         async function dispararParlayTelegram() {
@@ -3384,7 +3394,7 @@
                     if (displayFecha) {
                         const partes = data.fecha.split('-');
                         if (partes.length === 3) {
-                            displayFecha.innerText = `${partes[2]}.${partes[1]}.${partes[0]}`;
+                            displayFecha.innerText = `${data.fecha} (${partes[2]}/${partes[1]}/${partes[0]})`;
                         }
                     }
                 }
