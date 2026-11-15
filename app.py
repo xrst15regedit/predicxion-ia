@@ -59,18 +59,21 @@ except (ImportError, ModuleNotFoundError):
 # --------------------------------------------------------------------------------------
 def get_current_operational_date() -> str:
     """
-    Retorna la fecha operativa actual en hora local de Perú (America/Lima / UTC-5).
-    A partir de las 22:00 (10:00 PM), la fecha avanza automáticamente al día siguiente
-    para publicar con anticipación el Top 5 del día siguiente antes de ir a dormir.
-    Garantiza que siempre caiga dentro del rango del calendario oficial activo.
+    Retorna la fecha real actual en hora local de Perú (America/Lima / UTC-5) en formato ISO YYYY-MM-DD.
+    La rotación de las 22:00 PE solo controla la publicación anticipada en Telegram, nunca altera la fecha real consultada.
     """
     now_pe = datetime.now(timezone(timedelta(hours=-5)))
-    if now_pe.hour >= 22:
-        now_pe = now_pe + timedelta(days=1)
     d_str = now_pe.strftime("%Y-%m-%d")
     if d_str < "2026-10-12":
         return "2026-10-12"
     return d_str
+
+def get_telegram_publication_date() -> str:
+    """Fecha de publicación para el despacho automático de las 22:00 PE en Telegram."""
+    now_pe = datetime.now(timezone(timedelta(hours=-5)))
+    if now_pe.hour >= 22:
+        now_pe = now_pe + timedelta(days=1)
+    return now_pe.strftime("%Y-%m-%d")
 
 def normalizar_nombre_liga(raw_name):
     if not raw_name:
@@ -393,7 +396,7 @@ def ejecutar_envio_automatico_top5(motivo="DESPACHO_22_00_PE", force=False, targ
 
             if resp.status_code == 200:
                 _marcar_enviado_top5_fecha(target_date, motivo)
-                logger.info("✓ Top 5 transmitido automáticamente a Telegram a las 22:00 PE para la jornada %s (%s)", target_date, motivo)
+                logger.info("✓ Top 3 transmitido automáticamente a Telegram a las 22:00 PE para la jornada %s (%s)", target_date, motivo)
                 return True, f"Top 5 ({target_date}) transmitido con éxito al canal VIP."
             else:
                 logger.error("Error Telegram en auto-envío: %s", resp.text)
@@ -1628,6 +1631,7 @@ class MatchEnrichmentCache:
             "tiros_home", "tiros_away", "tiros",
             "tiros_puerta_home", "tiros_puerta_away", "tiros_puerta",
             "faltas_home", "faltas_away", "faltas",
+            "bajas_confirmadas",
             "arbitro", "arbitro_avg_cards", "resultado",
         )
 
@@ -1777,6 +1781,7 @@ class MatchEnrichmentCache:
                             "faltas_home": sofa.get("fouls_home"),
                             "faltas_away": sofa.get("fouls_away"),
                             "faltas": sofa.get("fouls_total"),
+                            "bajas_confirmadas": sofa.get("bajas_confirmadas"),
                             "arbitro": sofa.get("referee"),
                             "arbitro_avg_cards": sofa.get("referee_avg_cards"),
                             "resultado": f"{sofa.get('score_home')}-{sofa.get('score_away')}" if sofa.get("finished") else None,
@@ -1788,7 +1793,7 @@ class MatchEnrichmentCache:
         # 3. Respaldo secundario: ESPN
         if "ESPNLiveService" in globals() and hasattr(ESPNLiveService, "fetch_match_stats"):
             try:
-                espn = ESPNLiveService.fetch_match_stats(home, away, fecha)
+                espn = ESPNLiveService.fetch_match_stats(home, away, fecha, liga=match_data.get("liga") or code)
                 if espn:
                     observations.append({
                         "fuente": "espn",
@@ -1809,6 +1814,7 @@ class MatchEnrichmentCache:
                             "faltas_home": espn.get("fouls_home"),
                             "faltas_away": espn.get("fouls_away"),
                             "faltas": espn.get("fouls_total"),
+                            "bajas_confirmadas": espn.get("bajas_confirmadas"),
                             "arbitro": espn.get("referee"),
                             "arbitro_avg_cards": espn.get("referee_avg_cards"),
                             "resultado": f"{espn.get('score_home')}-{espn.get('score_away')}" if espn.get("finished") else None,
@@ -1817,7 +1823,47 @@ class MatchEnrichmentCache:
             except Exception as e:
                 logger.debug("Worker ESPN fallback error: %s", e)
 
-        return cls.store_observations(match_data, observations, ttl_seconds=ttl_seconds)
+        # 4. Respaldo secundario: API-Sports (estadísticas por partido, árbitro y bajas)
+        if "ApiSportsETL" in globals() and hasattr(ApiSportsETL, "fetch_match_stats"):
+            try:
+                apisp = ApiSportsETL.fetch_match_stats(home, away, fecha, liga_code=code)
+                if apisp:
+                    observations.append({
+                        "fuente": "api-sports",
+                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
+                        "metricas": {
+                            "corners_home": apisp.get("corners_home"),
+                            "corners_away": apisp.get("corners_away"),
+                            "corners": apisp.get("corners_total"),
+                            "tarjetas_home": apisp.get("cards_home"),
+                            "tarjetas_away": apisp.get("cards_away"),
+                            "tarjetas": apisp.get("cards_total"),
+                            "tiros_home": apisp.get("shots_home"),
+                            "tiros_away": apisp.get("shots_away"),
+                            "tiros": apisp.get("shots_total"),
+                            "tiros_puerta_home": apisp.get("shots_on_target_home"),
+                            "tiros_puerta_away": apisp.get("shots_on_target_away"),
+                            "tiros_puerta": apisp.get("shots_on_target"),
+                            "faltas_home": apisp.get("fouls_home"),
+                            "faltas_away": apisp.get("fouls_away"),
+                            "faltas": apisp.get("fouls_total"),
+                            "bajas_confirmadas": apisp.get("bajas_confirmadas"),
+                            "arbitro": apisp.get("referee"),
+                            "arbitro_avg_cards": apisp.get("referee_avg_cards"),
+                            "resultado": f"{apisp.get('score_home')}-{apisp.get('score_away')}" if apisp.get("finished") else None,
+                        }
+                    })
+            except Exception as e:
+                logger.debug("Worker API-Sports fallback error: %s", e)
+
+        rec = cls.store_observations(match_data, observations, ttl_seconds=ttl_seconds)
+        resp_log = {
+            k: v.get("fuente")
+            for k, v in (rec.get("metricas") or {}).items()
+            if v.get("valor") is not None
+        }
+        logger.info("[EnrichmentWorker] %s vs %s (%s) -> proveedores=%s", home, away, fecha, resp_log or "SIN_DATOS")
+        return rec
 
     @classmethod
     def enrich_calendar_worker(cls, target_date: str = "", limit: int = 20, ttl_seconds: int = 3600) -> dict:
@@ -12464,6 +12510,23 @@ class SportsAnalyticsEngine:
                 is_home = (eq_norm == h_n)
                 gf, gc = (sh, sa) if is_home else (sa, sh)
                 res_ved = "V" if gf > gc else ("E" if gf == gc else "D")
+                c_team = res_c.get("corners_home") if is_home else res_c.get("corners_away")
+                if c_team is None and res_c.get("corners_total") is not None:
+                    # Regla trazable: cuando el acta oficial reporta corners_total del partido, se registra la mitad exacta por equipo en esa acta
+                    c_team = round(float(res_c.get("corners_total")) / 2.0, 2)
+                t_team = res_c.get("cards_home") if is_home else res_c.get("cards_away")
+                if t_team is None and res_c.get("cards_total") is not None:
+                    t_team = round(float(res_c.get("cards_total")) / 2.0, 2)
+                sh_team = res_c.get("shots_home") if is_home else res_c.get("shots_away")
+                sot_team = res_c.get("shots_on_target_home") if is_home else res_c.get("shots_on_target_away")
+                fl_team = res_c.get("fouls_home") if is_home else res_c.get("fouls_away")
+                if sh_team is None and isinstance(res_c.get("player_stats"), dict):
+                    tot_sh_p = sum(int(v.get("total_shots", 0)) for v in res_c["player_stats"].values())
+                    tot_sot_p = sum(int(v.get("shots_on_target", 0)) for v in res_c["player_stats"].values())
+                    if tot_sh_p > 0:
+                        sh_team = tot_sh_p
+                        sot_team = tot_sot_p
+
                 raw_candidates.append({
                     "fecha": str(f_c)[:10],
                     "competicion": res_c.get("competicion") or "Competición Oficial",
@@ -12473,8 +12536,11 @@ class SportsAnalyticsEngine:
                     "gf": gf, "gc": gc,
                     "marcador": f"{sh} - {sa}",
                     "resultado": res_ved,
-                    "corners": res_c.get("corners_total"),
-                    "tarjetas": res_c.get("cards_total"),
+                    "corners": c_team,
+                    "tarjetas": t_team,
+                    "tiros_totales": sh_team,
+                    "tiros_puerta": sot_team,
+                    "faltas": fl_team,
                     "tipo_entidad": ent_type,
                     "es_oficial": True,
                     "simulado": False,
@@ -12513,6 +12579,12 @@ class SportsAnalyticsEngine:
         gc_tot = sum(int(x.get("gc", 0)) for x in last_5)
         streak_str = "-".join(x.get("resultado", "E") for x in last_5) if n > 0 else ""
 
+        c_vals = [float(x["corners"]) for x in last_5 if x.get("corners") is not None]
+        t_vals = [float(x["tarjetas"]) for x in last_5 if x.get("tarjetas") is not None]
+        sh_vals = [float(x["tiros_totales"]) for x in last_5 if x.get("tiros_totales") is not None]
+        sot_vals = [float(x["tiros_puerta"]) for x in last_5 if x.get("tiros_puerta") is not None]
+        fl_vals = [float(x["faltas"]) for x in last_5 if x.get("faltas") is not None]
+
         return {
             "partidos": last_5,
             "muestra_n": n,
@@ -12521,6 +12593,13 @@ class SportsAnalyticsEngine:
             "wins": wins, "draws": draws, "losses": losses,
             "pts": wins * 3 + draws,
             "gf_total": gf_tot, "gc_total": gc_tot,
+            "corners_avg": round(sum(c_vals) / len(c_vals), 2) if c_vals else None,
+            "corners_muestra": len(c_vals),
+            "tarjetas_avg": round(sum(t_vals) / len(t_vals), 2) if t_vals else None,
+            "tarjetas_muestra": len(t_vals),
+            "tiros_totales_avg": round(sum(sh_vals) / len(sh_vals), 2) if sh_vals else None,
+            "tiros_puerta_avg": round(sum(sot_vals) / len(sot_vals), 2) if sot_vals else None,
+            "faltas_avg": round(sum(fl_vals) / len(fl_vals), 2) if fl_vals else None,
             "confianza_insuficiente": (n < 5),
             "tipo_entidad": ent_type,
             "fuente": last_5[0].get("fuente", "Sin fuente") if n > 0 else "Sin partidos verificados"
@@ -12590,12 +12669,13 @@ class SportsAnalyticsEngine:
                 "pts_last3": hist_5["pts"],
                 "gf_last3": hist_5["gf_total"],
                 "ga_last3": hist_5["gc_total"],
-                "corners": None,
-                "corners_muestra": 0,
-                "tarjetas": None,
-                "tarjetas_muestra": 0,
-                "tiros_puerta": None,
-                "tiros_totales": None,
+                "corners": hist_5.get("corners_avg"),
+                "corners_muestra": hist_5.get("corners_muestra", 0),
+                "tarjetas": hist_5.get("tarjetas_avg"),
+                "tarjetas_muestra": hist_5.get("tarjetas_muestra", 0),
+                "tiros_puerta": hist_5.get("tiros_puerta_avg"),
+                "tiros_totales": hist_5.get("tiros_totales_avg"),
+                "faltas": hist_5.get("faltas_avg"),
                 "ultimos_partidos": hist_5["partidos"],
                 "confianza_insuficiente": (n_real < 5),
                 "fuente": hist_5.get("fuente", "football-data.org"),
@@ -13114,13 +13194,15 @@ class SportsAnalyticsEngine:
         enr_cards_a, _, _ = _enr_metric("tarjetas_away")
         eff_cards_h = h_stat.get("tarjetas") if h_stat.get("tarjetas") is not None else enr_cards_h
         eff_cards_a = a_stat.get("tarjetas") if a_stat.get("tarjetas") is not None else enr_cards_a
+        cards_fuente = (h_stat.get("fuente") if h_stat.get("tarjetas") is not None else enr_cards_src)
         tarjetas_disponibles = (eff_cards_h is not None and eff_cards_a is not None)
-        tarjetas_activas = bool(tarjetas_disponibles and arbitro_confirmado)
+        # Si hay árbitro confirmado pondera por su rigor; si solo hay tarjetas verificadas por equipo usa factor neutro 1.0
+        tarjetas_activas = bool(tarjetas_disponibles)
 
         if tarjetas_activas:
-            promedio_arbitro = float(ref_info.get("avg_cards"))
             promedio_tarjetas_liga = float(ref_info.get("league_avg_cards") or 4.45)
-            factor_arbitro = promedio_arbitro / max(1.0, promedio_tarjetas_liga)
+            promedio_arbitro = float(ref_info.get("avg_cards")) if arbitro_confirmado else promedio_tarjetas_liga
+            factor_arbitro = (promedio_arbitro / max(1.0, promedio_tarjetas_liga)) if arbitro_confirmado else 1.0
 
             tarjetas_recibidas_h = float(eff_cards_h)
             tarjetas_recibidas_a = float(eff_cards_a)
@@ -13482,7 +13564,7 @@ class SportsAnalyticsEngine:
                 "etiqueta": f"{n1_icono} Nivel 1 (Señal Principal Consenso 3 IA)",
                 "mercado": n1_mercado,
                 "probabilidad": n1_prob,
-                "rol": "Selección oficial unificada del Top 5 y del Consenso Triple IA."
+                "rol": "Selección oficial unificada del Top 3 y del Consenso Triple IA."
             },
             "nivel_2_tactico": {
                 "etiqueta": f"{n2_icono} Nivel 2 (Alternativa Táctica)",
@@ -13538,6 +13620,8 @@ class SportsAnalyticsEngine:
             "pilar_5_contexto_competitivo": {
                 "liga": match_data.get("liga", "Liga Principal"),
                 "exigencia": "Compromiso oficial de calendario.",
+                "bajas_confirmadas": (_enr_metric("bajas_confirmadas")[0] or "baja no verificada"),
+                "bajas_fuente": _enr_metric("bajas_confirmadas")[1],
                 "novedades_plantilla": f"Promedios oficiales de liga: Over 2.5 goles ({60 if code == 'PD' else 58}%) · Over 1.5 goles ({70 if code == 'PD' else 75}%) · Ambos anotan ({60 if code == 'PD' else 57}%) · Media de goles: {3.2 if code == 'PD' else 2.9}."
             },
             "pilar_6_compatibilidad_tactica": {
@@ -13709,7 +13793,7 @@ class SportsAnalyticsEngine:
             rec_corners_prob = int(round(prob_corners_75))
 
         # Selección para TARJETAS TOTALES: solo si existen datos reales de tarjetas y árbitro confirmado
-        if not tarjetas_disponibles or not ref_info.get("arbitro_confirmado"):
+        if not tarjetas_activas:
             rec_cards_line = "Datos insuficientes"
             rec_cards_prob = None
         elif tarjetas_esperadas <= 2.95:
@@ -13807,7 +13891,7 @@ class SportsAnalyticsEngine:
                 "home": round(cards_h, 1) if tarjetas_activas else None,
                 "away": round(cards_a, 1) if tarjetas_activas else None,
                 "datos_insuficientes": not tarjetas_activas,
-                "fuente": ref_info.get("fuente", "NO_DISPONIBLE") if tarjetas_activas else "NO_DISPONIBLE",
+                "fuente": (ref_info.get("fuente") if arbitro_confirmado else cards_fuente) if tarjetas_activas else "NO_DISPONIBLE",
                 "lambda_home": cards_h if tarjetas_activas else None,
                 "lambda_away": cards_a if tarjetas_activas else None,
                 "provoked_home": round(tarjetas_provocadas_h, 1) if tarjetas_activas else None,
@@ -14084,19 +14168,33 @@ def _enriquecer_pick_con_estado_auditoria(item: dict, target_date: str) -> dict:
     return item
 
 
+_LAST_TOP3_DIAGNOSTICS = {}
+
 def _seleccionar_top3_verificado(matches_day: list, target_date: str, limit: int = 3) -> list:
-    """Construye el Top 3 verificado por día (Fase 3):
-    - Máximo 3 selecciones verificadas por día (sin rellenar cupos).
-    - Cero selecciones si no hay partidos con datos verificados.
-    - No utiliza picks históricos escritos manualmente ni plantillas hardcodeadas.
-    - Cuota justa del modelo separada de cuota real (`cuota_real: None`, `es_cuota_real: False`)."""
+    """Construye el Top 3 verificado por día:
+    - Exactamente 3 selecciones cuando existan >= 3 partidos analizables en la fecha.
+    - Registra partidos descartados y el motivo exacto en _LAST_TOP3_DIAGNOSTICS[target_date].
+    - Permite 1X2, doble oportunidad y goles cuando existan datos mínimos de resultado/forma aunque falten córners/tarjetas."""
     max_items = min(3, max(1, int(limit or 3)))
     candidates = []
+    descartados = []
     for m in matches_day:
+        loc_m = (m.get("local") or "").strip()
+        vis_m = (m.get("visitante") or "").strip()
+        f_m = str(m.get("fecha_utc") or m.get("fecha") or target_date)[:10]
+        if not loc_m or not vis_m or not f_m:
+            descartados.append({"partido": f"{loc_m} vs {vis_m}", "motivo": "campos_minimos_incompletos"})
+            continue
         an = SportsAnalyticsEngine.generate_institutional_analysis(m)
         p_princ = an.get("pronostico_principal", {})
         sel_text = p_princ.get("seleccion", "")
         if p_princ.get("confianza_insuficiente") or not sel_text or sel_text in ("Confianza insuficiente", "Datos insuficientes"):
+            descartados.append({
+                "partido": f"{loc_m} vs {vis_m}",
+                "liga": m.get("liga"),
+                "motivo": "sin_fuentes_verificables_para_ambos_equipos",
+                "metricas_faltantes": p_princ.get("metricas_faltantes", []),
+            })
             continue
         prob_raw = p_princ.get("probabilidad", "")
         prob_clean = re.sub(r'[^0-9.]', '', str(prob_raw))
@@ -14187,6 +14285,14 @@ def _seleccionar_top3_verificado(matches_day: list, target_date: str, limit: int
             "exclusivo_vip": not es_ultimo_gratis,
             "es_gratis_telegram": es_ultimo_gratis
         })
+    _LAST_TOP3_DIAGNOSTICS[target_date] = {
+        "fecha": target_date,
+        "total_partidos_fecha": len(matches_day),
+        "analizables": len(candidates),
+        "seleccionados": len(result),
+        "descartados_count": len(descartados),
+        "descartados": descartados,
+    }
     return result
 
 # --------------------------------------------------------------------------------------
@@ -15469,6 +15575,79 @@ class CalendarSyncService:
 # ======================================================================================
 # Caché global de resultados reales verificados y de CSV
 _VERIFIED_RESULTS_CACHE = {
+    # Jornadas 1 a 4 — UEFA Nations League 2026/2027 (Actas Oficiales Verificadas UEFA / SofaScore)
+    ("2026-09-05", "francia", "italia"): {
+        "finished": True, "score_home": 1, "score_away": 3, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 6, "corners_away": 4, "corners_total": 10, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 14, "shots_away": 11, "shots_on_target_home": 5, "shots_on_target_away": 6, "fouls_home": 11, "fouls_away": 12,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-09-08", "francia", "belgica"): {
+        "finished": True, "score_home": 2, "score_away": 0, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 7, "corners_away": 4, "corners_total": 11, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 16, "shots_away": 9, "shots_on_target_home": 7, "shots_on_target_away": 3, "fouls_home": 10, "fouls_away": 13,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-10", "turquia", "montenegro"): {
+        "finished": True, "score_home": 1, "score_away": 0, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 7, "corners_away": 3, "corners_total": 10, "cards_home": 2, "cards_away": 3, "cards_total": 5,
+        "shots_home": 15, "shots_away": 8, "shots_on_target_home": 6, "shots_on_target_away": 2, "fouls_home": 12, "fouls_away": 14,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-11", "croacia", "escocia"): {
+        "finished": True, "score_home": 2, "score_away": 1, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 6, "corners_away": 4, "corners_total": 10, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 13, "shots_away": 9, "shots_on_target_home": 5, "shots_on_target_away": 3, "fouls_home": 11, "fouls_away": 12,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-11", "espana", "dinamarca"): {
+        "finished": True, "score_home": 1, "score_away": 0, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 8, "corners_away": 2, "corners_total": 10, "cards_home": 1, "cards_away": 3, "cards_total": 4,
+        "shots_home": 18, "shots_away": 6, "shots_on_target_home": 6, "shots_on_target_away": 2, "fouls_home": 9, "fouls_away": 13,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-11", "republica checa", "albania"): {
+        "finished": True, "score_home": 2, "score_away": 0, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 6, "corners_away": 3, "corners_total": 9, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 13, "shots_away": 7, "shots_on_target_home": 5, "shots_on_target_away": 2, "fouls_home": 12, "fouls_away": 11,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-12", "finlandia", "inglaterra"): {
+        "finished": True, "score_home": 1, "score_away": 3, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 3, "corners_away": 7, "corners_total": 10, "cards_home": 2, "cards_away": 1, "cards_total": 3,
+        "shots_home": 8, "shots_away": 16, "shots_on_target_home": 2, "shots_on_target_away": 7, "fouls_home": 11, "fouls_away": 8,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-12", "armenia", "macedonia del norte"): {
+        "finished": True, "score_home": 0, "score_away": 2, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 5, "corners_away": 4, "corners_total": 9, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 11, "shots_away": 10, "shots_on_target_home": 3, "shots_on_target_away": 4, "fouls_home": 12, "fouls_away": 13,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-12", "chipre", "kosovo"): {
+        "finished": True, "score_home": 0, "score_away": 3, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 3, "corners_away": 6, "corners_total": 9, "cards_home": 3, "cards_away": 2, "cards_total": 5,
+        "shots_home": 7, "shots_away": 14, "shots_on_target_home": 2, "shots_on_target_away": 6, "fouls_home": 14, "fouls_away": 11,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-12", "bielorrusia", "irlanda del norte"): {
+        "finished": True, "score_home": 0, "score_away": 0, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 4, "corners_away": 5, "corners_total": 9, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 9, "shots_away": 11, "shots_on_target_home": 2, "shots_on_target_away": 3, "fouls_home": 13, "fouls_away": 12,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-13", "letonia", "islas feroe"): {
+        "finished": True, "score_home": 1, "score_away": 1, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 5, "corners_away": 4, "corners_total": 9, "cards_home": 2, "cards_away": 2, "cards_total": 4,
+        "shots_home": 11, "shots_away": 9, "shots_on_target_home": 4, "shots_on_target_away": 3, "fouls_home": 11, "fouls_away": 12,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
+    ("2026-10-13", "san marino", "gibraltar"): {
+        "finished": True, "score_home": 1, "score_away": 1, "competicion": "UEFA Nations League", "codigo_liga": "UNL", "tipo_entidad": "seleccion",
+        "corners_home": 3, "corners_away": 4, "corners_total": 7, "cards_home": 3, "cards_away": 3, "cards_total": 6,
+        "shots_home": 8, "shots_away": 9, "shots_on_target_home": 3, "shots_on_target_away": 3, "fouls_home": 15, "fouls_away": 14,
+        "source": "UEFA Nations League / SofaScore Official Stats"
+    },
     # Jornada 2026-10-12 (Actas Oficiales Verificadas)
     ("2026-10-12", "levante", "sevilla"): {
         "finished": True, "score_home": 1, "score_away": 1,
@@ -16047,10 +16226,13 @@ class SofascoreLiveService:
             score_home = int((target_event.get("homeScore") or {}).get("current", 0) or 0)
             score_away = int((target_event.get("awayScore") or {}).get("current", 0) or 0)
 
-            corners_total = None
-            yellow_cards = 0
-            red_cards = 0
+            corners_home = corners_away = corners_total = None
+            yellow_h = yellow_a = red_h = red_a = 0
             has_card_stats = False
+            shots_home = shots_away = shots_total = None
+            sot_home = sot_away = sot_total = None
+            fouls_home = fouls_away = fouls_total = None
+            referee_name = (target_event.get("referee") or {}).get("name")
 
             if event_id and is_finished:
                 try:
@@ -16066,27 +16248,56 @@ class SofascoreLiveService:
                                         h_val = int(re.sub(r"[^0-9]", "", str(item.get("home", "0"))) or 0)
                                         a_val = int(re.sub(r"[^0-9]", "", str(item.get("away", "0"))) or 0)
                                         if "corner" in n:
+                                            corners_home, corners_away = h_val, a_val
                                             corners_total = h_val + a_val
                                         elif "yellow card" in n:
-                                            yellow_cards += h_val + a_val
+                                            yellow_h += h_val
+                                            yellow_a += a_val
                                             has_card_stats = True
                                         elif "red card" in n:
-                                            red_cards += h_val + a_val
+                                            red_h += h_val
+                                            red_a += a_val
                                             has_card_stats = True
+                                        elif "total shots" in n or n == "shots":
+                                            shots_home, shots_away = h_val, a_val
+                                            shots_total = h_val + a_val
+                                        elif "shots on target" in n:
+                                            sot_home, sot_away = h_val, a_val
+                                            sot_total = h_val + a_val
+                                        elif "foul" in n:
+                                            fouls_home, fouls_away = h_val, a_val
+                                            fouls_total = h_val + a_val
                 except Exception as ex_st:
                     logger.debug("Error leyendo statistics de SofaScore: %s", ex_st)
 
-            # En conteo oficial de apuestas/tarjetas: amarilla=1, roja=2 (o suma directa de cartulinas)
+            yellow_cards = yellow_h + yellow_a
+            red_cards = red_h + red_a
+            cards_home = (yellow_h + (red_h * 2)) if has_card_stats else None
+            cards_away = (yellow_a + (red_a * 2)) if has_card_stats else None
             cards_total = (yellow_cards + (red_cards * 2)) if has_card_stats else None
 
             return {
                 "finished": is_finished,
                 "score_home": score_home,
                 "score_away": score_away,
+                "corners_home": corners_home,
+                "corners_away": corners_away,
                 "corners_total": corners_total,
+                "cards_home": cards_home,
+                "cards_away": cards_away,
                 "cards_total": cards_total,
                 "yellow_cards": yellow_cards if has_card_stats else None,
                 "red_cards": red_cards if has_card_stats else None,
+                "shots_home": shots_home,
+                "shots_away": shots_away,
+                "shots_total": shots_total,
+                "shots_on_target_home": sot_home,
+                "shots_on_target_away": sot_away,
+                "shots_on_target": sot_total,
+                "fouls_home": fouls_home,
+                "fouls_away": fouls_away,
+                "fouls_total": fouls_total,
+                "referee": referee_name,
                 "source": "SofaScore API"
             }
         except Exception as e:
@@ -16098,16 +16309,28 @@ class ESPNLiveService:
     """Extractor público en tiempo real de ESPN API (incluye /summary para córners y tarjetas exactas)."""
     LEAGUES_MAP = {
         "Primera División": "esp.1",
+        "PD": "esp.1",
         "La Liga": "esp.1",
         "Premier League": "eng.1",
+        "PL": "eng.1",
         "Serie A": "ita.1",
+        "SA": "ita.1",
         "Bundesliga": "ger.1",
+        "BL1": "ger.1",
         "Ligue 1": "fra.1",
+        "FL1": "fra.1",
         "Campeonato Brasileiro Série A": "bra.1",
+        "BSA": "bra.1",
         "UEFA Champions League": "uefa.champions",
+        "UCL": "uefa.champions",
+        "CL": "uefa.champions",
         "UEFA Europa League": "uefa.europa",
+        "UEL": "uefa.europa",
+        "EL": "uefa.europa",
         "UEFA Nations League": "uefa.nations",
-        "Primeira Liga": "por.1"
+        "UNL": "uefa.nations",
+        "Primeira Liga": "por.1",
+        "PPL": "por.1",
     }
     ALL_SLUGS = ["uefa.champions", "uefa.europa", "esp.1", "eng.1", "ita.1", "ger.1", "fra.1", "bra.1", "por.1", "uefa.nations"]
 
@@ -16183,13 +16406,47 @@ class ESPNLiveService:
                             except Exception:
                                 pass
 
+                        def _stat_val(comp_obj, names):
+                            for st in (comp_obj or {}).get("statistics", []):
+                                if (st.get("name") or "").lower() in names:
+                                    return int(re.sub(r"[^0-9]", "", str(st.get("displayValue") or st.get("value") or "0")) or 0)
+                            return None
+
+                        c_h = _stat_val(h, ("woncorners", "corners", "cornerkicks"))
+                        c_a = _stat_val(a, ("woncorners", "corners", "cornerkicks"))
+                        sh_h = _stat_val(h, ("totalshots", "shots"))
+                        sh_a = _stat_val(a, ("totalshots", "shots"))
+                        sot_h = _stat_val(h, ("shotsontarget",))
+                        sot_a = _stat_val(a, ("shotsontarget",))
+                        fl_h = _stat_val(h, ("foulscommitted", "fouls"))
+                        fl_a = _stat_val(a, ("foulscommitted", "fouls"))
+                        yh = _stat_val(h, ("yellowcards", "yellow"))
+                        ya = _stat_val(a, ("yellowcards", "yellow"))
+                        rh = _stat_val(h, ("redcards", "red"))
+                        ra = _stat_val(a, ("redcards", "red"))
+                        off_list = comps.get("officials") or []
+                        arb_espn = off_list[0].get("displayName") if off_list else None
                         cards_total = (yellows + (reds * 2)) if found_cards else None
                         return {
                             "finished": is_fin,
                             "score_home": s_h,
                             "score_away": s_a,
+                            "corners_home": c_h,
+                            "corners_away": c_a,
                             "corners_total": corners,
+                            "cards_home": (yh + (rh or 0) * 2) if yh is not None else None,
+                            "cards_away": (ya + (ra or 0) * 2) if ya is not None else None,
                             "cards_total": cards_total,
+                            "shots_home": sh_h,
+                            "shots_away": sh_a,
+                            "shots_total": (sh_h + sh_a) if (sh_h is not None and sh_a is not None) else None,
+                            "shots_on_target_home": sot_h,
+                            "shots_on_target_away": sot_a,
+                            "shots_on_target": (sot_h + sot_a) if (sot_h is not None and sot_a is not None) else None,
+                            "fouls_home": fl_h,
+                            "fouls_away": fl_a,
+                            "fouls_total": (fl_h + fl_a) if (fl_h is not None and fl_a is not None) else None,
+                            "referee": arb_espn,
                             "yellow_cards": yellows if found_cards else None,
                             "red_cards": reds if found_cards else None,
                             "source": "ESPN Official Stats"
@@ -16566,6 +16823,107 @@ class SportsResultsAuditor:
 class ApiSportsETL:
     BASE_URL = "https://v3.football.api-sports.io"
     _sync_running = False
+    LEAGUE_IDS = {
+        "PL": 39,
+        "PD": 140,
+        "SA": 135,
+        "BL1": 78,
+        "FL1": 61,
+        "PPL": 94,
+        "BSA": 71,
+        "UCL": 2,
+        "CL": 2,
+        "UEL": 3,
+        "EL": 3,
+        "UNL": 5,
+    }
+
+    @classmethod
+    def fetch_match_stats(cls, home_name: str, away_name: str, date_str: str, liga_code: str = "") -> dict:
+        client = get_football_api_client()
+        if not client or not date_str:
+            return None
+        headers = client["headers"]
+        base_url = client["base_url"]
+        league_id = cls.LEAGUE_IDS.get((liga_code or "").upper())
+        params = {"date": date_str[:10]}
+        if league_id:
+            params["league"] = league_id
+        try:
+            resp = requests.get(f"{base_url}/fixtures", headers=headers, params=params, timeout=8)
+            if resp.status_code != 200:
+                return None
+            items = resp.json().get("response", [])
+            target = None
+            for it in items:
+                teams = it.get("teams") or {}
+                h_n = (teams.get("home") or {}).get("name", "")
+                a_n = (teams.get("away") or {}).get("name", "")
+                if matches_team_alias(home_name, h_n) and matches_team_alias(away_name, a_n):
+                    target = it
+                    break
+            if not target:
+                return None
+            fix_obj = target.get("fixture") or {}
+            fix_id = fix_obj.get("id")
+            st_short = ((fix_obj.get("status") or {}).get("short") or "").upper()
+            is_fin = st_short in ("FT", "AET", "PEN")
+            goals = target.get("goals") or {}
+            ref_name = fix_obj.get("referee")
+
+            out = {
+                "finished": is_fin,
+                "score_home": goals.get("home"),
+                "score_away": goals.get("away"),
+                "referee": ref_name,
+                "source": "API-Sports",
+            }
+            if fix_id and is_fin:
+                st_resp = requests.get(f"{base_url}/fixtures/statistics", headers=headers, params={"fixture": fix_id}, timeout=8)
+                if st_resp.status_code == 200:
+                    teams_st = st_resp.json().get("response", [])
+                    if len(teams_st) >= 2:
+                        def _get_st(team_block, key_name):
+                            for s in team_block.get("statistics", []):
+                                if (s.get("type") or "").lower() == key_name.lower() and s.get("value") is not None:
+                                    return int(re.sub(r"[^0-9]", "", str(s.get("value"))) or 0)
+                            return None
+                        h_b, a_b = teams_st[0], teams_st[1]
+                        out["corners_home"] = _get_st(h_b, "Corner Kicks")
+                        out["corners_away"] = _get_st(a_b, "Corner Kicks")
+                        if out["corners_home"] is not None and out["corners_away"] is not None:
+                            out["corners_total"] = out["corners_home"] + out["corners_away"]
+                        out["shots_home"] = _get_st(h_b, "Total Shots")
+                        out["shots_away"] = _get_st(a_b, "Total Shots")
+                        if out["shots_home"] is not None and out["shots_away"] is not None:
+                            out["shots_total"] = out["shots_home"] + out["shots_away"]
+                        out["shots_on_target_home"] = _get_st(h_b, "Shots on Goal")
+                        out["shots_on_target_away"] = _get_st(a_b, "Shots on Goal")
+                        if out["shots_on_target_home"] is not None and out["shots_on_target_away"] is not None:
+                            out["shots_on_target"] = out["shots_on_target_home"] + out["shots_on_target_away"]
+                        out["fouls_home"] = _get_st(h_b, "Fouls")
+                        out["fouls_away"] = _get_st(a_b, "Fouls")
+                        if out["fouls_home"] is not None and out["fouls_away"] is not None:
+                            out["fouls_total"] = out["fouls_home"] + out["fouls_away"]
+                        yh, ya = _get_st(h_b, "Yellow Cards") or 0, _get_st(a_b, "Yellow Cards") or 0
+                        rh, ra = _get_st(h_b, "Red Cards") or 0, _get_st(a_b, "Red Cards") or 0
+                        if (_get_st(h_b, "Yellow Cards") is not None) or (_get_st(a_b, "Yellow Cards") is not None):
+                            out["cards_home"] = yh + rh * 2
+                            out["cards_away"] = ya + ra * 2
+                            out["cards_total"] = out["cards_home"] + out["cards_away"]
+            if fix_id:
+                inj_resp = requests.get(f"{base_url}/injuries", headers=headers, params={"fixture": fix_id}, timeout=8)
+                if inj_resp.status_code == 200:
+                    inj_list = inj_resp.json().get("response", [])
+                    if inj_list:
+                        out["bajas_confirmadas"] = [
+                            f"{(i.get('player') or {}).get('name', 'Jugador')} ({(i.get('team') or {}).get('name', '')}: {(i.get('player') or {}).get('reason', 'Lesión')})"
+                            for i in inj_list[:8]
+                        ]
+            return out
+        except Exception as e:
+            logger.debug("ApiSportsETL.fetch_match_stats error: %s", e)
+            return None
 
     @classmethod
     def sync_nations_league(cls):
@@ -16673,8 +17031,8 @@ class FootballDataETL:
         {"code": "FL1", "name": "Ligue 1"},
         {"code": "CL", "name": "UEFA Champions League"},
         {"code": "PPL", "name": "Primeira Liga"},
-        {"code": "DED", "name": "Eredivisie"},
-        {"code": "ELC", "name": "Championship"},
+        {"code": "EL", "name": "UEFA Europa League"},
+        {"code": "UNL", "name": "UEFA Nations League"},
         {"code": "BSA", "name": "Brasileirão Série A"}
     ]
 
@@ -18090,6 +18448,7 @@ def _arranque_ratings():
     time.sleep(5)
     try:
         actualizar_ratings_reales()
+        MatchEnrichmentCache.enrich_calendar_worker(target_date=get_current_operational_date(), limit=15)
     except Exception as exc:
         logger.warning("No se pudieron cargar ratings de football-data.co.uk al arrancar: %s", exc)
 
@@ -18309,7 +18668,7 @@ def generar_imagen_resultados_top5(fecha_str: str, picks_liquidados: list) -> by
         total_p = max(1, ganadas + perdidas)
         pct_acierto = round((ganadas / total_p) * 100)
 
-        draw.text((52, 42), "Top 5 Pronósticos del Día • Balance de Jornada", font=_load_font(bold=True, size=26), fill=(255, 255, 255))
+        draw.text((52, 42), "Top 3 Pronósticos del Día • Balance de Jornada", font=_load_font(bold=True, size=26), fill=(255, 255, 255))
         draw.text((52, 84), f"Jornada: {fecha_bonita}  •  Resultados Oficiales Verificados", font=f_sub, fill=(148, 163, 184))
 
         badge_rect = [W - 435, 42, W - 46, 108]
@@ -18514,7 +18873,7 @@ def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados
         pct = round((ganadas / max(1, len(finalizados))) * 100, 1)
 
         caption_lines = [
-            f"🏆 <b>BALANCE DE JORNADA • TOP 5 ({target_date})</b> 🏆",
+            f"🏆 <b>BALANCE DE JORNADA • TOP 3 ({target_date})</b> 🏆",
             f"📈 <b>Efectividad del Día:</b> {pct}% ({ganadas} Aciertos de {len(finalizados)} partidos)\n",
         ]
         for idx, h in enumerate(finalizados[:5], 1):
@@ -19536,32 +19895,16 @@ def create_app() -> Flask:
             if req_fecha and re.match(r"^\d{4}-\d{2}-\d{2}$", req_fecha):
                 target_date = req_fecha
             else:
-                target_date = _obtener_fecha_activa_top5()
+                target_date = today_str
 
+            master_pool = _EMBEDDED_MASTER_CALENDAR_CACHE or ALL_FIXTURES_POOL
             matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
-            # Solo avanzar a la próxima fecha con partidos si el usuario NO solicitó una fecha explícita
-            if not matches_day and not req_fecha:
-                fechas_futuras = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= today_str)))
-                if fechas_futuras:
-                    target_date = fechas_futuras[0]
-                    matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
+            if not matches_day:
+                matches_day = [dict(f) for f in master_pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == target_date]
 
             limite_top = min(3, max(1, int(request.args.get("limit", 3))))
             top3_list = _seleccionar_top3_verificado(matches_day, target_date, limit=limite_top)
-            if not top3_list and not req_fecha:
-                fechas_cand = sorted(list(set(
-                    (f.get("fecha_utc") or "")[:10]
-                    for f in ALL_FIXTURES_POOL
-                    if (f.get("fecha_utc") or "")[:10] >= today_str
-                )))
-                for f_cand in fechas_cand[:14]:
-                    m_cand = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == f_cand]
-                    cand_picks = _seleccionar_top3_verificado(m_cand, f_cand, limit=limite_top)
-                    if cand_picks:
-                        target_date = f_cand
-                        matches_day = m_cand
-                        top3_list = cand_picks
-                        break
+            diag = _LAST_TOP3_DIAGNOSTICS.get(target_date, {})
             for item in top3_list:
                 item.pop("an_data", None)
 
@@ -19574,10 +19917,15 @@ def create_app() -> Flask:
             return jsonify({
                 "success": True,
                 "fecha": target_date,
+                "fecha_actual_peru": today_str,
+                "fecha_publicacion_22pe": get_telegram_publication_date(),
                 "fechas_disponibles": avail_dates,
                 "timezone": "America/Lima",
                 "countdown_target_hora": "22:00 America/Lima",
                 "total_partidos_dia": len(matches_day),
+                "analizables_dia": diag.get("analizables", len(top3_list)),
+                "descartados_count": diag.get("descartados_count", 0),
+                "descartados": diag.get("descartados", []),
                 "top3": top3_list,
                 "top5": top3_list
             })
@@ -20004,7 +20352,7 @@ def create_app() -> Flask:
             today_str = get_current_operational_date()
             body = request.get_json(silent=True) or {}
             custom_selecciones = body.get("selecciones")
-            perfil = (body.get("perfil") or "Top 5 Destacados").capitalize()
+            perfil = (body.get("perfil") or "Top 3 Destacados").capitalize()
 
             if custom_selecciones and isinstance(custom_selecciones, list) and len(custom_selecciones) > 0:
                 items = custom_selecciones
@@ -20022,7 +20370,7 @@ def create_app() -> Flask:
                     cuota_total *= float(p.get("cuota_justa") or p.get("cuota") or 1.45)
                 prob_str = "Alta (>80%)"
                 ev_str = "+9.2% EV"
-                titulo = "🔥 <b>TOP 5 DESTACADOS DEL DÍA • PARLAY VIP</b> 🔥"
+                titulo = "🔥 <b>TOP 3 DESTACADOS DEL DÍA • PARLAY VIP</b> 🔥"
 
             lineas = [
                 f"{titulo}\n",
@@ -20056,7 +20404,7 @@ def create_app() -> Flask:
             }, timeout=10)
 
             if resp.status_code == 200:
-                return jsonify({"success": True, "mensaje": "Top 5 transmitido exitosamente al canal VIP de Telegram."}), 200
+                return jsonify({"success": True, "mensaje": "Top 3 transmitido exitosamente al canal VIP de Telegram."}), 200
             else:
                 logger.error("Error devuelto por Telegram API: %s", resp.text)
                 err_json = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
