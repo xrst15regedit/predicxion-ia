@@ -203,7 +203,7 @@
                         <i class="fa-solid fa-futbol text-sm"></i> <span>Partidos</span>
                     </button>
                     <button onclick="navegarPestanaPrincipal('top3')" id="nav-tab-top3" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
-                        <i class="fa-solid fa-trophy text-lime-400"></i> <span>Top 5 del Día</span>
+                        <i class="fa-solid fa-trophy text-lime-400"></i> <span>Top 3 del Día</span>
                         <span id="lock-top3-nav" class="text-amber-400 text-[10px]"></span>
                     </button>
                     <button onclick="navegarPestanaPrincipal('alternativos')" id="nav-tab-alternativos" class="nav-tab-main px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 border border-cardBorder bg-cardDark text-slate-300 hover:text-white">
@@ -264,10 +264,10 @@
 
                         <div class="flex items-center gap-2 flex-wrap">
                             <button onclick="reproducirAudioTop5Completo()" id="btn-audio-top5-full" class="bg-[#0d1b18] hover:bg-emerald-950 text-[#00e676] border border-emerald-500/40 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-md cursor-pointer" title="Escuchar el resumen narrado por voz de los 5 destacados">
-                                <i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 5 (Voz IA)</span>
+                                <i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 3 (Voz IA)</span>
                             </button>
-                            <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-lg cursor-pointer" title="Enviar Top 5 directamente al canal VIP de Telegram">
-                                <i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>
+                            <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-lg cursor-pointer" title="Enviar Top 3 directamente al canal VIP de Telegram">
+                                <i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 3 a Telegram VIP</span>
                             </button>
                             <button onclick="dispararAuditoriaTelegram()" class="solo-admin hidden bg-emerald-950/90 hover:bg-emerald-900 text-[#00e676] border border-emerald-500/40 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-lg cursor-pointer" title="Enviar captura PNG de resultados liquidados a Telegram VIP">
                                 <i class="fa-solid fa-camera text-sm"></i> <span>Enviar Captura Resultados</span>
@@ -313,7 +313,7 @@
                     <!-- Contenedor dinámico de las 5 tarjetas horizontales a ancho completo -->
                     <div id="top3-cards-container" class="space-y-3.5 relative z-10 w-full">
                         <div class="text-xs text-slate-400 text-center py-8">
-                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando señales estadísticas del Top 5...
+                            <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando señales estadísticas del Top 3...
                         </div>
                     </div>
 
@@ -670,7 +670,7 @@
                             <li>✓ Cartelera completa del mes (+600 partidos)</li>
                             <li>✓ Termómetro de Rachas (últimos 5 partidos)</li>
                             <li>✓ 3 auditorías de partidos diarias gratuitas</li>
-                            <li>✓ Pick #5 libre en el Top 5 del Día</li>
+                            <li>✓ Último pick libre en el Top 3 del Día</li>
                             <li>✓ 3 Mercados Alternativos y 3 Destacados del Día</li>
                             <li>✓ Historial Oficial verificado 24/7 (aciertos y fallas)</li>
                             <li>✓ Comunidad de Telegram y Locución Voz IA básica</li>
@@ -689,7 +689,7 @@
                         <ul class="text-[11px] text-slate-200 space-y-1.5 mt-4 text-left">
                             <li>✓ <strong class="text-accentGreen">Pronósticos y auditorías ilimitadas 24/7</strong></li>
                             <li>✓ <strong class="text-white">Probabilidades Clave desbloqueadas</strong> (Goles, Remates, Córners y Tarjetas)</li>
-                            <li>✓ <strong class="text-white">Top 5 del Día completo</strong> desbloqueado</li>
+                            <li>✓ <strong class="text-white">Top 3 del Día completo</strong> desbloqueado</li>
                             <li>✓ <strong class="text-white">Todos los Mercados Alternativos</strong> y todos los Partidos Destacados del Día</li>
                             <li>✓ <strong class="text-cyan-300">Consenso Triple IA en vivo</strong> (Gemini + DeepSeek + Grok)</li>
                             <li>✓ <strong class="text-amber-300">Generador de Parlays IA</strong> y Simulación Monte Carlo (10K)</li>
@@ -1812,34 +1812,30 @@
             const bttsRec = kp.btts?.recommended || ((bttsVal >= 55 && lh >= 1.15 && la >= 1.05) ? 'Ambos anotan: Sí' : 'Ambos anotan: No');
             const bttsProb = kp.btts?.prob_pct != null ? Math.round(kp.btts.prob_pct) : Math.min(86, Math.max(72, bttsRec.includes('Sí') ? bttsVal + 10 : bttsNoVal + 10));
 
-            const cardsH = parseFloat(kp.avg_cards?.home ?? locAnt.tarjetas_prom ?? 1.9);
-            const cardsA = parseFloat(kp.avg_cards?.away ?? visAnt.tarjetas_prom ?? 1.9);
-            const avgCardsVal = kp.avg_cards?.value != null
-                ? parseFloat(kp.avg_cards.value)
-                : Math.round(((cardsH + cardsA) || parseFloat(xgParams.expected_cards || 3.8)) * 100) / 100;
+            const cardsInsuf = Boolean(kp.avg_cards?.datos_insuficientes || kp.avg_cards?.value === null);
+            const cardsH = cardsInsuf ? null : parseFloat(kp.avg_cards?.home ?? locAnt.tarjetas_prom ?? 0);
+            const cardsA = cardsInsuf ? null : parseFloat(kp.avg_cards?.away ?? visAnt.tarjetas_prom ?? 0);
+            const avgCardsVal = cardsInsuf ? null : (kp.avg_cards?.value != null ? parseFloat(kp.avg_cards.value) : Math.round((cardsH + cardsA) * 100) / 100);
 
-            const cornersH = parseFloat(kp.avg_corners?.home ?? locAnt.corners_prom ?? 4.9);
-            const cornersA = parseFloat(kp.avg_corners?.away ?? visAnt.corners_prom ?? 4.5);
-            const avgCornersVal = kp.avg_corners?.value != null
-                ? parseFloat(kp.avg_corners.value)
-                : Math.round(((cornersH + cornersA) || parseFloat(xgParams.expected_corners || 9.4)) * 100) / 100;
+            const cornersInsuf = Boolean(kp.avg_corners?.datos_insuficientes || kp.avg_corners?.value === null);
+            const cornersH = cornersInsuf ? null : parseFloat(kp.avg_corners?.home ?? locAnt.corners_prom ?? 0);
+            const cornersA = cornersInsuf ? null : parseFloat(kp.avg_corners?.away ?? visAnt.corners_prom ?? 0);
+            const avgCornersVal = cornersInsuf ? null : (kp.avg_corners?.value != null ? parseFloat(kp.avg_corners.value) : Math.round((cornersH + cornersA) * 100) / 100);
 
-            const shotsH = parseFloat(kp.avg_shots?.home ?? locAnt.tiros_totales_prom ?? 12.6);
-            const shotsA = parseFloat(kp.avg_shots?.away ?? visAnt.tiros_totales_prom ?? 11.4);
-            const avgShotsVal = kp.avg_shots?.value != null
-                ? parseFloat(kp.avg_shots.value)
-                : Math.round((shotsH + shotsA) * 10) / 10;
+            const shotsInsuf = Boolean(kp.avg_shots?.datos_insuficientes || kp.avg_shots?.value === null);
+            const shotsH = shotsInsuf ? null : parseFloat(kp.avg_shots?.home ?? locAnt.tiros_totales_prom ?? 0);
+            const shotsA = shotsInsuf ? null : parseFloat(kp.avg_shots?.away ?? visAnt.tiros_totales_prom ?? 0);
+            const avgShotsVal = shotsInsuf ? null : (kp.avg_shots?.value != null ? parseFloat(kp.avg_shots.value) : Math.round((shotsH + shotsA) * 10) / 10);
 
-            const shotsOTH = parseFloat(kp.avg_shots_on_target?.home ?? locAnt.tiros_puerta_prom ?? 4.6);
-            const shotsOTA = parseFloat(kp.avg_shots_on_target?.away ?? visAnt.tiros_puerta_prom ?? 4.1);
-            const avgShotsOTVal = kp.avg_shots_on_target?.value != null
-                ? parseFloat(kp.avg_shots_on_target.value)
-                : Math.round((shotsOTH + shotsOTA) * 10) / 10;
+            const shotsOTInsuf = Boolean(kp.avg_shots_on_target?.datos_insuficientes || kp.avg_shots_on_target?.value === null);
+            const shotsOTH = shotsOTInsuf ? null : parseFloat(kp.avg_shots_on_target?.home ?? locAnt.tiros_puerta_prom ?? 0);
+            const shotsOTA = shotsOTInsuf ? null : parseFloat(kp.avg_shots_on_target?.away ?? visAnt.tiros_puerta_prom ?? 0);
+            const avgShotsOTVal = shotsOTInsuf ? null : (kp.avg_shots_on_target?.value != null ? parseFloat(kp.avg_shots_on_target.value) : Math.round((shotsOTH + shotsOTA) * 10) / 10);
 
             const recGoals = kp.avg_goals?.recommended || (avgGoalsVal >= 2.85 ? 'Más de 2.5 goles' : (avgGoalsVal <= 1.98 ? 'Menos de 2.5 goles' : (avgGoalsVal <= 2.32 ? 'Menos de 3.5 goles' : 'Más de 1.5 goles')));
             const probGoals = kp.avg_goals?.prob_pct != null ? Math.round(kp.avg_goals.prob_pct) : (recGoals.includes('2.5') ? Math.max(over25Val, under25Val) + 8 : (recGoals.includes('3.5') ? under35Val : over15Val));
 
-            let recCards = kp.avg_cards?.recommended;
+            let recCards = cardsInsuf ? 'Datos insuficientes' : kp.avg_cards?.recommended;
             if (!recCards) {
                 if (avgCardsVal <= 2.95) recCards = 'Menos de 3.5 tarjetas';
                 else if (avgCardsVal <= 3.55) recCards = 'Menos de 4.5 tarjetas';
@@ -1850,7 +1846,7 @@
             }
             const probCards = kp.avg_cards?.prob_pct != null ? Math.round(kp.avg_cards.prob_pct) : 84;
 
-            let recCorners = kp.avg_corners?.recommended;
+            let recCorners = cornersInsuf ? 'Datos insuficientes' : kp.avg_corners?.recommended;
             if (!recCorners) {
                 if (avgCornersVal <= 7.8) recCorners = 'Menos de 8.5 córners';
                 else if (avgCornersVal <= 8.6) recCorners = 'Menos de 9.5 córners';
@@ -1896,8 +1892,8 @@
                     avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1)
                 },
                 avg_corners: {
-                    val: avgCornersVal.toFixed(1), num: avgCornersVal,
-                    home: cornersH.toFixed(1), away: cornersA.toFixed(1),
+                    val: (cornersInsuf || avgCornersVal == null ? 'N/D' : avgCornersVal.toFixed(1)), num: avgCornersVal,
+                    home: (cornersInsuf || cornersH == null ? 'N/D' : cornersH.toFixed(1)), away: (cornersInsuf || cornersA == null ? 'N/D' : cornersA.toFixed(1)),
                     avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1),
                     avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners),
                     rec: recCorners, prob: probCorners
@@ -1911,8 +1907,8 @@
                     refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO"
                 },
                 avg_cards: {
-                    val: avgCardsVal.toFixed(2), num: avgCardsVal,
-                    home: cardsH.toFixed(1), away: cardsA.toFixed(1),
+                    val: (cardsInsuf || avgCardsVal == null ? 'N/D' : avgCardsVal.toFixed(2)), num: avgCardsVal,
+                    home: (cardsInsuf || cardsH == null ? 'N/D' : cardsH.toFixed(1)), away: (cardsInsuf || cardsA == null ? 'N/D' : cardsA.toFixed(1)),
                     provH: parseFloat(kp.avg_cards?.provoked_home ?? cardsA).toFixed(1),
                     provA: parseFloat(kp.avg_cards?.provoked_away ?? cardsH).toFixed(1),
                     refName: kp.avg_cards?.referee_name || item.arbitro_designado?.nombre || item.parametros_xg?.referee_name || "Árbitro Oficial",
@@ -1923,18 +1919,20 @@
                     rec: recCards, prob: probCards
                 },
                 avg_shots: {
-                    val: avgShotsVal.toFixed(1), num: avgShotsVal,
-                    home: shotsH.toFixed(1), away: shotsA.toFixed(1),
+                    val: shotsInsuf ? 'N/D' : avgShotsVal.toFixed(1), num: shotsInsuf ? 0 : avgShotsVal,
+                    home: shotsInsuf ? 'N/D' : shotsH.toFixed(1), away: shotsInsuf ? 'N/D' : shotsA.toFixed(1),
                     avg: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1),
                     avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots),
-                    rec: recShots, prob: probShots
+                    rec: shotsInsuf ? 'Datos insuficientes' : recShots, prob: shotsInsuf ? 0 : probShots,
+                    insuficiente: shotsInsuf
                 },
                 avg_shots_ot: {
-                    val: avgShotsOTVal.toFixed(1), num: avgShotsOTVal,
-                    home: shotsOTH.toFixed(1), away: shotsOTA.toFixed(1),
+                    val: shotsOTInsuf ? 'N/D' : avgShotsOTVal.toFixed(1), num: shotsOTInsuf ? 0 : avgShotsOTVal,
+                    home: shotsOTInsuf ? 'N/D' : shotsOTH.toFixed(1), away: shotsOTInsuf ? 'N/D' : shotsOTA.toFixed(1),
                     avg: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1),
                     avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target),
-                    rec: recShotsOT, prob: probShotsOT
+                    rec: shotsOTInsuf ? 'Datos insuficientes' : recShotsOT, prob: shotsOTInsuf ? 0 : probShotsOT,
+                    insuficiente: shotsOTInsuf
                 }
             };
         }
@@ -2775,7 +2773,7 @@
                                 <span class="text-[10px] font-black uppercase text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-full">Límite Diario Alcanzado</span>
                                 <h3 class="text-xl sm:text-2xl font-black text-white mt-3">Has alcanzado tu límite de 3 pronósticos gratuitos por día</h3>
                                 <p class="text-xs text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
-                                    Las cuentas gratuitas tienen un cupo de 3 análisis diarios. Para auditar pronósticos ilimitados, acceder a los más de 600 partidos de la temporada, el Consenso Triple IA y el Top 5 completo, activa tu Membresía VIP.
+                                    Las cuentas gratuitas tienen un cupo de 3 análisis diarios. Para auditar pronósticos ilimitados, acceder a los más de 600 partidos de la temporada, el Consenso Triple IA y el Top 3 completo, activa tu Membresía VIP.
                                 </p>
                             </div>
                             <div class="bg-baseDark/90 p-3.5 rounded-2xl border border-cardBorder max-w-sm mx-auto flex items-center justify-around text-xs">
@@ -3256,7 +3254,7 @@
                     if (elM) elM.innerText = String(m).padStart(2, '0');
                     if (elS) elS.innerText = String(s).padStart(2, '0');
                 } catch (e) {
-                    console.error("Error en countdown Top 5:", e);
+                    console.error("Error en countdown Top 3:", e);
                 }
             }
             actualizarTimer();
@@ -3348,7 +3346,7 @@
         async function dispararParlayTelegram() {
             const btn = document.getElementById('btn-disparar-parlay-tg');
             if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Enviando...`;
-            notificar("Transmitiendo Top 5 al canal VIP de Telegram...");
+            notificar("Transmitiendo Top 3 al canal VIP de Telegram...");
 
             try {
                 const headers = await authHeaders();
@@ -3358,14 +3356,14 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    notificar("✓ " + (data.mensaje || "Top 5 transmitido con éxito al canal VIP de Telegram."));
+                    notificar("✓ " + (data.mensaje || "Top 3 transmitido con éxito al canal VIP de Telegram."));
                 } else {
-                    notificar("⚠️ " + (data.error || "Error al emitir Top 5."));
+                    notificar("⚠️ " + (data.error || "Error al emitir Top 3."));
                 }
             } catch (e) {
                 notificar("Error de conexión al emitir a Telegram.");
             } finally {
-                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 5 a Telegram VIP</span>`;
+                if (btn) btn.innerHTML = `<i class="fa-brands fa-telegram text-base"></i> <span>Enviar Top 3 a Telegram VIP</span>`;
             }
         }
 
@@ -3375,7 +3373,7 @@
             const displayFecha = document.getElementById('top3-fecha-display');
 
             if (!cont) return;
-            cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando señales estadísticas del Top 5...</div>`;
+            cont.innerHTML = `<div class="text-xs text-slate-400 text-center py-8"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Calculando señales estadísticas del Top 3...</div>`;
 
             try {
                 const url = fechaTop3Activa ? `${API_BASE}/api/v1/top3/daily?fecha=${fechaTop3Activa}` : `${API_BASE}/api/v1/top3/daily`;
@@ -3404,7 +3402,7 @@
 
                 if (data.top3 && data.top3.length > 0 && typeof precargarAudioTexto === 'function') {
                     const pLibre = data.top3.find(x => x.es_gratis_telegram) || data.top3[data.top3.length - 1] || data.top3[0];
-                    setTimeout(() => precargarAudioTexto(`Vamos con el pick número ${pLibre.rank} del Top 5: ${pLibre.local} contra ${pLibre.visitante}. Aquí la jugada recomendada es ${pLibre.mercado}, con un ${pLibre.probabilidad} de confianza estadística.`), 150);
+                    setTimeout(() => precargarAudioTexto(`Vamos con el pick número ${pLibre.rank} del Top 3: ${pLibre.local} contra ${pLibre.visitante}. Aquí la jugada recomendada es ${pLibre.mercado}, con un ${pLibre.probabilidad} de confianza estadística.`), 150);
                 }
 
                 const mesesCortos = ['Oct', 'Nov', 'Dic', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep'];
@@ -3489,7 +3487,7 @@
                                             </div>
                                             <p class="text-[10px] text-slate-300 max-w-xs mb-2">Desbloquea la jugada exacta, el promedio real del partido y el análisis completo.</p>
                                             <button onclick="abrirModalPlanes()" class="bg-[#00e676] hover:bg-emerald-400 text-slate-950 font-black text-[11px] px-3.5 py-1.5 rounded-lg transition shadow-lg flex items-center gap-1.5 cursor-pointer">
-                                                <i class="fa-solid fa-crown"></i> Desbloquear Top 5 VIP
+                                                <i class="fa-solid fa-crown"></i> Desbloquear Top 3 VIP
                                             </button>
                                         </div>
                                     ` : `
@@ -3590,8 +3588,8 @@
 
                 cont.innerHTML = htmlCards;
             } catch (err) {
-                console.error("Error cargando Top 5:", err);
-                cont.innerHTML = `<div class="text-xs text-red-400 text-center py-6">Error cargando Top 5. Intenta de nuevo más tarde.</div>`;
+                console.error("Error cargando Top 3:", err);
+                cont.innerHTML = `<div class="text-xs text-red-400 text-center py-6">Error cargando Top 3. Intenta de nuevo más tarde.</div>`;
             }
         }
 
@@ -3990,7 +3988,7 @@
         function restaurarBotonesAudio() {
             document.querySelectorAll('[id^="btn-audio-top5-"]').forEach(btn => {
                 if (btn.id === 'btn-audio-top5-full') {
-                    btn.innerHTML = `<i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 5 (Voz IA)</span>`;
+                    btn.innerHTML = `<i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 3 (Voz IA)</span>`;
                 } else {
                     btn.innerHTML = `<i class="fa-solid fa-volume-high text-[10px]"></i> <span>Escuchar Análisis IA</span>`;
                 }
@@ -4014,7 +4012,7 @@
             }
             const mktLimpio = limpiarTextoParaVoz(item.mercado);
             const justLimpia = limpiarTextoParaVoz(item.justificacion);
-            const guion = `Vamos con el pick número ${item.rank} del Top 5: ${item.local} contra ${item.visitante} en ${item.liga}. Aquí la jugada principal es ${mktLimpio}, con un ${item.probabilidad} de probabilidad y cuota justa de ${item.cuota}. ¿Por qué entramos aquí? ${justLimpia}`;
+            const guion = `Vamos con el pick número ${item.rank} del Top 3: ${item.local} contra ${item.visitante} en ${item.liga}. Aquí la jugada principal es ${mktLimpio}, con un ${item.probabilidad} de probabilidad y cuota justa de ${item.cuota}. ¿Por qué entramos aquí? ${justLimpia}`;
             hablarTextoIA(guion, null, `btn-audio-top5-${rank}`);
         }
 
@@ -4023,7 +4021,7 @@
             const esVip = verificarEsVip();
             const list = window.top5DataMemoria || [];
             if (!list || list.length === 0) {
-                notificar("Cargando el Top 5 del día...");
+                notificar("Cargando el Top 3 del día...");
                 return;
             }
 
@@ -4034,7 +4032,7 @@
                     const mktG = limpiarTextoParaVoz(pickGratis.mercado);
                     guion += `Vamos con el pick libre número 5 de la jornada: ${pickGratis.local} contra ${pickGratis.visitante}. La selección recomendada es ${mktG}, con ${pickGratis.probabilidad} de probabilidad. `;
                 }
-                guion += "Para desbloquear las 4 selecciones principales restantes del Top 5, activa tu Pase Pro en la plataforma.";
+                guion += "Para desbloquear las 2 selecciones principales restantes del Top 3, activa tu Pase Pro en la plataforma.";
                 hablarTextoIA(guion, null, 'btn-audio-top5-full');
                 return;
             }
@@ -4110,11 +4108,10 @@
         // COMPONENTES CUANTITATIVOS: TERMÓMETRO DE RACHA & PROPS DE JUGADORES
         // =========================================================================
         function renderizarBadgesRacha(rachaStr) {
-            let partes = (rachaStr || "V-E-D-V-E").replace(/\s+/g, '').split('-').filter(Boolean);
-            const fallbackCiclo = ['E', 'D', 'V', 'E', 'V'];
-            let fIdx = 0;
-            while (partes.length < 5) { partes.push(fallbackCiclo[fIdx % 5]); fIdx++; }
-            partes = partes.slice(0, 5);
+            const partes = (rachaStr || "").replace(/\s+/g, '').split('-').filter(Boolean).slice(0, 5);
+            if (partes.length === 0) {
+                return '<span class="text-[10px] text-amber-300 font-mono">Sin partidos verificados</span>';
+            }
 
             return partes.map(res => {
                 const r = res.toUpperCase();
@@ -4129,19 +4126,20 @@
         }
 
         function calcularPctRacha(rachaStr) {
-            let partes = (rachaStr || "V-E-V-V-D").replace(/\s+/g, '').split('-').filter(Boolean).slice(0, 5);
+            const partes = (rachaStr || "").replace(/\s+/g, '').split('-').filter(Boolean).slice(0, 5);
+            if (partes.length === 0) return 0;
             let puntos = 0;
             partes.forEach(p => {
                 const u = p.toUpperCase();
                 if (u === 'V' || u === 'W') puntos += 3;
                 else if (u === 'E') puntos += 1;
             });
-            const maxPts = Math.max(1, partes.length * 3);
-            return Math.min(100, Math.max(20, Math.round((puntos / maxPts) * 100)));
+            const maxPts = partes.length * 3;
+            return Math.min(100, Math.max(0, Math.round((puntos / maxPts) * 100)));
         }
 
         function resumirConteoRacha5(rachaStr) {
-            const partes = (rachaStr || "V-E-V-D-D").replace(/\s+/g, '').split('-').filter(Boolean).slice(0, 5);
+            const partes = (rachaStr || "").replace(/\s+/g, '').split('-').filter(Boolean).slice(0, 5);
             let v = 0, e = 0, d = 0;
             partes.forEach(p => {
                 const u = p.toUpperCase();
@@ -4153,13 +4151,17 @@
         }
 
         function renderizarListaUltimos5Html(ultimosList) {
-            if (!Array.isArray(ultimosList) || ultimosList.length === 0) return '';
+            if (!Array.isArray(ultimosList) || ultimosList.length === 0) {
+                return '<div class="pt-2 border-t border-cardBorder/40 text-[10px] text-amber-300 font-mono">Sin partidos verificados</div>';
+            }
             return `
                 <div class="pt-2 border-t border-cardBorder/40 flex flex-wrap gap-1.5">
                     ${ultimosList.slice(0, 5).map(m => {
-                        const c = String(m.condicion || 'E').toUpperCase();
-                        const col = c === 'V' ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/40' : (c === 'E' ? 'text-amber-300 border-amber-500/30 bg-amber-950/40' : 'text-rose-300 border-rose-500/30 bg-rose-950/40');
-                        return `<span class="text-[9px] font-mono px-2 py-0.5 rounded border ${col}">${esc(m.resultado)} vs ${esc(m.rival)} (${c})</span>`;
+                        const res = String(m.resultado || '').toUpperCase();
+                        const cond = String(m.condicion || '').toUpperCase() === 'V' ? 'Visitante' : 'Local';
+                        const marc = m.marcador || '—';
+                        const col = res === 'V' ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/40' : (res === 'E' ? 'text-amber-300 border-amber-500/30 bg-amber-950/40' : 'text-rose-300 border-rose-500/30 bg-rose-950/40');
+                        return `<span class="text-[9px] font-mono px-2 py-0.5 rounded border ${col}" title="${esc(m.fecha || '')} • ${esc(m.competicion || '')}">${esc(res)} ${esc(marc)} vs ${esc(m.rival)} (${cond})</span>`;
                     }).join('')}
                 </div>
             `;
@@ -4170,25 +4172,28 @@
             const locAnt = ant.local || {};
             const visAnt = ant.visitante || {};
 
-            const rachaLoc = locAnt.racha || "V-E-V-D-D";
-            const rachaVis = visAnt.racha || "V-V-E-D-V";
+            const rachaLoc = locAnt.racha || "";
+            const rachaVis = visAnt.racha || "";
 
-            const pctLoc = calcularPctRacha(rachaLoc);
-            const pctVis = calcularPctRacha(rachaVis);
+            const nLoc = locAnt.muestra_n != null ? locAnt.muestra_n : (rachaLoc ? rachaLoc.split('-').filter(Boolean).length : 0);
+            const nVis = visAnt.muestra_n != null ? visAnt.muestra_n : (rachaVis ? rachaVis.split('-').filter(Boolean).length : 0);
 
-            const badgesLoc = renderizarBadgesRacha(rachaLoc);
-            const badgesVis = renderizarBadgesRacha(rachaVis);
+            const pctLoc = rachaLoc ? calcularPctRacha(rachaLoc) : 0;
+            const pctVis = rachaVis ? calcularPctRacha(rachaVis) : 0;
 
-            const resumenLoc = resumirConteoRacha5(rachaLoc);
-            const resumenVis = resumirConteoRacha5(rachaVis);
+            const badgesLoc = rachaLoc ? renderizarBadgesRacha(rachaLoc) : '<span class="text-[10px] text-amber-300 font-mono">Sin partidos verificados</span>';
+            const badgesVis = rachaVis ? renderizarBadgesRacha(rachaVis) : '<span class="text-[10px] text-amber-300 font-mono">Sin partidos verificados</span>';
 
-            const gfLoc = locAnt.gf_ultimos3 != null ? locAnt.gf_ultimos3 : 8;
-            const gcLoc = locAnt.gc_ultimos3 != null ? locAnt.gc_ultimos3 : 5;
-            const tpLoc = locAnt.tiros_puerta_prom || "4.8";
+            const resumenLoc = rachaLoc ? resumirConteoRacha5(rachaLoc) : '0V-0E-0D';
+            const resumenVis = rachaVis ? resumirConteoRacha5(rachaVis) : '0V-0E-0D';
 
-            const gfVis = visAnt.gf_ultimos3 != null ? visAnt.gf_ultimos3 : 8;
-            const gcVis = visAnt.gc_ultimos3 != null ? visAnt.gc_ultimos3 : 5;
-            const tpVis = visAnt.tiros_puerta_prom || "4.4";
+            const gfLoc = locAnt.gf_ultimos3 != null ? locAnt.gf_ultimos3 : "—";
+            const gcLoc = locAnt.gc_ultimos3 != null ? locAnt.gc_ultimos3 : "—";
+            const tpLoc = locAnt.tiros_puerta_prom != null ? `${locAnt.tiros_puerta_prom}/p` : "N/D";
+
+            const gfVis = visAnt.gf_ultimos3 != null ? visAnt.gf_ultimos3 : "—";
+            const gcVis = visAnt.gc_ultimos3 != null ? visAnt.gc_ultimos3 : "—";
+            const tpVis = visAnt.tiros_puerta_prom != null ? `${visAnt.tiros_puerta_prom}/p` : "N/D";
 
             return `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -4204,15 +4209,15 @@
                             <div class="bg-gradient-to-r from-emerald-500 to-lime-400 h-2 rounded-full transition-all duration-500" style="width: ${pctLoc}%"></div>
                         </div>
                         <div class="flex items-center justify-between pt-1">
-                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos 5 partidos:</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos ${nLoc} partido${nLoc === 1 ? '' : 's'}${nLoc < 5 ? ' <span class="text-amber-400">(Confianza insuficiente)</span>' : ''}:</span>
                             <div class="flex items-center gap-1.5">
                                 ${badgesLoc}
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2 pt-2 border-t border-cardBorder/40 text-center text-[10px]">
-                            <div><span class="text-slate-400 block font-mono">Goles Favor (5p)</span><span class="text-white font-bold font-mono">${gfLoc}</span></div>
-                            <div><span class="text-slate-400 block font-mono">Goles Contra (5p)</span><span class="text-white font-bold font-mono">${gcLoc}</span></div>
-                            <div><span class="text-slate-400 block font-mono">Tiros Arco</span><span class="text-accentGreen font-bold font-mono">${tpLoc}/p</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Favor (${nLoc}p)</span><span class="text-white font-bold font-mono">${gfLoc}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Contra (${nLoc}p)</span><span class="text-white font-bold font-mono">${gcLoc}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Tiros Arco</span><span class="text-accentGreen font-bold font-mono">${tpLoc}</span></div>
                         </div>
                         ${renderizarListaUltimos5Html(locAnt.ultimos_partidos)}
                     </div>
@@ -4229,15 +4234,15 @@
                             <div class="bg-gradient-to-r from-blue-500 to-cyan-400 h-2 rounded-full transition-all duration-500" style="width: ${pctVis}%"></div>
                         </div>
                         <div class="flex items-center justify-between pt-1">
-                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos 5 partidos:</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-mono font-bold">Últimos ${nVis} partido${nVis === 1 ? '' : 's'}${nVis < 5 ? ' <span class="text-amber-400">(Confianza insuficiente)</span>' : ''}:</span>
                             <div class="flex items-center gap-1.5">
                                 ${badgesVis}
                             </div>
                         </div>
                         <div class="grid grid-cols-3 gap-2 pt-2 border-t border-cardBorder/40 text-center text-[10px]">
-                            <div><span class="text-slate-400 block font-mono">Goles Favor (5p)</span><span class="text-white font-bold font-mono">${gfVis}</span></div>
-                            <div><span class="text-slate-400 block font-mono">Goles Contra (5p)</span><span class="text-white font-bold font-mono">${gcVis}</span></div>
-                            <div><span class="text-slate-400 block font-mono">Tiros Arco</span><span class="text-cyan-400 font-bold font-mono">${tpVis}/p</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Favor (${nVis}p)</span><span class="text-white font-bold font-mono">${gfVis}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Goles Contra (${nVis}p)</span><span class="text-white font-bold font-mono">${gcVis}</span></div>
+                            <div><span class="text-slate-400 block font-mono">Tiros Arco</span><span class="text-cyan-400 font-bold font-mono">${tpVis}</span></div>
                         </div>
                         ${renderizarListaUltimos5Html(visAnt.ultimos_partidos)}
                     </div>
