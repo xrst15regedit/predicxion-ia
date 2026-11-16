@@ -13406,29 +13406,60 @@ class SportsAnalyticsEngine:
         norm = (team_name or "").lower().strip()
         return "seleccion" if norm in selecciones_conocidas else "club"
 
+    _HISTORY_INDEX = {}
+    _HISTORY_INDEX_COMP = {}
+    _HISTORY_INDEX_SIG = None
+    _LAST_5_CACHE = {}
+    _TEAM_STATS_CACHE = {}
+    _TEAM_STATS_CACHE_SIG = None
+    _PERF_COUNTERS = {"cache_queries": 0, "history_scans": 0}
+
     @classmethod
-    def get_verified_last_5_matches(cls, team_name: str, before_date: str = "", competition_code: str = "", entity_type: str = "") -> dict:
-        """
-        Fuente única de verdad para el Termómetro de Racha:
-        - Usa únicamente partidos oficiales finalizados previos a `before_date`.
-        - Separa estrictamente clubes vs selecciones y excluye amistosos y simulados.
-        - Ordena del más reciente al más antiguo, sin duplicados.
-        - Calcula V/E/D desde la perspectiva exacta del equipo (L/V).
-        - Si hay < 5 partidos válidos, retorna la cantidad real y `confianza_insuficiente: True`.
-        """
-        ent_type = entity_type or cls._infer_entity_type(team_name, competition_code)
+    def _current_history_signature(cls):
+        v_cache = globals().get("_VERIFIED_RESULTS_CACHE") or {}
+        v_hist = globals().get("VERIFIED_TEAM_HISTORY") or {}
+        r_est = globals().get("RATINGS_ESTADO") or {}
+        first_k = next(iter(v_cache), None)
+        return (len(v_cache), len(v_hist), first_k, r_est.get("actualizado"))
+
+    @classmethod
+    def rebuild_verified_history_index(cls, force: bool = False):
+        """Precalcula el índice global de históricos normalizados por equipo, competición y fecha."""
+        sig = cls._current_history_signature()
+        if not force and cls._HISTORY_INDEX_SIG == sig:
+            return
         norm_fn = globals().get("_norm_equipo")
-        eq_norm = norm_fn(team_name) if norm_fn else (team_name or "").lower().strip()
+        idx_main = {}
+        idx_comp = {}
+        dedup_tracker = {}
 
-        raw_candidates = []
-        # 1. Fuente primaria: VERIFIED_TEAM_HISTORY (Football-Data CSV oficial)
-        if "VERIFIED_TEAM_HISTORY" in globals() and ent_type == "club":
+        def _append_entry(eq_key: str, ent_type: str, entry: dict):
+            f_m = str(entry.get("fecha") or "")[:10]
+            if not f_m:
+                return
+            rival_n = entry.get("_rival_norm") or (norm_fn(entry.get("rival", "")) if norm_fn else str(entry.get("rival", "")).lower().strip())
+            cond = entry.get("condicion", "")
+            d_key = (eq_key, ent_type, f_m, rival_n, cond)
+            if d_key in dedup_tracker:
+                return
+            dedup_tracker[d_key] = True
+            idx_main.setdefault((eq_key, ent_type), []).append(entry)
+            c_code = str(entry.get("codigo_liga") or "").upper()
+            if c_code:
+                idx_comp.setdefault((eq_key, c_code, ent_type), []).append(entry)
+
+        if "VERIFIED_TEAM_HISTORY" in globals():
             with _RATINGS_LOCK:
-                hist_list = VERIFIED_TEAM_HISTORY.get(eq_norm, [])
-                for item in hist_list:
-                    raw_candidates.append(dict(item))
+                for eq_k, hist_list in VERIFIED_TEAM_HISTORY.items():
+                    for item in hist_list:
+                        if not item.get("es_oficial", True) or item.get("simulado", False):
+                            continue
+                        if "amistoso" in str(item.get("competicion", "")).lower():
+                            continue
+                        d_item = dict(item)
+                        d_item["_rival_norm"] = norm_fn(d_item.get("rival", "")) if norm_fn else str(d_item.get("rival", "")).lower().strip()
+                        _append_entry(eq_k, "club", d_item)
 
-        # 2. Fuente verificada de actas en _VERIFIED_RESULTS_CACHE (solo oficiales no simulados)
         if "_VERIFIED_RESULTS_CACHE" in globals():
             for (f_c, h_c, a_c), res_c in _VERIFIED_RESULTS_CACHE.items():
                 if not res_c.get("finished") or res_c.get("simulado"):
@@ -13436,78 +13467,105 @@ class SportsAnalyticsEngine:
                 if "amistoso" in str(res_c.get("competicion", "")).lower():
                     continue
                 c_ent = res_c.get("tipo_entidad") or cls._infer_entity_type(h_c, res_c.get("codigo_liga", ""))
-                if c_ent != ent_type:
-                    continue
                 h_n = norm_fn(h_c) if norm_fn else h_c.lower().strip()
                 a_n = norm_fn(a_c) if norm_fn else a_c.lower().strip()
-                if eq_norm not in (h_n, a_n):
-                    continue
                 sh = int(res_c.get("score_home") or 0)
                 sa = int(res_c.get("score_away") or 0)
-                is_home = (eq_norm == h_n)
-                gf, gc = (sh, sa) if is_home else (sa, sh)
-                res_ved = "V" if gf > gc else ("E" if gf == gc else "D")
-                c_team = res_c.get("corners_home") if is_home else res_c.get("corners_away")
-                if c_team is None and res_c.get("corners_total") is not None:
-                    # Regla trazable: cuando el acta oficial reporta corners_total del partido, se registra la mitad exacta por equipo en esa acta
-                    c_team = round(float(res_c.get("corners_total")) / 2.0, 2)
-                t_team = res_c.get("cards_home") if is_home else res_c.get("cards_away")
-                if t_team is None and res_c.get("cards_total") is not None:
-                    t_team = round(float(res_c.get("cards_total")) / 2.0, 2)
-                sh_team = res_c.get("shots_home") if is_home else res_c.get("shots_away")
-                sot_team = res_c.get("shots_on_target_home") if is_home else res_c.get("shots_on_target_away")
-                fl_team = res_c.get("fouls_home") if is_home else res_c.get("fouls_away")
-                if sh_team is None and isinstance(res_c.get("player_stats"), dict):
+                f_str = str(f_c)[:10]
+                comp_name = res_c.get("competicion") or "Competición Oficial"
+                comp_code = res_c.get("codigo_liga", "")
+                fuente = res_c.get("source") or "Acta Oficial Verificada"
+
+                ps_sh = ps_sot = None
+                if res_c.get("shots_home") is None and isinstance(res_c.get("player_stats"), dict):
                     tot_sh_p = sum(int(v.get("total_shots", 0)) for v in res_c["player_stats"].values())
                     tot_sot_p = sum(int(v.get("shots_on_target", 0)) for v in res_c["player_stats"].values())
                     if tot_sh_p > 0:
-                        sh_team = tot_sh_p
-                        sot_team = tot_sot_p
+                        ps_sh = tot_sh_p
+                        ps_sot = tot_sot_p
 
-                raw_candidates.append({
-                    "fecha": str(f_c)[:10],
-                    "competicion": res_c.get("competicion") or "Competición Oficial",
-                    "codigo_liga": res_c.get("codigo_liga", ""),
-                    "rival": a_c if is_home else h_c,
-                    "condicion": "L" if is_home else "V",
-                    "gf": gf, "gc": gc,
-                    "marcador": f"{sh} - {sa}",
-                    "resultado": res_ved,
-                    "corners": c_team,
-                    "tarjetas": t_team,
-                    "tiros_totales": sh_team,
-                    "tiros_puerta": sot_team,
-                    "faltas": fl_team,
-                    "tipo_entidad": ent_type,
-                    "es_oficial": True,
-                    "simulado": False,
-                    "fuente": res_c.get("source") or "Acta Oficial Verificada"
-                })
+                for is_home in (True, False):
+                    eq_n = h_n if is_home else a_n
+                    riv_name = a_c if is_home else h_c
+                    riv_n = a_n if is_home else h_n
+                    gf, gc = (sh, sa) if is_home else (sa, sh)
+                    res_ved = "V" if gf > gc else ("E" if gf == gc else "D")
+                    c_team = res_c.get("corners_home") if is_home else res_c.get("corners_away")
+                    if c_team is None and res_c.get("corners_total") is not None:
+                        c_team = round(float(res_c.get("corners_total")) / 2.0, 2)
+                    t_team = res_c.get("cards_home") if is_home else res_c.get("cards_away")
+                    if t_team is None and res_c.get("cards_total") is not None:
+                        t_team = round(float(res_c.get("cards_total")) / 2.0, 2)
+                    sh_team = res_c.get("shots_home") if is_home else res_c.get("shots_away")
+                    if sh_team is None:
+                        sh_team = ps_sh
+                    sot_team = res_c.get("shots_on_target_home") if is_home else res_c.get("shots_on_target_away")
+                    if sot_team is None:
+                        sot_team = ps_sot
+                    fl_team = res_c.get("fouls_home") if is_home else res_c.get("fouls_away")
 
-        # Filtrar: solo oficiales, no simulados, fecha estrictamente anterior a before_date, sin duplicados
+                    _append_entry(eq_n, c_ent, {
+                        "fecha": f_str,
+                        "competicion": comp_name,
+                        "codigo_liga": comp_code,
+                        "rival": riv_name,
+                        "_rival_norm": riv_n,
+                        "condicion": "L" if is_home else "V",
+                        "gf": gf, "gc": gc,
+                        "marcador": f"{sh} - {sa}",
+                        "resultado": res_ved,
+                        "corners": c_team,
+                        "tarjetas": t_team,
+                        "tiros_totales": sh_team,
+                        "tiros_puerta": sot_team,
+                        "faltas": fl_team,
+                        "tipo_entidad": c_ent,
+                        "es_oficial": True,
+                        "simulado": False,
+                        "fuente": fuente,
+                    })
+
+        for k_idx in idx_main:
+            idx_main[k_idx].sort(key=lambda x: x.get("fecha", ""), reverse=True)
+        for k_c in idx_comp:
+            idx_comp[k_c].sort(key=lambda x: x.get("fecha", ""), reverse=True)
+
+        cls._HISTORY_INDEX = idx_main
+        cls._HISTORY_INDEX_COMP = idx_comp
+        cls._HISTORY_INDEX_SIG = sig
+        cls._LAST_5_CACHE.clear()
+        cls._TEAM_STATS_CACHE.clear()
+        cls._TEAM_STATS_CACHE_SIG = sig
+
+    @classmethod
+    def get_verified_last_5_matches(cls, team_name: str, before_date: str = "", competition_code: str = "", entity_type: str = "") -> dict:
+        """
+        Consulta O(1) sobre el índice global precalculado de históricos normalizados y caché con clave team|competition|before_date.
+        Nunca recorre _VERIFIED_RESULTS_CACHE completo ni re-normaliza nombres en cada solicitud HTTP.
+        """
+        cls.rebuild_verified_history_index()
+        ent_type = entity_type or cls._infer_entity_type(team_name, competition_code)
+        norm_fn = globals().get("_norm_equipo")
+        eq_norm = norm_fn(team_name) if norm_fn else (team_name or "").lower().strip()
         cutoff = str(before_date or "")[:10]
-        seen = set()
-        valid = []
-        for m in raw_candidates:
-            if not m.get("es_oficial", True) or m.get("simulado", False):
-                continue
-            if "amistoso" in str(m.get("competicion", "")).lower():
-                continue
-            f_m = str(m.get("fecha") or "")[:10]
-            if not f_m:
-                continue
-            if cutoff and f_m >= cutoff:
-                continue
-            rival_n = norm_fn(m.get("rival", "")) if norm_fn else str(m.get("rival", "")).lower().strip()
-            dedup_k = (f_m, rival_n, m.get("condicion", ""))
-            if dedup_k in seen:
-                continue
-            seen.add(dedup_k)
-            valid.append(m)
+        comp_str = str(competition_code or "").upper()
+        cache_key = f"{eq_norm}|{comp_str}|{cutoff}|{ent_type}"
 
-        # Ordenar del más reciente al más antiguo y tomar máximo 5
-        valid.sort(key=lambda x: x.get("fecha", ""), reverse=True)
-        last_5 = valid[:5]
+        cached = cls._LAST_5_CACHE.get(cache_key)
+        if cached is not None:
+            cls._PERF_COUNTERS["cache_queries"] += 1
+            return dict(cached)
+
+        candidates = cls._HISTORY_INDEX.get((eq_norm, ent_type), [])
+        if cutoff:
+            last_5 = []
+            for m in candidates:
+                if m["fecha"] < cutoff:
+                    last_5.append(m)
+                    if len(last_5) >= 5:
+                        break
+        else:
+            last_5 = candidates[:5]
         n = len(last_5)
         wins = sum(1 for x in last_5 if x.get("resultado") == "V")
         draws = sum(1 for x in last_5 if x.get("resultado") == "E")
@@ -13522,7 +13580,7 @@ class SportsAnalyticsEngine:
         sot_vals = [float(x["tiros_puerta"]) for x in last_5 if x.get("tiros_puerta") is not None]
         fl_vals = [float(x["faltas"]) for x in last_5 if x.get("faltas") is not None]
 
-        return {
+        res_obj = {
             "partidos": last_5,
             "muestra_n": n,
             "streak": streak_str,
@@ -13541,6 +13599,8 @@ class SportsAnalyticsEngine:
             "tipo_entidad": ent_type,
             "fuente": last_5[0].get("fuente", "Sin fuente") if n > 0 else "Sin partidos verificados"
         }
+        cls._LAST_5_CACHE[cache_key] = res_obj
+        return dict(res_obj)
 
     @classmethod
     def _expand_streak_to_5(cls, raw_streak: str, normalized_name: str, elo_val: int = 1800) -> str:
@@ -13562,17 +13622,25 @@ class SportsAnalyticsEngine:
     @classmethod
     def get_team_stats(cls, team_name: str, competition_code: str = "", before_date: str = "") -> dict:
         """
-        Fuente única de producción para métricas de equipo:
-        - Consume únicamente datos oficiales provenientes de football-data.org (`RATINGS_REALES` + `VERIFIED_TEAM_HISTORY` + `_VERIFIED_RESULTS_CACHE` no simulado).
-        - NUNCA consume `REAL_FORM_2026_OVERRIDES`, `TEAM_HISTORICAL_DATABASE`, hashes ni valores ficticios.
+        Fuente única de producción para métricas de equipo con caché team|competition|before_date:
+        - Consume únicamente datos oficiales preindexados (`RATINGS_REALES` + índice global precalculado).
         - Si no existen datos oficiales suficientes, devuelve `nivel_verificacion = "DATOS_INSUFICIENTES"`.
         """
+        cls.rebuild_verified_history_index()
+        norm_fn = globals().get("_norm_equipo")
+        eq_norm = norm_fn(team_name) if norm_fn else (team_name or "").lower().strip()
+        ts_key = f"{eq_norm}|{str(competition_code or '').upper()}|{str(before_date or '')[:10]}"
+        cached_ts = cls._TEAM_STATS_CACHE.get(ts_key)
+        if cached_ts is not None:
+            cls._PERF_COUNTERS["cache_queries"] += 1
+            return dict(cached_ts)
+
         real_rating = _ratings_para(team_name) if "_ratings_para" in globals() else None
         hist_5 = cls.get_verified_last_5_matches(team_name, before_date=before_date, competition_code=competition_code)
         n_real = int(hist_5.get("muestra_n", 0))
 
         if real_rating and n_real > 0:
-            return {
+            res_ts = {
                 "elo": real_rating.get("elo"),
                 "base_att": real_rating.get("gf_promedio"),
                 "base_def": real_rating.get("gc_promedio"),
@@ -13596,9 +13664,8 @@ class SportsAnalyticsEngine:
                 "datos_suficientes": (n_real >= 5),
                 "observacion": f"Datos oficiales ({n_real} últimos partidos; {real_rating.get('partidos', n_real)} en temporada)."
             }
-
-        if n_real > 0:
-            return {
+        elif n_real > 0:
+            res_ts = {
                 "elo": None,
                 "base_att": round(hist_5["gf_total"] / n_real, 2),
                 "base_def": round(hist_5["gc_total"] / n_real, 2),
@@ -13622,30 +13689,32 @@ class SportsAnalyticsEngine:
                 "datos_suficientes": (n_real >= 5),
                 "observacion": f"Muestra verificada: {n_real}/5 partidos oficiales."
             }
-
-        return {
-            "elo": None,
-            "base_att": None,
-            "base_def": None,
-            "streak": "",
-            "muestra_n": 0,
-            "pts_last3": 0,
-            "gf_last3": 0,
-            "ga_last3": 0,
-            "corners": None,
-            "corners_muestra": 0,
-            "tarjetas": None,
-            "tarjetas_muestra": 0,
-            "tiros_puerta": None,
-            "tiros_totales": None,
-            "ultimos_partidos": [],
-            "confianza_insuficiente": True,
-            "fuente": "NO_DISPONIBLE",
-            "actualizado_en": None,
-            "nivel_verificacion": "DATOS_INSUFICIENTES",
-            "datos_suficientes": False,
-            "observacion": "DATOS_INSUFICIENTES: sin partidos oficiales verificados en football-data.org."
-        }
+        else:
+            res_ts = {
+                "elo": None,
+                "base_att": None,
+                "base_def": None,
+                "streak": "",
+                "muestra_n": 0,
+                "pts_last3": 0,
+                "gf_last3": 0,
+                "ga_last3": 0,
+                "corners": None,
+                "corners_muestra": 0,
+                "tarjetas": None,
+                "tarjetas_muestra": 0,
+                "tiros_puerta": None,
+                "tiros_totales": None,
+                "ultimos_partidos": [],
+                "confianza_insuficiente": True,
+                "fuente": "NO_DISPONIBLE",
+                "actualizado_en": None,
+                "nivel_verificacion": "DATOS_INSUFICIENTES",
+                "datos_suficientes": False,
+                "observacion": "DATOS_INSUFICIENTES: sin partidos oficiales verificados en football-data.org."
+            }
+        cls._TEAM_STATS_CACHE[ts_key] = res_ts
+        return dict(res_ts)
     @staticmethod
     def calculate_poisson(k: int, lamb: float) -> float:
         if lamb <= 0:
@@ -19189,14 +19258,22 @@ def _bloqueo_compra(uid, monto):
             return f"Esta compra superaría tu límite mensual de gasto (S/ {lim:.2f}). Llevas gastados S/ {gasto:.2f} este mes."
     return None
 
+_NORM_EQUIPO_CACHE = {}
+
 def _norm_equipo(nombre):
     if not nombre:
         return ""
-    s = nombre.lower().strip()
+    key = str(nombre)
+    cached = _NORM_EQUIPO_CACHE.get(key)
+    if cached is not None:
+        return cached
+    s = key.lower().strip()
     s = re.sub(r'[̀-ͯ]', '', unicodedata.normalize('NFD', s))
     s = re.sub(r'[^a-z0-9 ]', '', s)
     s = re.sub(r'\s+', ' ', s).strip()
-    return ALIAS_EQUIPOS_RATINGS.get(s, s)
+    res = ALIAS_EQUIPOS_RATINGS.get(s, s)
+    _NORM_EQUIPO_CACHE[key] = res
+    return res
 
 def _fecha_csv(texto):
     for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
@@ -19396,10 +19473,56 @@ def _ratings_para(nombre):
     with _RATINGS_LOCK:
         return RATINGS_REALES.get(_norm_equipo(nombre))
 
+_FIXTURES_BY_DATE_INDEX = {}
+_FIXTURES_DATES_SORTED = []
+_FIXTURES_INDEX_SIG = None
+
+def ensure_fixtures_date_index(force: bool = False):
+    """Pre-normaliza nombres de equipos y agrupa ALL_FIXTURES_POOL por fecha una sola vez."""
+    global _FIXTURES_BY_DATE_INDEX, _FIXTURES_DATES_SORTED, _FIXTURES_INDEX_SIG
+    pool = globals().get("ALL_FIXTURES_POOL") or []
+    sig = (len(pool), id(pool))
+    if not force and _FIXTURES_INDEX_SIG == sig:
+        return
+    by_date = {}
+    seen_global = set()
+    for fix in pool:
+        f_utc = fix.get("fecha_utc") or fix.get("fecha") or ""
+        fecha_dia = str(f_utc)[:10]
+        if not fecha_dia:
+            continue
+        loc = (fix.get("local") or "").strip()
+        vis = (fix.get("visitante") or "").strip()
+        if "_local_norm" not in fix:
+            fix["_local_norm"] = _norm_equipo(loc)
+        if "_visitante_norm" not in fix:
+            fix["_visitante_norm"] = _norm_equipo(vis)
+        if "_liga_norm" not in fix:
+            fix["_liga_norm"] = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
+        m_key = CalendarSyncService.canonical_fixture_key(loc, vis, fecha_dia)
+        id_p = fix.get("id_partido")
+        if m_key in seen_global or (id_p and id_p in seen_global):
+            continue
+        seen_global.add(m_key)
+        if id_p:
+            seen_global.add(id_p)
+        by_date.setdefault(fecha_dia, []).append(fix)
+    _FIXTURES_BY_DATE_INDEX = by_date
+    _FIXTURES_DATES_SORTED = sorted(by_date.keys())
+    _FIXTURES_INDEX_SIG = sig
+
+try:
+    ensure_fixtures_date_index(force=True)
+    SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
+except Exception:
+    pass
+
 def _arranque_ratings():
     time.sleep(5)
     try:
+        ensure_fixtures_date_index(force=True)
         actualizar_ratings_reales()
+        SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
         MatchEnrichmentCache.enrich_calendar_worker(target_date=get_current_operational_date(), limit=15)
         now_pe = Top3RotationManager.now_peru()
         if now_pe.hour >= 22:
@@ -20405,6 +20528,7 @@ def create_app() -> Flask:
 
     @app.route("/obtener-pronostico", methods=["GET"])
     def obtener_pronostico():
+        t_start = time.perf_counter()
         try:
             today_str = get_current_operational_date()
             req_fecha = request.args.get("fecha", "").strip()
@@ -20413,83 +20537,98 @@ def create_app() -> Flask:
 
             now_ts = time.time()
             if cache_key in _CARTELERA_MEMO_CACHE and (now_ts - _CARTELERA_MEMO_TS.get(cache_key, 0)) < 300:
-                return jsonify(_CARTELERA_MEMO_CACHE[cache_key]), 200
+                cached_resp = dict(_CARTELERA_MEMO_CACHE[cache_key])
+                elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+                cached_resp["metricas_rendimiento"] = {
+                    **(cached_resp.get("metricas_rendimiento") or {}),
+                    "tiempo_total_ms": elapsed_ms,
+                    "tiempo_total_seg": round(elapsed_ms / 1000.0, 4),
+                    "cache_hit_cartelera": True,
+                }
+                return jsonify(cached_resp), 200
+
+            ensure_fixtures_date_index()
+            SportsAnalyticsEngine.rebuild_verified_history_index()
+            cache_q_start = SportsAnalyticsEngine._PERF_COUNTERS["cache_queries"]
+            scans_start = SportsAnalyticsEngine._PERF_COUNTERS["history_scans"]
+
+            _, active_end_date = get_active_calendar_window()
+            matches_target = list(_FIXTURES_BY_DATE_INDEX.get(target_featured_date, []))
+            hay_partidos_hoy = len(matches_target) > 0
+            fecha_mostrada_destacados = target_featured_date
+
+            if not hay_partidos_hoy:
+                fechas_fut = [
+                    d for d in _FIXTURES_DATES_SORTED
+                    if target_featured_date <= d <= active_end_date
+                ]
+                if fechas_fut:
+                    fecha_mostrada_destacados = fechas_fut[0]
+                    matches_target = list(_FIXTURES_BY_DATE_INDEX.get(fecha_mostrada_destacados, []))
 
             todos = {}
             destacados = []
-            seen_matches = set()
+            partidos_fallidos = 0
 
-            for fix in ALL_FIXTURES_POOL:
-                f_utc = fix.get("fecha_utc") or ""
-                fecha_dia_solo = f_utc[:10]
+            for fix in matches_target:
+                try:
+                    f_utc = fix.get("fecha_utc") or ""
+                    fecha_dia_solo = str(f_utc)[:10] or fecha_mostrada_destacados
+                    div_name = fix.get("_liga_norm") or normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
+                    fix["liga"] = div_name
+                    loc = (fix.get("local") or "").strip()
+                    vis = (fix.get("visitante") or "").strip()
 
-                # Descartar permanentemente partidos anteriores a la fecha actual
-                if fecha_dia_solo < today_str:
-                    continue
-                _, active_end_date = get_active_calendar_window()
-                if fecha_dia_solo > active_end_date:
-                    continue
+                    analisis = analytics.generate_institutional_analysis(fix)
 
-                div_name = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
-                fix["liga"] = div_name
-                loc = fix.get("local", "").strip()
-                vis = fix.get("visitante", "").strip()
-                m_key = CalendarSyncService.canonical_fixture_key(loc, vis, fecha_dia_solo)
+                    props_loc_list = [dict(p, equipo_partido=loc) for p in (get_players_for_team(loc) or [])[:2]]
+                    props_vis_list = [dict(p, equipo_partido=vis) for p in (get_players_for_team(vis) or [])[:2]]
+                    props_partido = []
+                    if props_loc_list:
+                        props_partido.append(props_loc_list[0])
+                    if props_vis_list:
+                        props_partido.append(props_vis_list[0])
+                    if len(props_loc_list) > 1:
+                        props_partido.append(props_loc_list[1])
+                    if len(props_vis_list) > 1:
+                        props_partido.append(props_vis_list[1])
 
-                if m_key in seen_matches or fix["id_partido"] in seen_matches:
-                    continue
-                seen_matches.add(m_key)
-                seen_matches.add(fix["id_partido"])
-
-                analisis = analytics.generate_institutional_analysis(fix)
-
-                # Vinculación dinámica O(1) instantánea de los 2 referentes titulares por equipo (Opción A y Opción B)
-                props_loc_list = [dict(p, equipo_partido=loc) for p in (get_players_for_team(loc) or [])[:2]]
-                props_vis_list = [dict(p, equipo_partido=vis) for p in (get_players_for_team(vis) or [])[:2]]
-                props_partido = []
-                if props_loc_list:
-                    props_partido.append(props_loc_list[0])
-                if props_vis_list:
-                    props_partido.append(props_vis_list[0])
-                if len(props_loc_list) > 1:
-                    props_partido.append(props_loc_list[1])
-                if len(props_vis_list) > 1:
-                    props_partido.append(props_vis_list[1])
-
-                item = {
-                    "id_partido": fix["id_partido"],
-                    "partido": f"{loc} vs {vis}",
-                    "local": loc,
-                    "visitante": vis,
-                    "liga": div_name,
-                    "codigo_liga": fix.get("codigo_liga", "OFL"),
-                    "fecha": fecha_dia_solo,
-                    "hora_utc": (f_utc[11:16] if len(f_utc) >= 16 else "14:00"),
-                    "estado": fix.get("estado", "SCHEDULED"),
-                    "estado_calendario": CalendarSyncService.get_fixture_overlay(fix),
-                    "jornada": fix.get("jornada"),
-                    "probabilidades": analisis["probabilidades"],
-                    "key_probabilities": analisis.get("key_probabilities", {}),
-                    "dobles_oportunidades": analisis["dobles_oportunidades"],
-                    "pronostico_principal": analisis["pronostico_principal"],
-                    "consenso_5_modelos": analisis.get("consenso_5_modelos", []),
-                    "pilares_cuantitativos": analisis["pilares_cuantitativos"],
-                    "organizacion_stakazos": analisis["organizacion_stakazos"],
-                    "modulo_arbitraje": analisis["modulo_arbitraje"],
-                    "analisis_partidos_anteriores": analisis.get("analisis_partidos_anteriores", {}),
-                    "h2h_directo": analisis.get("h2h_directo", {}),
-                    "alerta_trampa": analisis.get("alerta_trampa", {"activa": False}),
-                    "parametros_xg": analisis["parametros_xg"],
-                    "props_local": props_loc_list,
-                    "props_visitante": props_vis_list,
-                    "props_jugadores": props_partido,
-                    "consenso_dual_ia": analisis.get("consenso_dual_ia", {}),
-                    "consenso_triple_ia": analisis.get("consenso_dual_ia", {})
-                }
-                todos.setdefault(div_name, []).append(item)
-
-                if fecha_dia_solo == target_featured_date:
+                    item = {
+                        "id_partido": fix.get("id_partido"),
+                        "partido": f"{loc} vs {vis}",
+                        "local": loc,
+                        "visitante": vis,
+                        "liga": div_name,
+                        "codigo_liga": fix.get("codigo_liga", "OFL"),
+                        "fecha": fecha_dia_solo,
+                        "hora_utc": (f_utc[11:16] if len(f_utc) >= 16 else "14:00"),
+                        "estado": fix.get("estado", "SCHEDULED"),
+                        "estado_calendario": CalendarSyncService.get_fixture_overlay(fix),
+                        "jornada": fix.get("jornada"),
+                        "probabilidades": analisis["probabilidades"],
+                        "key_probabilities": analisis.get("key_probabilities", {}),
+                        "dobles_oportunidades": analisis["dobles_oportunidades"],
+                        "pronostico_principal": analisis["pronostico_principal"],
+                        "consenso_5_modelos": analisis.get("consenso_5_modelos", []),
+                        "pilares_cuantitativos": analisis["pilares_cuantitativos"],
+                        "organizacion_stakazos": analisis["organizacion_stakazos"],
+                        "modulo_arbitraje": analisis["modulo_arbitraje"],
+                        "analisis_partidos_anteriores": analisis.get("analisis_partidos_anteriores", {}),
+                        "h2h_directo": analisis.get("h2h_directo", {}),
+                        "alerta_trampa": analisis.get("alerta_trampa", {"activa": False}),
+                        "parametros_xg": analisis["parametros_xg"],
+                        "props_local": props_loc_list,
+                        "props_visitante": props_vis_list,
+                        "props_jugadores": props_partido,
+                        "consenso_dual_ia": analisis.get("consenso_dual_ia", {}),
+                        "consenso_triple_ia": analisis.get("consenso_dual_ia", {})
+                    }
+                    todos.setdefault(div_name, []).append(item)
                     destacados.append(item)
+                except Exception as match_exc:
+                    partidos_fallidos += 1
+                    logger.warning("Partido omitido en /obtener-pronostico (%s vs %s): %s", fix.get("local"), fix.get("visitante"), match_exc)
+                    continue
 
             for k in todos:
                 todos[k] = sorted(todos[k], key=lambda x: (str(x.get("fecha") or ""), str(x.get("hora_utc") or "")))
@@ -20498,32 +20637,32 @@ def create_app() -> Flask:
                 p_raw = p_item.get("pronostico_principal", {}).get("probabilidad", "50%")
                 return float(re.sub(r'[^0-9.]', '', str(p_raw)) or 50.0)
 
-            hay_partidos_hoy = len(destacados) > 0
-            fecha_mostrada_destacados = target_featured_date
+            destacados.sort(key=_extract_prob, reverse=True)
+            destacados = destacados[:12]
 
             if hay_partidos_hoy:
-                destacados.sort(key=_extract_prob, reverse=True)
-                destacados = destacados[:12]
                 mensaje_jornada = f"Partidos de Hoy • {target_featured_date} (Actualización 22:00 PE)"
             else:
-                # Si en la fecha actual (ej. 2026-10-15) NO se juegan partidos de nuestras ligas,
-                # tomar EXCLUSIVAMENTE los partidos de la fecha inmediata siguiente (ej. 2026-10-16)
-                # y NUNCA mezclar partidos lejanos del día 22 o de noviembre.
-                pool_todos = []
-                for k, lista in todos.items():
-                    pool_todos.extend(lista)
-                fechas_con_partidos = sorted(list(set(x.get("fecha") for x in pool_todos if x.get("fecha", "") >= target_featured_date)))
-                if fechas_con_partidos:
-                    fecha_mostrada_destacados = fechas_con_partidos[0]
-                    partidos_proxima_jornada = [x for x in pool_todos if x.get("fecha") == fecha_mostrada_destacados]
-                    partidos_proxima_jornada.sort(key=_extract_prob, reverse=True)
-                    destacados = partidos_proxima_jornada[:12]
-                else:
-                    destacados = []
                 mensaje_jornada = f"Partidos no disponibles hoy ({target_featured_date} sin programación oficial) • Próxima jornada: {fecha_mostrada_destacados}"
 
             total_partidos = sum(len(v) for v in todos.values())
-            logger.info("Retornando %d partidos totales en %d ligas. Hay partidos hoy (%s): %s. Destacados (%s): %d", total_partidos, len(todos), today_str, hay_partidos_hoy, fecha_mostrada_destacados, len(destacados))
+            elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            consultas_cache = SportsAnalyticsEngine._PERF_COUNTERS["cache_queries"] - cache_q_start
+            recorridos_hist = SportsAnalyticsEngine._PERF_COUNTERS["history_scans"] - scans_start
+
+            metricas_rend = {
+                "tiempo_total_ms": elapsed_ms,
+                "tiempo_total_seg": round(elapsed_ms / 1000.0, 4),
+                "partidos_procesados": total_partidos,
+                "partidos_fallidos": partidos_fallidos,
+                "consultas_cache": consultas_cache,
+                "recorridos_historicos": recorridos_hist,
+                "cache_hit_cartelera": False,
+            }
+            logger.info(
+                "Retornando %d partidos en %d ligas (%s). tiempo_ms=%.2f consultas_cache=%d recorridos_historicos=%d",
+                total_partidos, len(todos), fecha_mostrada_destacados, elapsed_ms, consultas_cache, recorridos_hist
+            )
 
             res_cartelera = {
                 "success": True,
@@ -20535,7 +20674,8 @@ def create_app() -> Flask:
                 "destacados": destacados,
                 "pronosticos_destacados": destacados,
                 "todos": todos,
-                "todos_los_partidos": todos
+                "todos_los_partidos": todos,
+                "metricas_rendimiento": metricas_rend,
             }
             _CARTELERA_MEMO_CACHE[cache_key] = res_cartelera
             _CARTELERA_MEMO_TS[cache_key] = now_ts
