@@ -271,62 +271,509 @@ def _verificar_es_admin() -> bool:
     # RECHAZO ESTRICTO POR DEFECTO
     return False
 # --------------------------------------------------------------------------------------
-# AUTOMATIZACIÓN 24/7: DESPACHO AUTOMÁTICO DEL TOP 5 AL CANAL VIP DE TELEGRAM (EXACTAMENTE 22:00 PM HORA PERÚ)
+# AUTOMATIZACIÓN 24/7: ROTACIÓN AUTOMÁTICA DIARIA DEL TOP 3 Y ENVÍO A TELEGRAM (22:00 AMERICA/LIMA)
 # --------------------------------------------------------------------------------------
-# Se pre-marca 2026-10-16 como ya emitido para no duplicar el envío ya realizado hoy
 _ultimo_envio_auto_fecha = ""
 _auto_telegram_lock = threading.Lock()
 _LAST_TG_FILE = "/tmp/predicxion_last_tg_top5_date.txt"
+_TOP3_ROTATION_STATE_FILE = "/tmp/predicxion_top3_rotation_state.json"
+PERU_TZ = timezone(timedelta(hours=-5))
+
+
+class Top3RotationManager:
+    """Gestor institucional de rotación diaria del Top 3 a las 22:00 America/Lima (UTC-5) con clave idempotente y recuperación."""
+
+    _LOCK = threading.RLock()
+    _STATE = {
+        "timezone": "America/Lima",
+        "ultima_rotacion": None,
+        "proxima_rotacion": None,
+        "fecha_actual": None,
+        "fecha_publicacion": None,
+        "fecha_rotacion": None,
+        "fecha_partidos_publicada": None,
+        "idempotency_key": None,
+        "cantidad_selecciones": 0,
+        "selecciones_publicadas": [],
+        "estado_telegram": "PENDIENTE",
+        "telegram_sent": False,
+        "ultimo_error": None,
+        "jornada_anterior_cerrada": None,
+        "published_keys": set(),
+    }
+
+    @classmethod
+    def now_peru(cls, now_override=None) -> datetime:
+        if isinstance(now_override, datetime):
+            if now_override.tzinfo is None:
+                return now_override.replace(tzinfo=PERU_TZ)
+            return now_override.astimezone(PERU_TZ)
+        if isinstance(now_override, str) and now_override.strip():
+            try:
+                s = now_override.strip().replace("Z", "+00:00")
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    return dt.replace(tzinfo=PERU_TZ)
+                return dt.astimezone(PERU_TZ)
+            except Exception:
+                pass
+        return datetime.now(PERU_TZ)
+
+    @classmethod
+    def reset_state(cls):
+        global _ultimo_envio_auto_fecha
+        with cls._LOCK:
+            _ultimo_envio_auto_fecha = ""
+            cls._STATE = {
+                "timezone": "America/Lima",
+                "ultima_rotacion": None,
+                "proxima_rotacion": None,
+                "fecha_actual": None,
+                "fecha_publicacion": None,
+                "fecha_rotacion": None,
+                "fecha_partidos_publicada": None,
+                "idempotency_key": None,
+                "cantidad_selecciones": 0,
+                "selecciones_publicadas": [],
+                "estado_telegram": "PENDIENTE",
+                "telegram_sent": False,
+                "ultimo_error": None,
+                "jornada_anterior_cerrada": None,
+                "published_keys": set(),
+            }
+            for fpath in (_TOP3_ROTATION_STATE_FILE, _LAST_TG_FILE):
+                try:
+                    if os.path.exists(fpath):
+                        os.remove(fpath)
+                except Exception:
+                    pass
+
+    @classmethod
+    def _resolve_next_match_date(cls, base_date_str: str) -> str:
+        """Selecciona los partidos del día siguiente (base_date + 1 día). Si no hay en calendario, busca la fecha inmediata posterior."""
+        try:
+            dt_base = datetime.strptime(base_date_str[:10], "%Y-%m-%d")
+        except Exception:
+            dt_base = cls.now_peru()
+        next_day = (dt_base + timedelta(days=1)).strftime("%Y-%m-%d")
+        pool = globals().get("ALL_FIXTURES_POOL") or []
+        if not pool:
+            return next_day
+        if any((f.get("fecha_utc") or f.get("fecha") or "")[:10] == next_day for f in pool):
+            return next_day
+        fechas_fut = sorted(
+            list(
+                set(
+                    (f.get("fecha_utc") or f.get("fecha") or "")[:10]
+                    for f in pool
+                    if (f.get("fecha_utc") or f.get("fecha") or "")[:10] >= next_day
+                )
+            )
+        )
+        return fechas_fut[0] if fechas_fut else next_day
+
+    @classmethod
+    def compute_window(cls, now_pe=None, target_date_override=None) -> dict:
+        dt_pe = cls.now_peru(now_pe)
+        fecha_actual = dt_pe.strftime("%Y-%m-%d")
+        en_ventana_22 = dt_pe.hour >= 22
+        fecha_publicacion = fecha_actual
+        if target_date_override:
+            fecha_partidos = str(target_date_override)[:10]
+        else:
+            fecha_partidos = cls._resolve_next_match_date(fecha_publicacion)
+
+        if en_ventana_22:
+            prox_dt = (dt_pe + timedelta(days=1)).replace(hour=22, minute=0, second=0, microsecond=0)
+        else:
+            prox_dt = dt_pe.replace(hour=22, minute=0, second=0, microsecond=0)
+
+        idempotency_key = f"top3:{fecha_publicacion}:{fecha_partidos}"
+        return {
+            "timezone": "America/Lima",
+            "hora_actual": dt_pe.isoformat(),
+            "fecha_actual": fecha_actual,
+            "fecha_publicacion": fecha_publicacion,
+            "fecha_partidos": fecha_partidos,
+            "fecha_rotacion": dt_pe.isoformat(),
+            "proxima_rotacion": prox_dt.isoformat(),
+            "idempotency_key": idempotency_key,
+            "en_ventana_22": en_ventana_22,
+        }
+
+    @classmethod
+    def _load_persisted_state(cls):
+        try:
+            if os.path.exists(_TOP3_ROTATION_STATE_FILE):
+                with open(_TOP3_ROTATION_STATE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    keys = set(data.get("published_keys") or [])
+                    cls._STATE["published_keys"].update(keys)
+                    for k in (
+                        "ultima_rotacion",
+                        "proxima_rotacion",
+                        "fecha_actual",
+                        "fecha_publicacion",
+                        "fecha_rotacion",
+                        "fecha_partidos_publicada",
+                        "idempotency_key",
+                        "cantidad_selecciones",
+                        "selecciones_publicadas",
+                        "estado_telegram",
+                        "telegram_sent",
+                        "ultimo_error",
+                        "jornada_anterior_cerrada",
+                    ):
+                        if data.get(k) is not None and cls._STATE.get(k) in (None, 0, [], "PENDIENTE", False):
+                            cls._STATE[k] = data[k]
+        except Exception:
+            pass
+
+    @classmethod
+    def _save_persisted_state(cls):
+        try:
+            serializable = dict(cls._STATE)
+            serializable["published_keys"] = sorted(list(cls._STATE.get("published_keys") or set()))
+            with open(_TOP3_ROTATION_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(serializable, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+    @classmethod
+    def is_key_published(cls, idempotency_key: str) -> bool:
+        if not idempotency_key:
+            return False
+        with cls._LOCK:
+            cls._load_persisted_state()
+            if idempotency_key in cls._STATE["published_keys"]:
+                return True
+            try:
+                if "db" in globals() and db:
+                    doc = db.collection("top3_rotaciones").document(idempotency_key).get()
+                    if doc.exists and (doc.to_dict() or {}).get("enviado"):
+                        cls._STATE["published_keys"].add(idempotency_key)
+                        return True
+            except Exception:
+                pass
+            return False
+
+    @classmethod
+    def mark_key_published(cls, idempotency_key: str, metadata: dict = None):
+        with cls._LOCK:
+            cls._STATE["published_keys"].add(idempotency_key)
+            cls._save_persisted_state()
+            try:
+                if "db" in globals() and db:
+                    payload = {
+                        "idempotency_key": idempotency_key,
+                        "enviado": True,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        **(metadata or {}),
+                    }
+                    db.collection("top3_rotaciones").document(idempotency_key).set(payload, merge=True)
+            except Exception:
+                pass
+
+    @classmethod
+    def get_published_match_date(cls, now_pe=None) -> str:
+        """Devuelve la fecha de partidos publicada vigente para el calendario visible y el botón 'Hoy'."""
+        with cls._LOCK:
+            cls._load_persisted_state()
+            pub_date = cls._STATE.get("fecha_partidos_publicada")
+            if pub_date:
+                return pub_date
+            dt_pe = cls.now_peru(now_pe)
+            if dt_pe.hour >= 22:
+                return cls._resolve_next_match_date(dt_pe.strftime("%Y-%m-%d"))
+            return get_current_operational_date()
+
+    @classmethod
+    def close_previous_matchday(cls, fecha_anterior: str) -> dict:
+        """Cierra la jornada anterior y envía resultados verificados si los 3 partidos han concluido."""
+        res_summary = {"fecha_cerrada": fecha_anterior, "picks_auditados": 0, "finalizados": 0, "resultados_enviados": False}
+        try:
+            pool = globals().get("ALL_FIXTURES_POOL") or []
+            matches_prev = [f for f in pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == fecha_anterior]
+            if not matches_prev or "_seleccionar_top3_verificado" not in globals():
+                return res_summary
+            picks_prev = _seleccionar_top3_verificado(matches_prev, fecha_anterior, limit=3)
+            liquidados = []
+            for p in picks_prev:
+                real_stats = obtener_resultado_real_verificado(
+                    p.get("local", ""),
+                    p.get("visitante", ""),
+                    fecha_anterior,
+                    liga=p.get("liga", ""),
+                    fecha_utc_completa=p.get("fecha_utc", ""),
+                    an_data=p.get("an_data"),
+                )
+                if real_stats and real_stats.get("finished") and not real_stats.get("simulado"):
+                    cal = SportsResultsAuditor.grade_prediction(p, real_stats)
+                    if cal.get("estado") in ("GANADA", "PERDIDA"):
+                        liquidados.append({
+                            "partido": p.get("partido"),
+                            "local": p.get("local"),
+                            "visitante": p.get("visitante"),
+                            "liga": p.get("liga"),
+                            "seleccion": p.get("seleccion") or p.get("mercado"),
+                            "mercado": p.get("mercado"),
+                            "probabilidad": p.get("probabilidad"),
+                            "cuota": p.get("cuota"),
+                            "resultado": cal.get("resultado"),
+                            "marcador_final": f"{real_stats.get('score_home', 0)} - {real_stats.get('score_away', 0)}",
+                            "corners_totales": real_stats.get("corners_total"),
+                            "tarjetas_totales": real_stats.get("cards_total"),
+                            "estado": cal.get("estado"),
+                            "verificado": True,
+                        })
+            res_summary["picks_auditados"] = len(picks_prev)
+            res_summary["finalizados"] = len(liquidados)
+            if len(picks_prev) > 0 and len(liquidados) == len(picks_prev):
+                if "ejecutar_envio_automatico_resultados_top5" in globals():
+                    ok_r, _ = ejecutar_envio_automatico_resultados_top5(
+                        fecha_anterior, liquidados, force=False, motivo="CIERRE_JORNADA_22_00_PE"
+                    )
+                    res_summary["resultados_enviados"] = bool(ok_r)
+        except Exception as exc:
+            logger.debug("Aviso cerrando jornada anterior %s: %s", fecha_anterior, exc)
+        return res_summary
+
+    @classmethod
+    def check_and_run_rotation(
+        cls,
+        now_pe=None,
+        force: bool = False,
+        target_date_override: str = None,
+        motivo: str = "ROTACION_22_00_PE",
+    ) -> dict:
+        with cls._LOCK:
+            cls._load_persisted_state()
+            win = cls.compute_window(now_pe=now_pe, target_date_override=target_date_override)
+            cls._STATE["fecha_actual"] = win["fecha_actual"]
+            cls._STATE["proxima_rotacion"] = win["proxima_rotacion"]
+
+            # 1. Antes de las 22:00 PE no publica (salvo ejecución manual forzada)
+            if not force and not win["en_ventana_22"]:
+                return {
+                    "executed": False,
+                    "published": False,
+                    "already_published": False,
+                    "reason": "BEFORE_22_00_PE",
+                    "timezone": "America/Lima",
+                    "hora_actual": win["hora_actual"],
+                    "fecha_actual": win["fecha_actual"],
+                    "fecha_publicacion": win["fecha_publicacion"],
+                    "fecha_partidos": win["fecha_partidos"],
+                    "fecha_partidos_publicada": cls._STATE.get("fecha_partidos_publicada") or win["fecha_actual"],
+                    "proxima_rotacion": win["proxima_rotacion"],
+                    "idempotency_key": win["idempotency_key"],
+                    "cantidad_selecciones": cls._STATE.get("cantidad_selecciones", 0),
+                    "estado_telegram": cls._STATE.get("estado_telegram", "PENDIENTE"),
+                    "ultimo_error": cls._STATE.get("ultimo_error"),
+                }
+
+            idem_key = win["idempotency_key"]
+
+            # 2. Clave idempotente: no enviar dos veces el mismo Top 3 (ni tras reinicio a las 23:00 PE)
+            if not force and cls.is_key_published(idem_key):
+                return {
+                    "executed": False,
+                    "published": False,
+                    "already_published": True,
+                    "reason": "ALREADY_PUBLISHED",
+                    "timezone": "America/Lima",
+                    "hora_actual": win["hora_actual"],
+                    "fecha_actual": win["fecha_actual"],
+                    "fecha_publicacion": win["fecha_publicacion"],
+                    "fecha_rotacion": cls._STATE.get("fecha_rotacion") or win["fecha_rotacion"],
+                    "ultima_rotacion": cls._STATE.get("ultima_rotacion"),
+                    "proxima_rotacion": win["proxima_rotacion"],
+                    "fecha_partidos": win["fecha_partidos"],
+                    "fecha_partidos_publicada": cls._STATE.get("fecha_partidos_publicada") or win["fecha_partidos"],
+                    "idempotency_key": idem_key,
+                    "cantidad_selecciones": cls._STATE.get("cantidad_selecciones", 0),
+                    "estado_telegram": cls._STATE.get("estado_telegram", "ENVIADO"),
+                    "telegram_sent": bool(cls._STATE.get("telegram_sent", True)),
+                    "ultimo_error": cls._STATE.get("ultimo_error"),
+                }
+
+            # 3. Ejecutar rotación de las 22:00 PE (o recuperación pendiente post-22:00 PE)
+            logger.info("[Top3Rotation] started")
+            fecha_partidos = win["fecha_partidos"]
+            logger.info("[Top3Rotation] target_date=%s", fecha_partidos)
+
+            # 3.1 Cerrar la jornada anterior
+            cierre_info = cls.close_previous_matchday(win["fecha_actual"])
+            cls._STATE["jornada_anterior_cerrada"] = cierre_info
+
+            # 3.2 Enriquecer caché antes del cálculo del Top 3 (si el worker está disponible)
+            try:
+                if "MatchEnrichmentCache" in globals() and hasattr(MatchEnrichmentCache, "enrich_calendar_worker"):
+                    MatchEnrichmentCache.enrich_calendar_worker(target_date=fecha_partidos, limit=15)
+            except Exception as e_enr:
+                logger.debug("Aviso enriquecimiento previo a rotación Top 3: %s", e_enr)
+
+            # 3.3 Seleccionar partidos del día siguiente y recalcular Top 3 con datos actualizados
+            pool = globals().get("ALL_FIXTURES_POOL") or []
+            master_pool = globals().get("_EMBEDDED_MASTER_CALENDAR_CACHE") or pool
+            matches_day = [f for f in pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == fecha_partidos]
+            if not matches_day:
+                matches_day = [dict(f) for f in master_pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == fecha_partidos]
+
+            raw_items = _seleccionar_top3_verificado(matches_day, fecha_partidos, limit=3) if "_seleccionar_top3_verificado" in globals() else []
+            clean_items = []
+            for it in raw_items[:3]:
+                it_copy = dict(it)
+                it_copy.pop("an_data", None)
+                clean_items.append(it_copy)
+
+            logger.info("[Top3Rotation] selected=%d", len(clean_items))
+
+            # 3.4 Actualizar calendario visible y guardar selección publicada
+            cls._STATE["ultima_rotacion"] = win["hora_actual"]
+            cls._STATE["fecha_rotacion"] = win["hora_actual"]
+            cls._STATE["fecha_publicacion"] = win["fecha_publicacion"]
+            cls._STATE["fecha_partidos_publicada"] = fecha_partidos
+            cls._STATE["idempotency_key"] = idem_key
+            cls._STATE["cantidad_selecciones"] = len(clean_items)
+            cls._STATE["selecciones_publicadas"] = clean_items
+
+            if "_CARTELERA_MEMO_CACHE" in globals() and isinstance(_CARTELERA_MEMO_CACHE, dict):
+                _CARTELERA_MEMO_CACHE.clear()
+
+            # 3.5 Enviar Top 3 al canal de Telegram
+            if not clean_items:
+                tg_ok = False
+                tg_msg = f"No existen partidos con datos mínimos verificables para la fecha {fecha_partidos}."
+                cls._STATE["estado_telegram"] = "SIN_SELECCIONES_VERIFICADAS"
+                cls._STATE["telegram_sent"] = False
+                cls._STATE["ultimo_error"] = tg_msg
+                logger.info("[Top3Rotation] telegram_sent=false")
+                cls._save_persisted_state()
+            else:
+                tg_ok, tg_msg = ejecutar_envio_automatico_top5(
+                    motivo=motivo,
+                    force=True,
+                    target_date_override=fecha_partidos,
+                    precalculated_items=clean_items,
+                    idempotency_key=idem_key,
+                    fecha_publicacion=win["fecha_publicacion"],
+                )
+                logger.info("[Top3Rotation] telegram_sent=%s", "true" if tg_ok else "false")
+                if tg_ok:
+                    cls._STATE["estado_telegram"] = "ENVIADO"
+                    cls._STATE["telegram_sent"] = True
+                    cls._STATE["ultimo_error"] = None
+                    cls.mark_key_published(
+                        idem_key,
+                        {
+                            "fecha_publicacion": win["fecha_publicacion"],
+                            "fecha_partidos": fecha_partidos,
+                            "fecha_rotacion": win["hora_actual"],
+                            "cantidad_selecciones": len(clean_items),
+                            "motivo": motivo,
+                        },
+                    )
+                else:
+                    cls._STATE["estado_telegram"] = "ERROR"
+                    cls._STATE["telegram_sent"] = False
+                    cls._STATE["ultimo_error"] = tg_msg
+                    cls._save_persisted_state()
+
+            return {
+                "executed": True,
+                "published": bool(tg_ok),
+                "already_published": False,
+                "timezone": "America/Lima",
+                "hora_actual": win["hora_actual"],
+                "fecha_actual": win["fecha_actual"],
+                "fecha_publicacion": win["fecha_publicacion"],
+                "fecha_rotacion": cls._STATE["fecha_rotacion"],
+                "ultima_rotacion": cls._STATE["ultima_rotacion"],
+                "proxima_rotacion": win["proxima_rotacion"],
+                "fecha_partidos": fecha_partidos,
+                "fecha_partidos_publicada": cls._STATE["fecha_partidos_publicada"],
+                "idempotency_key": idem_key,
+                "cantidad_selecciones": len(clean_items),
+                "selecciones": clean_items,
+                "estado_telegram": cls._STATE["estado_telegram"],
+                "telegram_sent": bool(tg_ok),
+                "mensaje_telegram": tg_msg,
+                "ultimo_error": cls._STATE["ultimo_error"],
+                "jornada_anterior_cerrada": cierre_info,
+            }
+
+    @classmethod
+    def get_status_report(cls, now_pe=None) -> dict:
+        with cls._LOCK:
+            cls._load_persisted_state()
+            win = cls.compute_window(now_pe=now_pe)
+            pub_date = cls._STATE.get("fecha_partidos_publicada") or cls.get_published_match_date(now_pe=now_pe)
+            return {
+                "timezone": "America/Lima",
+                "hora_actual": win["hora_actual"],
+                "hora_actual_america_lima": win["hora_actual"],
+                "fecha_actual": win["fecha_actual"],
+                "fecha_publicacion": cls._STATE.get("fecha_publicacion") or win["fecha_publicacion"],
+                "fecha_rotacion": cls._STATE.get("fecha_rotacion"),
+                "ultima_rotacion": cls._STATE.get("ultima_rotacion"),
+                "proxima_rotacion": win["proxima_rotacion"],
+                "fecha_partidos_publicada": pub_date,
+                "cantidad_selecciones": int(cls._STATE.get("cantidad_selecciones") or 0),
+                "idempotency_key": cls._STATE.get("idempotency_key") or win["idempotency_key"],
+                "estado_telegram": cls._STATE.get("estado_telegram") or "PENDIENTE",
+                "telegram_sent": bool(cls._STATE.get("telegram_sent", False)),
+                "ultimo_error": cls._STATE.get("ultimo_error"),
+                "selecciones_publicadas": list(cls._STATE.get("selecciones_publicadas") or []),
+            }
+
 
 def _obtener_fecha_activa_top5() -> str:
-    """Calcula la fecha activa del Top 5 sincronizada ESTRICTAMENTE con el reloj de las 22:00 (10:00 PM hora Perú).
-    NUNCA adelanta la fecha a las 4:00 PM aunque hayan terminado los partidos de la tarde;
-    espera siempre a las 22:00 (10:00 PM America/Lima) tal como indica el contador regresivo."""
-    op_date = get_current_operational_date()
-    if "ALL_FIXTURES_POOL" not in globals() or not ALL_FIXTURES_POOL:
-        return op_date
-    matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == op_date]
-    if not matches_day:
-        fechas_fut = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= op_date)))
-        if fechas_fut:
-            return fechas_fut[0]
-    return op_date
+    """Calcula la fecha activa del Top 3 sincronizada con el reloj de las 22:00 (America/Lima)."""
+    return Top3RotationManager.get_published_match_date()
 
-def _ya_enviado_top5_fecha(target_date: str) -> bool:
+
+def _ya_enviado_top5_fecha(target_key: str) -> bool:
     global _ultimo_envio_auto_fecha
-    # (corte fijo eliminado: el control se hace por fecha real)
-    if _ultimo_envio_auto_fecha == target_date:
+    if not target_key:
+        return False
+    if _ultimo_envio_auto_fecha == target_key:
+        return True
+    if Top3RotationManager.is_key_published(target_key):
         return True
     try:
         if os.path.exists(_LAST_TG_FILE):
             with open(_LAST_TG_FILE, "r", encoding="utf-8") as f:
-                if f.read().strip() == target_date:
-                    _ultimo_envio_auto_fecha = target_date
+                saved = f.read().strip()
+                if saved == target_key:
+                    _ultimo_envio_auto_fecha = target_key
                     return True
     except Exception:
         pass
     try:
         if "db" in globals() and db:
-            doc = db.collection("telegram_auto_envios").document(target_date).get()
+            doc = db.collection("telegram_auto_envios").document(target_key).get()
             if doc.exists and (doc.to_dict() or {}).get("enviado"):
-                _ultimo_envio_auto_fecha = target_date
+                _ultimo_envio_auto_fecha = target_key
                 return True
     except Exception:
         pass
     return False
 
-def _marcar_enviado_top5_fecha(target_date: str, motivo: str):
+
+def _marcar_enviado_top5_fecha(target_key: str, motivo: str):
     global _ultimo_envio_auto_fecha
-    _ultimo_envio_auto_fecha = target_date
+    _ultimo_envio_auto_fecha = target_key
     try:
         with open(_LAST_TG_FILE, "w", encoding="utf-8") as f:
-            f.write(target_date)
+            f.write(target_key)
     except Exception:
         pass
     try:
         if "db" in globals() and db:
-            db.collection("telegram_auto_envios").document(target_date).set({
-                "fecha": target_date,
+            db.collection("telegram_auto_envios").document(target_key).set({
+                "fecha": target_key,
                 "enviado": True,
                 "motivo": motivo,
                 "timestamp": datetime.now(timezone.utc).isoformat()
@@ -334,16 +781,26 @@ def _marcar_enviado_top5_fecha(target_date: str, motivo: str):
     except Exception:
         pass
 
-def ejecutar_envio_automatico_top5(motivo="DESPACHO_22_00_PE", force=False, target_date_override=None):
-    """Ejecuta el despacho automático del Top 5 al canal de Telegram VIP exactamente en la rotación de las 22:00 (10:00 PM Perú)."""
+
+def ejecutar_envio_automatico_top5(
+    motivo="DESPACHO_22_00_PE",
+    force=False,
+    target_date_override=None,
+    precalculated_items=None,
+    idempotency_key=None,
+    fecha_publicacion=None,
+):
+    """Ejecuta el despacho automático del Top 3 al canal de Telegram VIP con clave idempotente top3:{fecha_publicacion}:{fecha_partidos}."""
     if "ALL_FIXTURES_POOL" not in globals() or "SportsAnalyticsEngine" not in globals():
         return False, "Motor aún inicializando catálogos."
 
     target_date = target_date_override or _obtener_fecha_activa_top5()
+    pub_date = fecha_publicacion or get_current_operational_date()
+    idem_key = idempotency_key or f"top3:{pub_date}:{target_date}"
 
     with _auto_telegram_lock:
-        if not force and _ya_enviado_top5_fecha(target_date):
-            return False, f"Ya se emitió el Top 5 para la jornada {target_date}."
+        if not force and (_ya_enviado_top5_fecha(idem_key) or _ya_enviado_top5_fecha(target_date)):
+            return False, f"Ya se emitió el Top 3 ({idem_key}) para la jornada {target_date}."
 
         bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
         channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
@@ -357,29 +814,31 @@ def ejecutar_envio_automatico_top5(motivo="DESPACHO_22_00_PE", force=False, targ
             return False, "Faltan credenciales TELEGRAM_BOT_TOKEN o TELEGRAM_CHANNEL_ID en Render."
 
         try:
-            matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
-
-            items = _seleccionar_top5_diversificado(matches_day, target_date, limit=5)
+            if precalculated_items is not None:
+                items = list(precalculated_items)[:3]
+            else:
+                matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == target_date]
+                items = _seleccionar_top3_verificado(matches_day, target_date, limit=3)
 
             if not items:
-                return False, "No se encontraron partidos para la fecha activa."
+                return False, "No se encontraron partidos con datos verificables para la fecha activa."
 
             lineas = [
-                f"🟢 <b>PRONÓSTICOS DESTACADOS DEL DÍA ({target_date})</b> 🟢\n"
+                f"🟢 <b>TOP 3 PRONÓSTICOS DEL DÍA ({target_date})</b> 🟢\n"
             ]
 
             banderas_top = {"PD": "🇪🇸", "PL": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "BL1": "🇩🇪", "SA": "🇮🇹", "FL1": "🇫🇷", "PPL": "🇵🇹", "BSA": "🇧🇷", "UCL": "🇪🇺", "UEL": "🇪🇺", "UNL": "🇪🇺"}
-            for i, p in enumerate(items, 1):
+            for i, p in enumerate(items[:3], 1):
                 liga_p = p.get("liga") or "Fútbol Oficial"
                 flag_p = banderas_top.get(p.get("codigo_liga"), "🏆")
                 partido_p = p.get("partido") or f"{p.get('local')} vs {p.get('visitante')}"
                 mercado_p = p.get("mercado") or "Selección Principal"
-                prob_p = p.get("probabilidad") or "84%"
+                prob_p = p.get("probabilidad") or "—"
                 prom_p = p.get("promedio_mercado_valor") or p.get("stat_projection_label") or ""
                 lineas.append(f"{flag_p} <b>{liga_p}</b>")
                 lineas.append(f"⚽ <b>{i}. {partido_p}</b>")
                 lineas.append(f"🎯 <b>Jugada:</b> <code>{mercado_p}</code> ({prob_p})")
-                if prom_p:
+                if prom_p and prom_p != "Datos insuficientes":
                     lineas.append(f"📊 <b>Promedio del partido:</b> {prom_p}")
                 lineas.append("")
 
@@ -395,30 +854,38 @@ def ejecutar_envio_automatico_top5(motivo="DESPACHO_22_00_PE", force=False, targ
             }, timeout=12)
 
             if resp.status_code == 200:
+                _marcar_enviado_top5_fecha(idem_key, motivo)
                 _marcar_enviado_top5_fecha(target_date, motivo)
-                logger.info("✓ Top 3 transmitido automáticamente a Telegram a las 22:00 PE para la jornada %s (%s)", target_date, motivo)
-                return True, f"Top 5 ({target_date}) transmitido con éxito al canal VIP."
+                Top3RotationManager.mark_key_published(idem_key, {
+                    "fecha_publicacion": pub_date,
+                    "fecha_partidos": target_date,
+                    "cantidad_selecciones": len(items[:3]),
+                    "motivo": motivo,
+                })
+                logger.info("✓ Top 3 transmitido automáticamente a Telegram a las 22:00 PE para la jornada %s (%s)", target_date, idem_key)
+                return True, f"Top 3 ({target_date}) transmitido con éxito al canal VIP [{idem_key}]."
             else:
                 logger.error("Error Telegram en auto-envío: %s", resp.text)
-                return False, f"Telegram API error: {resp.text}"
+                return False, f"Telegram API error ({resp.status_code}): {resp.text}"
         except Exception as err:
             logger.error("Excepción en ejecutar_envio_automatico_top5: %s", err)
             return False, str(err)
 
+
 def _loop_auto_telegram():
-    """Monitorea el reloj oficial de Perú (America/Lima, UTC-5) cada 30 segundos y dispara el envío automático
-    ÚNICAMENTE cuando el reloj marca las 22:00 (10:00 PM hora Perú), coincidiendo con el contador regresivo."""
+    """Monitorea el reloj oficial de Perú (America/Lima, UTC-5) cada 30 segundos y ejecuta la rotación de las 22:00 PE
+    o la recuperación automática si Render se reinició después de las 22:00 PE."""
     import time
     time.sleep(10)
     while True:
         try:
-            now_pe = datetime.now(timezone(timedelta(hours=-5)))
-            # Solo disparar automáticamente en la ventana de las 22:00 (10:00 PM hora Perú)
-            if now_pe.hour == 22:
-                ejecutar_envio_automatico_top5(motivo="ROTACION_22_00_PE")
+            now_pe = Top3RotationManager.now_peru()
+            if now_pe.hour >= 22:
+                Top3RotationManager.check_and_run_rotation(now_pe=now_pe, motivo="ROTACION_22_00_PE")
         except Exception as e:
             logger.error("Error en _loop_auto_telegram: %s", e)
         time.sleep(30)
+
 
 if os.getenv("DISABLE_BACKGROUND_WORKERS", "false").lower() != "true":
     threading.Thread(target=_loop_auto_telegram, daemon=True).start()
@@ -18449,6 +18916,9 @@ def _arranque_ratings():
     try:
         actualizar_ratings_reales()
         MatchEnrichmentCache.enrich_calendar_worker(target_date=get_current_operational_date(), limit=15)
+        now_pe = Top3RotationManager.now_peru()
+        if now_pe.hour >= 22:
+            Top3RotationManager.check_and_run_rotation(now_pe=now_pe, motivo="RECUPERACION_ARRANQUE_POST_22PE")
     except Exception as exc:
         logger.warning("No se pudieron cargar ratings de football-data.co.uk al arrancar: %s", exc)
 
@@ -18525,7 +18995,7 @@ def _ocultar_contenido_vip(path: str, data: dict) -> dict:
     if path == "/api/v1/top3/daily":
         for key in ("top3", "top5"):
             for it in data.get(key) or []:
-                if int(it.get("rank", 0)) <= 4:
+                if not it.get("es_gratis_telegram") and int(it.get("rank", 0)) <= 2:
                     it.update({
                         "mercado": "🔒 Pick exclusivo VIP",
                         "probabilidad": "🔒",
@@ -18842,17 +19312,21 @@ def generar_imagen_resultados_top5(fecha_str: str, picks_liquidados: list) -> by
         logger.error("Error generando imagen PNG de resultados Top 5: %s", exc)
         return b""
 
-def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados: list, force: bool = False, motivo: str = "AUTO_5_DE_5_FINALIZADOS"):
+def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados: list, force: bool = False, motivo: str = "AUTO_3_DE_3_FINALIZADOS"):
     """
-    Envía automáticamente la captura visual (PNG) de los resultados del Top 5 a Telegram VIP
-    UNA VEZ que los 5 partidos del Top 5 han finalizado por completo.
+    Envía automáticamente la captura visual (PNG) de los resultados verificados del Top 3 a Telegram VIP
+    UNA VEZ que los partidos publicados del Top 3 han finalizado por completo con resultados verificados.
     """
-    if not picks_liquidados or len(picks_liquidados) < 5:
-        return False, "Aún no están los 5 partidos del Top 5."
+    picks_top3 = list(picks_liquidados or [])[:3]
+    esperados = len(picks_top3)
+    if not picks_top3 or esperados == 0:
+        return False, "No existen selecciones verificadas del Top 3 para liquidar."
 
-    finalizados = [p for p in picks_liquidados if p.get("estado") in ("GANADA", "PERDIDA")]
-    if not force and len(finalizados) < 5:
-        return False, f"Faltan partidos por finalizar ({len(finalizados)}/5 completados)."
+    finalizados = [p for p in picks_top3 if p.get("estado") in ("GANADA", "PERDIDA") and p.get("verificado", True)]
+    if not force and len(finalizados) < esperados:
+        return False, f"Faltan partidos por finalizar ({len(finalizados)}/{esperados} completados)."
+    if not finalizados:
+        return False, "Ningún partido del Top 3 cuenta con resultado final verificado."
 
     with _auto_resultados_lock:
         if not force and _ya_enviado_resultados_top5_fecha(target_date):
@@ -19885,17 +20359,42 @@ def create_app() -> Flask:
             "football_data_org": FootballDataOrgClient.get_status_report(),
         }), 200
 
+    @app.route("/api/v1/admin/top3/rotate", methods=["POST"])
+    @require_auth
+    def admin_top3_rotate():
+        user_email = (getattr(g, "user_email", "") or "").strip().lower()
+        if user_email not in OWNER_EMAILS and not _verificar_es_admin():
+            return jsonify({"success": False, "error": "Acceso denegado: Se requieren permisos de administrador."}), 403
+        body = request.get_json(silent=True) or {}
+        force = bool(body.get("force", True))
+        target_date = str(body.get("fecha_partidos") or body.get("fecha") or "").strip() or None
+        now_override = body.get("now_pe")
+        res = Top3RotationManager.check_and_run_rotation(
+            now_pe=now_override,
+            force=force,
+            target_date_override=target_date,
+            motivo="MANUAL_ADMIN_ROTATE",
+        )
+        code = 200 if (res.get("executed") or res.get("already_published")) else 400
+        return jsonify({"success": bool(res.get("executed") or res.get("already_published")), **res}), code
+
+    @app.route("/api/v1/admin/top3/rotation-status", methods=["GET"])
+    def admin_top3_rotation_status():
+        status_report = Top3RotationManager.get_status_report()
+        return jsonify({"success": True, **status_report}), 200
+
     @app.route("/api/v1/top3/daily", methods=["GET"])
     def get_daily_top3():
         try:
             today_str = get_current_operational_date()
             req_fecha = request.args.get("fecha", "").strip()
+            pub_match_date = Top3RotationManager.get_published_match_date()
 
-            # Permitir navegar fechas del calendario (incluyendo jornadas concluidas como 16.10.2026 para ver WIN/LOSS estilo Oddster)
+            # Si no se especifica fecha (carga inicial o botón "Hoy"), usar la fecha publicada vigente del Top 3
             if req_fecha and re.match(r"^\d{4}-\d{2}-\d{2}$", req_fecha):
                 target_date = req_fecha
             else:
-                target_date = today_str
+                target_date = pub_match_date
 
             master_pool = _EMBEDDED_MASTER_CALENDAR_CACHE or ALL_FIXTURES_POOL
             matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
@@ -19908,17 +20407,22 @@ def create_app() -> Flask:
             for item in top3_list:
                 item.pop("an_data", None)
 
-            # El envío automático a Telegram se ejecuta estrictamente a las 22:00 (10:00 PM hora Perú) vía _loop_auto_telegram
-
+            rot_status = Top3RotationManager.get_status_report()
             _, active_end_win = get_active_calendar_window()
             all_cal_dates = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= "2026-10-12")))
             avail_dates = [d for d in all_cal_dates if "2026-10-12" <= d <= active_end_win]
+            if target_date not in avail_dates and target_date >= "2026-10-12":
+                avail_dates = sorted(avail_dates + [target_date])
 
             return jsonify({
                 "success": True,
                 "fecha": target_date,
+                "fecha_partidos_publicada": pub_match_date,
                 "fecha_actual_peru": today_str,
                 "fecha_publicacion_22pe": get_telegram_publication_date(),
+                "idempotency_key": rot_status.get("idempotency_key"),
+                "ultima_rotacion": rot_status.get("ultima_rotacion"),
+                "proxima_rotacion": rot_status.get("proxima_rotacion"),
                 "fechas_disponibles": avail_dates,
                 "timezone": "America/Lima",
                 "countdown_target_hora": "22:00 America/Lima",
@@ -20211,12 +20715,12 @@ def create_app() -> Flask:
                 hoy = get_current_operational_date()
                 ayer = (datetime.strptime(hoy, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
                 res_ayer = _auditar_y_liquidar_fecha(ayer)
-                if len(res_ayer) == 5 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_ayer):
+                if len(res_ayer) >= 1 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_ayer):
                     ejecutar_envio_automatico_resultados_top5(ayer, res_ayer, force=False, motivo="AUTO_CIERRE_JORNADA")
 
                 res_hoy = _auditar_y_liquidar_fecha(hoy)
-                if len(res_hoy) == 5 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_hoy):
-                    ejecutar_envio_automatico_resultados_top5(hoy, res_hoy, force=False, motivo="AUTO_5_PARTIDOS_FINALIZADOS")
+                if len(res_hoy) >= 1 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_hoy):
+                    ejecutar_envio_automatico_resultados_top5(hoy, res_hoy, force=False, motivo="AUTO_3_PARTIDOS_FINALIZADOS")
             except Exception as ex_aud:
                 logger.debug("Ciclo auto-auditoría: %s", ex_aud)
             time.sleep(300)  # Revisa cada 5 minutos para enviar resultados apenas terminen todos los partidos
