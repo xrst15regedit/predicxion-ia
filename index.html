@@ -242,7 +242,7 @@
             <!-- MÓDULO 0: CARTELERA 7 PILARES -->
             
             <!-- ========================================================================= -->
-            <!-- APARTADO EXCLUSIVO: TOP 5 PRONÓSTICOS DEL DÍA (ANCHO COMPLETO FLUIDO) -->
+            <!-- APARTADO EXCLUSIVO: TOP 3 PRONÓSTICOS DEL DÍA (ANCHO COMPLETO FLUIDO) -->
             <!-- ========================================================================= -->
             <div id="seccion-top3" class="seccion-principal hidden w-full max-w-[1600px] mx-auto mb-6 space-y-4">
                 <div class="bg-[#081210] border border-emerald-500/30 rounded-3xl p-4 sm:p-6 lg:p-7 shadow-2xl space-y-4 relative overflow-hidden" style="background-image: radial-gradient(ellipse at top right, rgba(0, 230, 118, 0.14), transparent 60%), radial-gradient(ellipse at bottom left, rgba(6, 78, 59, 0.20), transparent 60%);">
@@ -255,7 +255,7 @@
                     <div class="flex flex-col md:flex-row md:items-end justify-between border-b border-emerald-900/50 pb-4 gap-4 relative z-10">
                         <div class="space-y-1">
                             <h2 class="text-3xl sm:text-5xl font-outfit font-black text-white m-0 tracking-tight flex items-center gap-2">
-                                Top <span class="text-[#00e676]">5</span>
+                                Top <span class="text-[#00e676]">3</span> del Día
                             </h2>
                             <p class="text-xs sm:text-sm text-slate-300 m-0 max-w-2xl font-medium">
                                 Las tres predicciones diarias con las señales estadísticas más fuertes, seleccionadas por el motor de predicción.
@@ -263,7 +263,7 @@
                         </div>
 
                         <div class="flex items-center gap-2 flex-wrap">
-                            <button onclick="reproducirAudioTop5Completo()" id="btn-audio-top5-full" class="bg-[#0d1b18] hover:bg-emerald-950 text-[#00e676] border border-emerald-500/40 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-md cursor-pointer" title="Escuchar el resumen narrado por voz de los 5 destacados">
+                            <button onclick="reproducirAudioTop5Completo()" id="btn-audio-top5-full" class="bg-[#0d1b18] hover:bg-emerald-950 text-[#00e676] border border-emerald-500/40 text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-md cursor-pointer" title="Escuchar el resumen narrado por voz de los 3 destacados">
                                 <i class="fa-solid fa-volume-high text-sm"></i> <span>Escuchar Top 3 (Voz IA)</span>
                             </button>
                             <button onclick="dispararParlayTelegram()" id="btn-disparar-parlay-tg" class="solo-admin hidden bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-lg cursor-pointer" title="Enviar Top 3 directamente al canal VIP de Telegram">
@@ -310,7 +310,7 @@
                         </div>
                     </div>
 
-                    <!-- Contenedor dinámico de las 5 tarjetas horizontales a ancho completo -->
+                    <!-- Contenedor dinámico de las 3 tarjetas horizontales a ancho completo -->
                     <div id="top3-cards-container" class="space-y-3.5 relative z-10 w-full">
                         <div class="text-xs text-slate-400 text-center py-8">
                             <i class="fa-solid fa-spinner fa-spin mr-2"></i> Cargando señales estadísticas del Top 3...
@@ -324,7 +324,7 @@
                                 <i class="fa-solid fa-crown"></i>
                             </div>
                             <div>
-                                <div class="text-xs font-black text-white">Desbloquea las 5 Señales Estadísticas Completas</div>
+                                <div class="text-xs font-black text-white">Desbloquea las 3 Señales Estadísticas del Top 3</div>
                                 <div class="text-[10px] text-slate-400">Acceso ilimitado a todas las predicciones del motor cuantitativo, cálculo xG, cuotas con valor (+EV) y consenso Triple IA</div>
                             </div>
                         </div>
@@ -2827,7 +2827,7 @@
                         <div class="w-[42%]"><h3 class="text-base sm:text-xl font-black text-white m-0">${item.visitante}</h3></div>
                     </div>
 
-                    <!-- TARJETA DESTACADA ESTILO ODDSTER + METODOLOGÍA TOP 5 TIPSTERS MUNDIALES -->
+                    <!-- TARJETA DESTACADA ESTILO ODDSTER + METODOLOGÍA CUANTITATIVA -->
                     <div class="bg-gradient-to-r from-[#091914] via-[#0d171e] to-[#0a1618] border border-emerald-500/40 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3">
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-900/50 pb-3">
                             <div>
@@ -3204,7 +3204,7 @@
         cargarDatosCartelera();
     
         // =========================================================================
-        // CONTROLADOR TOP 5 PRONÓSTICOS DEL DÍA
+        // CONTROLADOR TOP 3 PRONÓSTICOS DEL DÍA
         // =========================================================================
         let _ultimaFechaRecargada = "";
 
@@ -3349,8 +3349,8 @@
         }
 
         function irAHoyTop3() {
-            const hoyPeru = obtenerFechaActualPeruIso();
-            cargarTop3(hoyPeru);
+            fechaTop3Activa = "";
+            cargarTop3("");
         }
 
         async function dispararParlayTelegram() {
@@ -3408,17 +3408,18 @@
 
                 const esVip = verificarEsVip();
                 let htmlCards = '';
-                window.top5DataMemoria = data.top3;
+                const top3Slice = (data.top3 || []).slice(0, 3);
+                window.top5DataMemoria = top3Slice;
 
-                if (data.top3 && data.top3.length > 0 && typeof precargarAudioTexto === 'function') {
-                    const pLibre = data.top3.find(x => x.es_gratis_telegram) || data.top3[data.top3.length - 1] || data.top3[0];
+                if (top3Slice.length > 0 && typeof precargarAudioTexto === 'function') {
+                    const pLibre = top3Slice.find(x => x.es_gratis_telegram) || top3Slice[top3Slice.length - 1] || top3Slice[0];
                     setTimeout(() => precargarAudioTexto(`Vamos con el pick número ${pLibre.rank} del Top 3: ${pLibre.local} contra ${pLibre.visitante}. Aquí la jugada recomendada es ${pLibre.mercado}, con un ${pLibre.probabilidad} de confianza estadística.`), 150);
                 }
 
                 const mesesCortos = ['Oct', 'Nov', 'Dic', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep'];
                 const mapaMeses = {'01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun','07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic'};
 
-                data.top3.forEach(t => {
+                top3Slice.forEach(t => {
                     const esFinalizado = (t.estado_partido === 'GANADA' || t.estado_partido === 'PERDIDA');
                     const esPerdida = (t.estado_partido === 'PERDIDA');
                     // Si es una jornada histórica ya liquidada, mostrar siempre abierta para transparencia total estilo Oddster
@@ -4036,19 +4037,19 @@
             }
 
             if (!esVip) {
-                const pickGratis = list.find(t => t.rank === 5) || list[list.length - 1];
+                const pickGratis = list.find(t => t.rank === 3) || list[list.length - 1];
                 let guion = "";
                 if (pickGratis) {
                     const mktG = limpiarTextoParaVoz(pickGratis.mercado);
-                    guion += `Vamos con el pick libre número 5 de la jornada: ${pickGratis.local} contra ${pickGratis.visitante}. La selección recomendada es ${mktG}, con ${pickGratis.probabilidad} de probabilidad. `;
+                    guion += `Vamos con el pick libre número ${pickGratis.rank || 3} del Top 3 de la jornada: ${pickGratis.local} contra ${pickGratis.visitante}. La selección recomendada es ${mktG}, con ${pickGratis.probabilidad} de probabilidad. `;
                 }
                 guion += "Para desbloquear las 2 selecciones principales restantes del Top 3, activa tu Pase Pro en la plataforma.";
                 hablarTextoIA(guion, null, 'btn-audio-top5-full');
                 return;
             }
 
-            let guion = "Repasamos rápido los cinco pronósticos principales de la jornada. ";
-            list.forEach((item, idx) => {
+            let guion = "Repasamos rápido las tres predicciones principales del Top 3 de la jornada. ";
+            list.slice(0, 3).forEach((item, idx) => {
                 const mktItem = limpiarTextoParaVoz(item.mercado);
                 guion += `Número ${idx + 1}: ${item.local} contra ${item.visitante}, vamos con ${mktItem}, con ${item.probabilidad} de probabilidad. `;
             });
