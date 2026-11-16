@@ -1713,6 +1713,418 @@ class FootballDataOrgClient:
 # ======================================================================================
 # MOTOR DE INTELIGENCIA ARTIFICIAL DUAL EN CASCADA (GEMINI + GROK xAI)
 # ======================================================================================
+
+class HighlightlyFootballClient:
+    """
+    Cliente oficial de Highlightly Football API (https://soccer.highlightly.net).
+    - Lee HIGHLIGHTLY_API_KEY exclusivamente vía os.getenv() (sin exponerla en frontend, logs ni respuestas JSON).
+    - Autenticación mediante header 'x-rapidapi-key'.
+    - Consulta partidos (/matches) y estadísticas (/statistics/{matchId}) con caché TTL y control de tasa.
+    - Maneja HTTP 401, 403, 404, 429, timeout, respuestas vacías y JSON inválido sin inventar datos.
+    """
+    BASE_URL = "https://soccer.highlightly.net"
+    _CACHE = {}
+    _STATS_CACHE = {}
+    _LOCK = threading.RLock()
+    _LAST_REQ_TS = 0.0
+    _MIN_INTERVAL_SEC = 1.1
+    _REQUEST_LOGS = []
+    _STATUS = {
+        "proveedor": "highlightly",
+        "ultima_consulta": None,
+        "ultima_respuesta_valida": None,
+        "ultima_falla": None,
+        "cache_hits": 0,
+        "cache_misses": 0,
+        "total_solicitudes": 0,
+    }
+
+    @classmethod
+    def _get_api_key(cls) -> str:
+        return (os.getenv("HIGHLIGHTLY_API_KEY") or "").strip()
+
+    @classmethod
+    def _sanitize_error(cls, msg: str, key: str) -> str:
+        s = str(msg or "")
+        if key:
+            s = s.replace(key, "[REDACTED]")
+        return s[:240]
+
+    @classmethod
+    def _record_log(cls, entry: dict):
+        with cls._LOCK:
+            cls._REQUEST_LOGS.append(entry)
+            if len(cls._REQUEST_LOGS) > 100:
+                cls._REQUEST_LOGS = cls._REQUEST_LOGS[-100:]
+
+    @classmethod
+    def _respect_rate_limit(cls):
+        with cls._LOCK:
+            now_ts = time.time()
+            elapsed = now_ts - cls._LAST_REQ_TS
+            if cls._LAST_REQ_TS > 0 and elapsed < cls._MIN_INTERVAL_SEC:
+                time.sleep(cls._MIN_INTERVAL_SEC - elapsed)
+            cls._LAST_REQ_TS = time.time()
+
+    @classmethod
+    def fetch_json(cls, endpoint_path: str, params: dict = None, ttl_seconds: int = 1800, timeout_sec: int = 12, partido_label: str = "") -> dict:
+        key = cls._get_api_key()
+        now_ts = time.time()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        params_key = json.dumps(params or {}, sort_keys=True)
+        cache_key = f"{endpoint_path}?{params_key}"
+
+        with cls._LOCK:
+            cached = cls._CACHE.get(cache_key)
+            if cached and (now_ts - cached["ts"]) < ttl_seconds:
+                cls._STATUS["cache_hits"] += 1
+                cls._record_log({
+                    "proveedor": "highlightly",
+                    "endpoint": endpoint_path,
+                    "fecha_consulta": now_iso,
+                    "partido": partido_label or "GENERAL",
+                    "codigo_http": 200,
+                    "duracion_ms": 0,
+                    "cache_hit": True,
+                    "indicadores_recibidos": [],
+                    "error_sanitizado": None,
+                })
+                return {"ok": True, "data": cached["data"], "status_code": 200, "cache_hit": True, "error": None}
+            cls._STATUS["cache_misses"] += 1
+
+        if not key:
+            err_msg = "Clave HIGHLIGHTLY_API_KEY no configurada en variables de entorno."
+            with cls._LOCK:
+                cls._STATUS["ultima_consulta"] = now_iso
+                cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": None, "error": err_msg}
+            cls._record_log({
+                "proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso,
+                "partido": partido_label or "GENERAL", "codigo_http": None, "duracion_ms": 0,
+                "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err_msg,
+            })
+            return {"ok": False, "data": None, "status_code": None, "cache_hit": False, "error": err_msg}
+
+        cls._respect_rate_limit()
+        url = f"{cls.BASE_URL}{endpoint_path}"
+        headers = {"x-rapidapi-key": key, "Accept": "application/json"}
+        t0 = time.time()
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=timeout_sec)
+            dur_ms = int(round((time.time() - t0) * 1000))
+            status_code = resp.status_code
+
+            with cls._LOCK:
+                cls._STATUS["total_solicitudes"] += 1
+                cls._STATUS["ultima_consulta"] = now_iso
+
+            if status_code in (401, 403):
+                err = f"Acceso denegado o clave inválida en Highlightly ({status_code})"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": status_code, "error": err}
+                cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": status_code, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": status_code, "cache_hit": False, "error": err}
+
+            if status_code == 404:
+                err = "Recurso o partido no encontrado en Highlightly (404)"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": 404, "error": err}
+                cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": 404, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 404, "cache_hit": False, "error": err}
+
+            if status_code == 429:
+                err = "Límite de solicitudes Highlightly alcanzado (HTTP 429)"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": 429, "error": err}
+                cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": 429, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 429, "cache_hit": False, "error": err}
+
+            if status_code != 200:
+                err = f"Respuesta HTTP inesperada de Highlightly ({status_code})"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": status_code, "error": err}
+                cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": status_code, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": status_code, "cache_hit": False, "error": err}
+
+            if not resp.text or not resp.text.strip():
+                err = "Respuesta vacía de Highlightly"
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": 200, "error": err}
+                cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": 200, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 200, "cache_hit": False, "error": err}
+
+            try:
+                payload = resp.json()
+                if not isinstance(payload, (dict, list)):
+                    raise ValueError("Payload JSON inválido")
+            except Exception as j_err:
+                err = cls._sanitize_error(f"Error de formato JSON en Highlightly: {j_err}", key)
+                with cls._LOCK:
+                    cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": 200, "error": err}
+                cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": 200, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+                return {"ok": False, "data": None, "status_code": 200, "cache_hit": False, "error": err}
+
+            with cls._LOCK:
+                cls._CACHE[cache_key] = {"ts": now_ts, "data": payload}
+                cls._STATUS["ultima_respuesta_valida"] = {"fecha_consulta": now_iso, "endpoint": endpoint_path, "partido": partido_label}
+
+            cls._record_log({
+                "proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso,
+                "partido": partido_label or "GENERAL", "codigo_http": 200, "duracion_ms": dur_ms,
+                "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": None,
+            })
+            return {"ok": True, "data": payload, "status_code": 200, "cache_hit": False, "error": None}
+        except requests.exceptions.Timeout:
+            dur_ms = int(round((time.time() - t0) * 1000))
+            err = f"Timeout conectando con Highlightly ({timeout_sec}s)"
+            with cls._LOCK:
+                cls._STATUS["ultima_consulta"] = now_iso
+                cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": None, "error": err}
+            cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": None, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+            return {"ok": False, "data": None, "status_code": None, "cache_hit": False, "error": err}
+        except Exception as exc:
+            dur_ms = int(round((time.time() - t0) * 1000))
+            err = cls._sanitize_error(f"Error de red Highlightly: {exc}", key)
+            with cls._LOCK:
+                cls._STATUS["ultima_consulta"] = now_iso
+                cls._STATUS["ultima_falla"] = {"fecha_consulta": now_iso, "partido": partido_label, "codigo_http": None, "error": err}
+            cls._record_log({"proveedor": "highlightly", "endpoint": endpoint_path, "fecha_consulta": now_iso, "partido": partido_label or "GENERAL", "codigo_http": None, "duracion_ms": dur_ms, "cache_hit": False, "indicadores_recibidos": [], "error_sanitizado": err})
+            return {"ok": False, "data": None, "status_code": None, "cache_hit": False, "error": err}
+
+    @staticmethod
+    def _parse_int_stat(raw_val):
+        if raw_val is None or raw_val == "":
+            return None
+        if isinstance(raw_val, (int, float)):
+            return int(round(float(raw_val)))
+        s = str(raw_val).strip()
+        m = re.match(r"^(-?\d+(?:\.\d+)?)", s)
+        if not m:
+            return None
+        return int(round(float(m.group(1))))
+
+    @classmethod
+    def _extract_team_stat_map(cls, team_block: dict) -> dict:
+        stat_map = {}
+        stats_list = team_block.get("statistics") or team_block.get("stats") or []
+        if isinstance(stats_list, dict):
+            for k, v in stats_list.items():
+                stat_map[str(k).strip().lower()] = v
+            return stat_map
+        if isinstance(stats_list, list):
+            for item in stats_list:
+                if not isinstance(item, dict):
+                    continue
+                name = (
+                    item.get("displayName")
+                    or item.get("name")
+                    or item.get("type")
+                    or item.get("label")
+                    or ""
+                )
+                val = item.get("value")
+                if val is None:
+                    val = item.get("displayValue")
+                if name:
+                    stat_map[str(name).strip().lower()] = val
+        return stat_map
+
+    @classmethod
+    def _pick_stat(cls, stat_map: dict, aliases: tuple):
+        for alias in aliases:
+            if alias in stat_map:
+                parsed = cls._parse_int_stat(stat_map[alias])
+                if parsed is not None:
+                    return parsed
+        for k, v in stat_map.items():
+            for alias in aliases:
+                if alias in k:
+                    parsed = cls._parse_int_stat(v)
+                    if parsed is not None:
+                        return parsed
+        return None
+
+    @classmethod
+    def find_match_info(cls, home_name: str, away_name: str, date_str: str, ttl_seconds: int = 1800) -> dict:
+        if not date_str:
+            return None
+        partido_lbl = f"{home_name} vs {away_name}"
+        res = cls.fetch_json(
+            "/matches",
+            params={"date": str(date_str)[:10]},
+            ttl_seconds=ttl_seconds,
+            partido_label=partido_lbl,
+        )
+        if not res.get("ok") or not res.get("data"):
+            return None
+        payload = res["data"]
+        matches = payload.get("data", payload.get("matches", [])) if isinstance(payload, dict) else payload
+        if not isinstance(matches, list):
+            return None
+
+        for m in matches:
+            if not isinstance(m, dict):
+                continue
+            h_obj = m.get("homeTeam") or m.get("home") or {}
+            a_obj = m.get("awayTeam") or m.get("away") or {}
+            h_n = h_obj.get("name", "") if isinstance(h_obj, dict) else str(h_obj)
+            a_n = a_obj.get("name", "") if isinstance(a_obj, dict) else str(a_obj)
+            if matches_team_alias(home_name, h_n) and matches_team_alias(away_name, a_n):
+                match_id = m.get("id") or m.get("matchId")
+                state = m.get("state") or {}
+                desc = str(state.get("description") or m.get("status") or "").lower()
+                is_fin = desc in ("finished", "ended", "ft", "aet", "pen", "full time")
+                score_obj = state.get("score") or m.get("score") or {}
+                cur_score = score_obj.get("current") or ""
+                sh = sa = None
+                if isinstance(cur_score, str) and "-" in cur_score:
+                    parts = [p.strip() for p in cur_score.split("-", 1)]
+                    sh = cls._parse_int_stat(parts[0])
+                    sa = cls._parse_int_stat(parts[1])
+                elif isinstance(score_obj, dict):
+                    sh = cls._parse_int_stat(score_obj.get("home"))
+                    sa = cls._parse_int_stat(score_obj.get("away"))
+                return {
+                    "match_id": match_id,
+                    "finished": is_fin,
+                    "score_home": sh,
+                    "score_away": sa,
+                    "home_name": h_n,
+                    "away_name": a_n,
+                }
+        return None
+
+    @classmethod
+    def fetch_statistics(cls, match_id, home_name: str = "", away_name: str = "", ttl_seconds: int = 3600) -> dict:
+        if not match_id:
+            return None
+        partido_lbl = f"{home_name} vs {away_name}".strip(" vs")
+        res = cls.fetch_json(
+            f"/statistics/{match_id}",
+            ttl_seconds=ttl_seconds,
+            partido_label=partido_lbl,
+        )
+        if not res.get("ok") or not res.get("data"):
+            return None
+        payload = res["data"]
+        blocks = payload.get("data", payload.get("statistics", [])) if isinstance(payload, dict) else payload
+        if not isinstance(blocks, list) or len(blocks) < 2:
+            return None
+
+        home_block = blocks[0]
+        away_block = blocks[1]
+        if home_name and away_name:
+            for b in blocks:
+                t_name = ((b.get("team") or {}).get("name") or b.get("teamName") or "")
+                if t_name:
+                    if matches_team_alias(home_name, t_name):
+                        home_block = b
+                    elif matches_team_alias(away_name, t_name):
+                        away_block = b
+
+        h_map = cls._extract_team_stat_map(home_block)
+        a_map = cls._extract_team_stat_map(away_block)
+
+        corners_h = cls._pick_stat(h_map, ("corner kicks", "corners"))
+        corners_a = cls._pick_stat(a_map, ("corner kicks", "corners"))
+
+        yh = cls._pick_stat(h_map, ("yellow cards",))
+        ya = cls._pick_stat(a_map, ("yellow cards",))
+        rh = cls._pick_stat(h_map, ("red cards",))
+        ra = cls._pick_stat(a_map, ("red cards",))
+        tot_ch = cls._pick_stat(h_map, ("total cards", "cards"))
+        tot_ca = cls._pick_stat(a_map, ("total cards", "cards"))
+        cards_h = tot_ch if tot_ch is not None else ((yh or 0) + (rh or 0) * 2 if (yh is not None or rh is not None) else None)
+        cards_a = tot_ca if tot_ca is not None else ((ya or 0) + (ra or 0) * 2 if (ya is not None or ra is not None) else None)
+
+        shots_h = cls._pick_stat(h_map, ("total shots", "shots total", "shots"))
+        shots_a = cls._pick_stat(a_map, ("total shots", "shots total", "shots"))
+
+        sot_h = cls._pick_stat(h_map, ("shots on goal", "shots on target", "on target"))
+        sot_a = cls._pick_stat(a_map, ("shots on goal", "shots on target", "on target"))
+
+        fouls_h = cls._pick_stat(h_map, ("fouls", "total fouls"))
+        fouls_a = cls._pick_stat(a_map, ("fouls", "total fouls"))
+
+        out = {
+            "corners_home": corners_h,
+            "corners_away": corners_a,
+            "corners_total": (corners_h + corners_a) if (corners_h is not None and corners_a is not None) else None,
+            "cards_home": cards_h,
+            "cards_away": cards_a,
+            "cards_total": (cards_h + cards_a) if (cards_h is not None and cards_a is not None) else None,
+            "shots_home": shots_h,
+            "shots_away": shots_a,
+            "shots_total": (shots_h + shots_a) if (shots_h is not None and shots_a is not None) else None,
+            "shots_on_target_home": sot_h,
+            "shots_on_target_away": sot_a,
+            "shots_on_target": (sot_h + sot_a) if (sot_h is not None and sot_a is not None) else None,
+            "fouls_home": fouls_h,
+            "fouls_away": fouls_a,
+            "fouls_total": (fouls_h + fouls_a) if (fouls_h is not None and fouls_a is not None) else None,
+            "source": "highlightly",
+        }
+        indicadores = [
+            k for k in (
+                "corners_home", "corners_away",
+                "cards_home", "cards_away",
+                "shots_home", "shots_away",
+                "shots_on_target_home", "shots_on_target_away",
+                "fouls_home", "fouls_away",
+            )
+            if out.get(k) is not None
+        ]
+        out["indicadores_recibidos"] = indicadores
+        return out
+
+    @classmethod
+    def fetch_match_stats(cls, home_name: str, away_name: str, date_str: str, liga_code: str = "", ttl_seconds: int = 3600) -> dict:
+        if not cls._get_api_key() or not date_str:
+            return None
+        nf = globals().get("_norm_equipo")
+        h_n = nf(home_name) if nf else (home_name or "").lower().strip()
+        a_n = nf(away_name) if nf else (away_name or "").lower().strip()
+        cache_key = f"{str(date_str)[:10]}|{h_n}|{a_n}"
+        now_ts = time.time()
+        with cls._LOCK:
+            cached = cls._STATS_CACHE.get(cache_key)
+            if cached and (now_ts - cached["ts"]) < ttl_seconds:
+                return dict(cached["data"]) if cached["data"] is not None else None
+
+        m_info = cls.find_match_info(home_name, away_name, date_str, ttl_seconds=ttl_seconds)
+        if not m_info or not m_info.get("match_id"):
+            with cls._LOCK:
+                cls._STATS_CACHE[cache_key] = {"ts": now_ts, "data": None}
+            return None
+
+        stats = cls.fetch_statistics(m_info["match_id"], home_name=home_name, away_name=away_name, ttl_seconds=ttl_seconds)
+        if not stats:
+            with cls._LOCK:
+                cls._STATS_CACHE[cache_key] = {"ts": now_ts, "data": None}
+            return None
+
+        stats["finished"] = bool(m_info.get("finished"))
+        stats["score_home"] = m_info.get("score_home")
+        stats["score_away"] = m_info.get("score_away")
+        stats["match_id_highlightly"] = m_info.get("match_id")
+        stats["fecha_consulta"] = datetime.now(timezone.utc).isoformat()
+        with cls._LOCK:
+            cls._STATS_CACHE[cache_key] = {"ts": now_ts, "data": dict(stats)}
+
+        logger.info(
+            "[Highlightly] fecha=%s partido=%s vs %s indicadores=%s",
+            stats["fecha_consulta"], home_name, away_name, stats.get("indicadores_recibidos", [])
+        )
+        return stats
+
+    @classmethod
+    def get_status_report(cls) -> dict:
+        with cls._LOCK:
+            return {
+                **cls._STATUS,
+                "api_key_configurada": bool(cls._get_api_key()),
+                "ultimas_solicitudes": list(cls._REQUEST_LOGS[-20:]),
+            }
+
 class DualAIEngine:
     """
     Arquitectura de Inteligencia Artificial Triple en Cascada:
@@ -2223,6 +2635,64 @@ class MatchEnrichmentCache:
                             }
                         })
                         break
+
+        # 1B. Fuente estadística real: Highlightly Football API (para métricas ausentes en football-data.org)
+        if "HighlightlyFootballClient" in globals():
+            try:
+                hl = HighlightlyFootballClient.fetch_match_stats(home, away, fecha, liga_code=code)
+                if hl:
+                    observations.append({
+                        "fuente": "highlightly",
+                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
+                        "metricas": {
+                            "corners_home": hl.get("corners_home"),
+                            "corners_away": hl.get("corners_away"),
+                            "corners": hl.get("corners_total"),
+                            "tarjetas_home": hl.get("cards_home"),
+                            "tarjetas_away": hl.get("cards_away"),
+                            "tarjetas": hl.get("cards_total"),
+                            "tiros_home": hl.get("shots_home"),
+                            "tiros_away": hl.get("shots_away"),
+                            "tiros": hl.get("shots_total"),
+                            "tiros_puerta_home": hl.get("shots_on_target_home"),
+                            "tiros_puerta_away": hl.get("shots_on_target_away"),
+                            "tiros_puerta": hl.get("shots_on_target"),
+                            "faltas_home": hl.get("fouls_home"),
+                            "faltas_away": hl.get("fouls_away"),
+                            "faltas": hl.get("fouls_total"),
+                            "resultado": f"{hl.get('score_home')}-{hl.get('score_away')}" if (hl.get("finished") and hl.get("score_home") is not None and hl.get("score_away") is not None) else None,
+                        }
+                    })
+                    if hl.get("finished") and hl.get("score_home") is not None and hl.get("score_away") is not None and "_VERIFIED_RESULTS_CACHE" in globals():
+                        v_key = (fecha, home, away)
+                        if v_key not in _VERIFIED_RESULTS_CACHE:
+                            _VERIFIED_RESULTS_CACHE[v_key] = {
+                                "finished": True,
+                                "simulado": False,
+                                "competicion": match_data.get("liga") or "Competición Oficial",
+                                "codigo_liga": code,
+                                "score_home": hl.get("score_home"),
+                                "score_away": hl.get("score_away"),
+                                "corners_home": hl.get("corners_home"),
+                                "corners_away": hl.get("corners_away"),
+                                "corners_total": hl.get("corners_total"),
+                                "cards_home": hl.get("cards_home"),
+                                "cards_away": hl.get("cards_away"),
+                                "cards_total": hl.get("cards_total"),
+                                "shots_home": hl.get("shots_home"),
+                                "shots_away": hl.get("shots_away"),
+                                "shots_total": hl.get("shots_total"),
+                                "shots_on_target_home": hl.get("shots_on_target_home"),
+                                "shots_on_target_away": hl.get("shots_on_target_away"),
+                                "shots_on_target": hl.get("shots_on_target"),
+                                "fouls_home": hl.get("fouls_home"),
+                                "fouls_away": hl.get("fouls_away"),
+                                "fouls_total": hl.get("fouls_total"),
+                                "source": "highlightly",
+                                "tipo_entidad": SportsAnalyticsEngine._infer_entity_type(home, code) if "SportsAnalyticsEngine" in globals() else "club",
+                            }
+            except Exception as e:
+                logger.debug("Worker Highlightly fallback error: %s", e)
 
         # 2. Respaldo secundario: SofaScore
         if "SofascoreLiveService" in globals():
@@ -13111,12 +13581,13 @@ class SportsAnalyticsEngine:
                 "pts_last3": hist_5["pts"],
                 "gf_last3": hist_5["gf_total"],
                 "ga_last3": hist_5["gc_total"],
-                "corners": real_rating.get("corners_promedio"),
-                "corners_muestra": real_rating.get("corners_muestra", 0),
-                "tarjetas": real_rating.get("tarjetas_promedio"),
-                "tarjetas_muestra": real_rating.get("tarjetas_muestra", 0),
-                "tiros_puerta": None,
-                "tiros_totales": None,
+                "corners": real_rating.get("corners_promedio") if real_rating.get("corners_promedio") is not None else hist_5.get("corners_avg"),
+                "corners_muestra": real_rating.get("corners_muestra", 0) or hist_5.get("corners_muestra", 0),
+                "tarjetas": real_rating.get("tarjetas_promedio") if real_rating.get("tarjetas_promedio") is not None else hist_5.get("tarjetas_avg"),
+                "tarjetas_muestra": real_rating.get("tarjetas_muestra", 0) or hist_5.get("tarjetas_muestra", 0),
+                "tiros_puerta": hist_5.get("tiros_puerta_avg"),
+                "tiros_totales": hist_5.get("tiros_totales_avg"),
+                "faltas": hist_5.get("faltas_avg"),
                 "ultimos_partidos": hist_5["partidos"],
                 "confianza_insuficiente": hist_5["confianza_insuficiente"],
                 "fuente": real_rating.get("fuente", "football-data.org"),
@@ -13543,18 +14014,22 @@ class SportsAnalyticsEngine:
         corners_fuente = (h_stat.get("fuente") if h_stat.get("corners") is not None else enr_ch_src)
         corners_disponibles = (eff_corners_h is not None and eff_corners_a is not None)
 
-        enr_sh_h, _, _ = _enr_metric("tiros_home")
+        enr_sh_h, enr_sh_src, _ = _enr_metric("tiros_home")
         enr_sh_a, _, _ = _enr_metric("tiros_away")
-        enr_sot_h, _, _ = _enr_metric("tiros_puerta_home")
+        enr_sot_h, enr_sot_src, _ = _enr_metric("tiros_puerta_home")
         enr_sot_a, _, _ = _enr_metric("tiros_puerta_away")
+        enr_fl_h, enr_fl_src, _ = _enr_metric("faltas_home")
+        enr_fl_a, _, _ = _enr_metric("faltas_away")
         eff_shots_h = h_stat.get("tiros_totales") if h_stat.get("tiros_totales") is not None else enr_sh_h
         eff_shots_a = a_stat.get("tiros_totales") if a_stat.get("tiros_totales") is not None else enr_sh_a
         eff_sot_h = h_stat.get("tiros_puerta") if h_stat.get("tiros_puerta") is not None else enr_sot_h
         eff_sot_a = a_stat.get("tiros_puerta") if a_stat.get("tiros_puerta") is not None else enr_sot_a
-        tiros_disponibles = (
-            eff_shots_h is not None and eff_shots_a is not None
-            and eff_sot_h is not None and eff_sot_a is not None
-        )
+        eff_fouls_h = h_stat.get("faltas") if h_stat.get("faltas") is not None else enr_fl_h
+        eff_fouls_a = a_stat.get("faltas") if a_stat.get("faltas") is not None else enr_fl_a
+        shots_disponibles = (eff_shots_h is not None and eff_shots_a is not None)
+        sot_disponibles = (eff_sot_h is not None and eff_sot_a is not None)
+        faltas_disponibles = (eff_fouls_h is not None and eff_fouls_a is not None)
+        tiros_disponibles = (shots_disponibles and sot_disponibles)
 
         # Ruta H2H exclusivamente desde caché verificado (sin API-Sports, SofaScore, ESPN ni hashes)
         h2h_directo = {
@@ -14192,20 +14667,22 @@ class SportsAnalyticsEngine:
         }
         l_avg = league_averages_table.get(code, league_averages_table["PD"])
 
-        if tiros_disponibles:
+        if shots_disponibles:
             raw_sh_h = float(eff_shots_h)
             raw_sh_a = float(eff_shots_a)
             shots_h = round(max(7.5, min(17.5, raw_sh_h * 0.88 + (lh - 1.25) * 1.1)), 1)
             shots_a = round(max(6.5, min(16.0, raw_sh_a * 0.85 + (la - 1.10) * 1.1)), 1)
             shots_tot_match = round(shots_h + shots_a, 1)
+        else:
+            shots_h = shots_a = shots_tot_match = None
 
+        if sot_disponibles:
             raw_sot_h = float(eff_sot_h)
             raw_sot_a = float(eff_sot_a)
             shots_ot_h = round(max(2.4, min(7.4, raw_sot_h * 0.82 + (lh - 1.25) * 0.5)), 1)
             shots_ot_a = round(max(2.0, min(6.8, raw_sot_a * 0.80 + (la - 1.10) * 0.5)), 1)
             shots_ot_match = round(shots_ot_h + shots_ot_a, 1)
         else:
-            shots_h = shots_a = shots_tot_match = None
             shots_ot_h = shots_ot_a = shots_ot_match = None
 
         if corners_disponibles:
@@ -14282,12 +14759,10 @@ class SportsAnalyticsEngine:
             rec_cards_line = "Más de 2.5 tarjetas"
             rec_cards_prob = int(round(prob_cards_over_35))
 
-        # Selección para REMATES TOTALES y TIROS A PUERTA (solo si existen datos reales)
-        if not tiros_disponibles:
+        # Selección para REMATES TOTALES y TIROS A PUERTA (evaluación independiente por métrica)
+        if not shots_disponibles:
             rec_shots_line = "Datos insuficientes"
             rec_shots_prob = None
-            rec_sot_line = "Datos insuficientes"
-            rec_sot_prob = None
         elif shots_tot_match >= l_avg["shots"] + 0.8:
             linea_sh = int(math.floor(shots_tot_match - 2.0)) + 0.5
             rec_shots_line = f"Más de {linea_sh} remates"
@@ -14301,8 +14776,9 @@ class SportsAnalyticsEngine:
             rec_shots_line = f"Más de {linea_sh} remates"
             rec_shots_prob = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, shots_tot_match) for k in range(int(linea_sh) + 1))) * 100.0))))
 
-        if not tiros_disponibles:
-            pass
+        if not sot_disponibles:
+            rec_sot_line = "Datos insuficientes"
+            rec_sot_prob = None
         elif shots_ot_match >= l_avg["shots_on_target"] + 0.4:
             linea_sot = max(5.5, int(math.floor(shots_ot_match - 1.2)) + 0.5)
             rec_sot_line = f"Más de {linea_sot} tiros a puerta"
@@ -14393,20 +14869,29 @@ class SportsAnalyticsEngine:
                 "recommended": rec_corners_line if corners_disponibles else "Datos insuficientes"
             },
             "avg_shots": {
-                "value": shots_tot_match if tiros_disponibles else None,
-                "home": shots_h if tiros_disponibles else None, "away": shots_a if tiros_disponibles else None,
-                "prob_pct": rec_shots_prob if tiros_disponibles else None,
+                "value": shots_tot_match if shots_disponibles else None,
+                "home": shots_h if shots_disponibles else None, "away": shots_a if shots_disponibles else None,
+                "prob_pct": rec_shots_prob if shots_disponibles else None,
+                "fuente": (h_stat.get("fuente") if h_stat.get("tiros_totales") is not None else enr_sh_src) if shots_disponibles else "NO_DISPONIBLE",
                 "league_avg": l_avg["shots"], "unit": "",
-                "recommended": rec_shots_line if tiros_disponibles else "Datos insuficientes",
-                "datos_insuficientes": not tiros_disponibles
+                "recommended": rec_shots_line if shots_disponibles else "Datos insuficientes",
+                "datos_insuficientes": not shots_disponibles
             },
             "avg_shots_on_target": {
-                "value": shots_ot_match if tiros_disponibles else None,
-                "home": shots_ot_h if tiros_disponibles else None, "away": shots_ot_a if tiros_disponibles else None,
-                "prob_pct": rec_sot_prob if tiros_disponibles else None,
+                "value": shots_ot_match if sot_disponibles else None,
+                "home": shots_ot_h if sot_disponibles else None, "away": shots_ot_a if sot_disponibles else None,
+                "prob_pct": rec_sot_prob if sot_disponibles else None,
+                "fuente": (h_stat.get("fuente") if h_stat.get("tiros_puerta") is not None else enr_sot_src) if sot_disponibles else "NO_DISPONIBLE",
                 "league_avg": l_avg["shots_on_target"], "unit": "",
-                "recommended": rec_sot_line if tiros_disponibles else "Datos insuficientes",
-                "datos_insuficientes": not tiros_disponibles
+                "recommended": rec_sot_line if sot_disponibles else "Datos insuficientes",
+                "datos_insuficientes": not sot_disponibles
+            },
+            "avg_fouls": {
+                "value": round(float(eff_fouls_h) + float(eff_fouls_a), 1) if faltas_disponibles else None,
+                "home": round(float(eff_fouls_h), 1) if faltas_disponibles else None,
+                "away": round(float(eff_fouls_a), 1) if faltas_disponibles else None,
+                "fuente": (h_stat.get("fuente") if h_stat.get("faltas") is not None else enr_fl_src) if faltas_disponibles else "NO_DISPONIBLE",
+                "datos_insuficientes": not faltas_disponibles,
             },
             "_meta": {
                 "fuente_local": fuente_h,
@@ -20357,6 +20842,7 @@ def create_app() -> Flask:
             "success": True,
             "estado_ratings": dict(RATINGS_ESTADO),
             "football_data_org": FootballDataOrgClient.get_status_report(),
+            "highlightly": HighlightlyFootballClient.get_status_report(),
         }), 200
 
     @app.route("/api/v1/admin/top3/rotate", methods=["POST"])
