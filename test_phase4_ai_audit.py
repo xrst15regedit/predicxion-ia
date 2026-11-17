@@ -624,6 +624,133 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertIn("onerror=", html)
 
 
+    def test_12_small_teams_last_5_highlightly_espn_fallback_and_separate_modeled_estimation(self):
+        import json as _json
+
+        # 1. Sin base estadística suficiente -> devuelve "Sin base suficiente para estimar" (no un número arbitrario)
+        an_no_base = pred_app.SportsAnalyticsEngine.generate_institutional_analysis({
+            "local": "ClubNuevoSinBaseA",
+            "visitante": "ClubNuevoSinBaseB",
+            "codigo_liga": "PD",
+            "liga": "LaLiga",
+            "fecha": "2026-11-20",
+        })
+        for m_key in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target"):
+            m_obj = an_no_base["key_probabilities"][m_key]
+            for req_k in ("valor", "tipo_dato", "fuente", "muestra_n", "confianza"):
+                self.assertIn(req_k, m_obj, f"Falta {req_k} en {m_key}")
+            self.assertIsNone(m_obj["valor"])
+            self.assertEqual(m_obj["tipo_dato"], "ESTIMADO_MODELO")
+            self.assertEqual(m_obj["muestra_n"], 0)
+            self.assertEqual(m_obj["mensaje_base"], "Sin base suficiente para estimar")
+            self.assertEqual(m_obj["etiqueta_ui"], "No estimable")
+            self.assertEqual(m_obj["recommended_modelado"], "Sin base suficiente para estimar")
+
+        # 2. Obtención de últimos 5 partidos mediante Highlightly (3 antes de fecha + 1 futuro ignorado) y respaldo ESPN (2 antes de fecha)
+        hl_matches_payload = {
+            "data": [
+                {"id": 901, "date": "2026-11-25T15:00:00Z", "homeTeam": {"name": "Mirassol"}, "awayTeam": {"name": "Bahia"}, "state": {"description": "Finished", "score": {"current": "3 - 0"}}},
+                {"id": 902, "date": "2026-11-10T15:00:00Z", "homeTeam": {"name": "Mirassol"}, "awayTeam": {"name": "Santos"}, "state": {"description": "Finished", "score": {"current": "2 - 1"}}},
+                {"id": 903, "date": "2026-11-05T15:00:00Z", "homeTeam": {"name": "Gremio"}, "awayTeam": {"name": "Mirassol"}, "state": {"description": "Finished", "score": {"current": "1 - 1"}}},
+                {"id": 904, "date": "2026-11-01T15:00:00Z", "homeTeam": {"name": "Mirassol"}, "awayTeam": {"name": "Coritiba"}, "state": {"description": "Finished", "score": {"current": "0 - 1"}}},
+            ]
+        }
+        espn_scoreboard_payload = {
+            "events": [
+                {
+                    "id": "e1",
+                    "date": "2026-10-25T18:00Z",
+                    "competitions": [{
+                        "date": "2026-10-25T18:00Z",
+                        "status": {"type": {"completed": True, "state": "post"}},
+                        "competitors": [
+                            {"homeAway": "home", "score": "2", "team": {"displayName": "Mirassol", "name": "Mirassol"}, "statistics": []},
+                            {"homeAway": "away", "score": "0", "team": {"displayName": "Ceará", "name": "Ceará"}, "statistics": []},
+                        ],
+                    }],
+                },
+                {
+                    "id": "e2",
+                    "date": "2026-10-20T18:00Z",
+                    "competitions": [{
+                        "date": "2026-10-20T18:00Z",
+                        "status": {"type": {"completed": True, "state": "post"}},
+                        "competitors": [
+                            {"homeAway": "home", "score": "1", "team": {"displayName": "Fortaleza", "name": "Fortaleza"}, "statistics": []},
+                            {"homeAway": "away", "score": "2", "team": {"displayName": "Mirassol", "name": "Mirassol"}, "statistics": []},
+                        ],
+                    }],
+                },
+            ]
+        }
+
+        espn_resp = MagicMock()
+        espn_resp.status_code = 200
+        espn_resp.json.return_value = espn_scoreboard_payload
+
+        with patch.object(pred_app.HighlightlyFootballClient, "fetch_json", return_value={"ok": True, "data": hl_matches_payload}), \
+             patch.object(pred_app.HighlightlyFootballClient, "fetch_statistics", return_value=None), \
+             patch.object(requests, "get", return_value=espn_resp):
+            last5_mirassol = pred_app.MatchEnrichmentCache.enrich_team_last_5_matches(
+                "Mirassol", before_date="2026-11-15", competition_code="BSA", limit=5
+            )
+
+        self.assertEqual(len(last5_mirassol), 5)
+        for m_item in last5_mirassol:
+            self.assertLess(m_item["fecha"], "2026-11-15", "No debe incluir partidos en o después de la fecha del encuentro")
+
+        # 3. Con resultados históricos de goles pero sin tiros/tarjetas/córners verificados:
+        #    - No bloquea el partido
+        #    - Genera estimación modelada separada (ESTIMADO_MODELO) marcada explícitamente
+        #    - Mantiene value=None (verificado) separado de valor (estimado por modelo)
+        self._add_verified_team("Remo", code="BSA", liga="Brasileirao", gf=1, ga=1)
+        # Limpiar métricas secundarias de Remo para probar estimación modelada pura
+        for k_v, v_v in list(pred_app._VERIFIED_RESULTS_CACHE.items()):
+            if "Remo" in k_v:
+                for sec_k in ("corners_home", "corners_away", "cards_home", "cards_away", "shots_home", "shots_away", "shots_on_target_home", "shots_on_target_away"):
+                    v_v.pop(sec_k, None)
+        pred_app.SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
+
+        an_small = pred_app.SportsAnalyticsEngine.generate_institutional_analysis({
+            "local": "Mirassol",
+            "visitante": "Remo",
+            "codigo_liga": "BSA",
+            "liga": "Campeonato Brasileiro Série A",
+            "fecha": "2026-11-15",
+        })
+        p_princ = an_small["pronostico_principal"]
+        self.assertNotIn(p_princ["seleccion"], ("Datos insuficientes", "Confianza insuficiente", ""))
+        self.assertFalse(p_princ["confianza_insuficiente"])
+
+        kp_s = an_small["key_probabilities"]
+        for m_key in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target"):
+            m_obj = kp_s[m_key]
+            for req_k in ("valor", "tipo_dato", "fuente", "muestra_n", "confianza"):
+                self.assertIn(req_k, m_obj)
+            # Separación estricta: value (verificado) es None, pero valor y estimacion_modelada tienen la estimación marcada
+            self.assertIsNone(m_obj["value"])
+            self.assertTrue(m_obj["datos_insuficientes"])
+            self.assertIsNotNone(m_obj["valor"])
+            self.assertEqual(m_obj["tipo_dato"], "ESTIMADO_MODELO")
+            self.assertGreater(m_obj["muestra_n"], 0)
+            self.assertIn(m_obj["confianza"], ("MEDIA", "BAJA"))
+            self.assertIsNotNone(m_obj["estimacion_modelada"])
+            self.assertEqual(m_obj["estimacion_modelada"]["tipo_dato"], "ESTIMADO_MODELO")
+
+        # Separación en IA
+        sep_ia = an_small["consenso_dual_ia"]["separacion_datos"]
+        self.assertEqual(sep_ia["metricas_verificadas"], [])
+        self.assertIn("avg_corners", sep_ia["metricas_estimadas_modelo"])
+
+        # Verificar que index.html reemplazó N/D por "Estimación del modelo" y "No estimable"
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        self.assertNotIn("N/D", html)
+        self.assertIn("Estimación del modelo", html)
+        self.assertIn("No estimable", html)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
