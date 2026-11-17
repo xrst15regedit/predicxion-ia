@@ -1929,14 +1929,16 @@ class HighlightlyFootballClient:
         return stat_map
 
     @classmethod
-    def _pick_stat(cls, stat_map: dict, aliases: tuple):
+    def _pick_stat(cls, stat_map: dict, aliases: tuple, exclude_substrings: tuple = ()):
         for alias in aliases:
             if alias in stat_map:
                 parsed = cls._parse_int_stat(stat_map[alias])
                 if parsed is not None:
                     return parsed
-        for k, v in stat_map.items():
-            for alias in aliases:
+        for alias in aliases:
+            for k, v in stat_map.items():
+                if exclude_substrings and any(ex in k for ex in exclude_substrings):
+                    continue
                 if alias in k:
                     parsed = cls._parse_int_stat(v)
                     if parsed is not None:
@@ -2004,10 +2006,15 @@ class HighlightlyFootballClient:
             partido_label=partido_lbl,
         )
         if not res.get("ok") or not res.get("data"):
+            logger.info("[HighlightlyStats] match_id=%s partido=%s http=%s campos=[]", match_id, partido_lbl, res.get("status_code"))
             return None
         payload = res["data"]
-        blocks = payload.get("data", payload.get("statistics", [])) if isinstance(payload, dict) else payload
+        if isinstance(payload, dict) and ("home" in payload and "away" in payload) and not isinstance(payload.get("data"), list):
+            blocks = [payload["home"], payload["away"]]
+        else:
+            blocks = payload.get("data", payload.get("statistics", [])) if isinstance(payload, dict) else payload
         if not isinstance(blocks, list) or len(blocks) < 2:
+            logger.info("[HighlightlyStats] match_id=%s partido=%s http=%s campos=[] (estructura_sin_bloques)", match_id, partido_lbl, res.get("status_code"))
             return None
 
         home_block = blocks[0]
@@ -2036,11 +2043,27 @@ class HighlightlyFootballClient:
         cards_h = tot_ch if tot_ch is not None else ((yh or 0) + (rh or 0) * 2 if (yh is not None or rh is not None) else None)
         cards_a = tot_ca if tot_ca is not None else ((ya or 0) + (ra or 0) * 2 if (ya is not None or ra is not None) else None)
 
-        shots_h = cls._pick_stat(h_map, ("total shots", "shots total", "shots"))
-        shots_a = cls._pick_stat(a_map, ("total shots", "shots total", "shots"))
+        sot_h = cls._pick_stat(h_map, ("shots on goal", "shots on target", "on target", "shots_on_target"))
+        sot_a = cls._pick_stat(a_map, ("shots on goal", "shots on target", "on target", "shots_on_target"))
 
-        sot_h = cls._pick_stat(h_map, ("shots on goal", "shots on target", "on target"))
-        sot_a = cls._pick_stat(a_map, ("shots on goal", "shots on target", "on target"))
+        shots_h = cls._pick_stat(
+            h_map,
+            ("total shots", "shots total", "goal attempts", "shots_total", "shots"),
+            exclude_substrings=("on goal", "on target", "off goal", "off target", "blocked", "inside", "outside", "accuracy", "saved"),
+        )
+        shots_a = cls._pick_stat(
+            a_map,
+            ("total shots", "shots total", "goal attempts", "shots_total", "shots"),
+            exclude_substrings=("on goal", "on target", "off goal", "off target", "blocked", "inside", "outside", "accuracy", "saved"),
+        )
+        if shots_h is None and sot_h is not None:
+            soff_h = cls._pick_stat(h_map, ("shots off goal", "shots off target", "off target")) or 0
+            blk_h = cls._pick_stat(h_map, ("blocked shots",)) or 0
+            shots_h = sot_h + soff_h + blk_h
+        if shots_a is None and sot_a is not None:
+            soff_a = cls._pick_stat(a_map, ("shots off goal", "shots off target", "off target")) or 0
+            blk_a = cls._pick_stat(a_map, ("blocked shots",)) or 0
+            shots_a = sot_a + soff_a + blk_a
 
         fouls_h = cls._pick_stat(h_map, ("fouls", "total fouls"))
         fouls_a = cls._pick_stat(a_map, ("fouls", "total fouls"))
@@ -2074,6 +2097,8 @@ class HighlightlyFootballClient:
             if out.get(k) is not None
         ]
         out["indicadores_recibidos"] = indicadores
+        out["http_status"] = res.get("status_code", 200)
+        logger.info("[HighlightlyStats] match_id=%s partido=%s http=%s campos=%s", match_id, partido_lbl, out["http_status"], indicadores)
         return out
 
     @classmethod
@@ -2116,12 +2141,284 @@ class HighlightlyFootballClient:
         )
         return stats
 
+    _LAST_LIVE_VERIFICATION = None
+
+    @staticmethod
+    def _classify_http_failure(res: dict) -> str:
+        if not res:
+            return "ERROR_DESCONOCIDO"
+        code = res.get("status_code")
+        err = str(res.get("error") or "").lower()
+        if code == 401:
+            return "HTTP_401"
+        if code == 403:
+            return "HTTP_403"
+        if code == 404:
+            return "HTTP_404"
+        if code == 429:
+            return "HTTP_429"
+        if "timeout" in err:
+            return "TIMEOUT"
+        if "vacía" in err or "vacia" in err:
+            return "RESPUESTA_VACIA"
+        if code is not None and code != 200:
+            return f"HTTP_{code}"
+        return "ERROR_RED"
+
+    @classmethod
+    def verify_live_production(cls, date_str: str = "", home_name: str = "", away_name: str = "") -> dict:
+        """
+        Verificación real de producción contra Highlightly (SIN mocks).
+        - Confirma si HIGHLIGHTLY_API_KEY está configurada sin mostrar su valor.
+        - Consulta /matches y /statistics/{matchId}.
+        - Diferencia HTTP 401, 403, 404, 429, timeout y respuesta vacía.
+        - Guarda métricas normalizadas en MatchEnrichmentCache.
+        """
+        fecha_obj = str(date_str or get_current_operational_date())[:10]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        api_cfg = bool(cls._get_api_key())
+
+        if not api_cfg:
+            report = {
+                "modo_verificacion": "LIVE_RENDER",
+                "ok": False,
+                "estado_integracion": "SIN_API_KEY",
+                "api_key_configurada": False,
+                "proveedor": "highlightly",
+                "tipo_falla": "SIN_API_KEY",
+                "http_status_matches": None,
+                "http_status_statistics": None,
+                "partido": f"{home_name} vs {away_name}".strip(" vs") or None,
+                "fecha": fecha_obj,
+                "fecha_consulta": now_iso,
+                "campos_recibidos": [],
+                "metricas_normalizadas": {},
+                "guardado_en_cache": False,
+                "detalle": "HIGHLIGHTLY_API_KEY no configurada en el entorno.",
+            }
+            with cls._LOCK:
+                cls._LAST_LIVE_VERIFICATION = report
+            logger.info("[HighlightlyLiveVerify] modo=LIVE_RENDER proveedor=highlightly api_key_configurada=False tipo_falla=SIN_API_KEY fecha=%s", fecha_obj)
+            return report
+
+        # 1. Consulta en vivo a /matches (ttl_seconds=0 para verificación real sin caché)
+        partido_filtro = f"{home_name} vs {away_name}".strip(" vs")
+        res_m = cls.fetch_json(
+            "/matches",
+            params={"date": fecha_obj},
+            ttl_seconds=0,
+            partido_label=partido_filtro or f"VERIFY_{fecha_obj}",
+        )
+        http_m = res_m.get("status_code")
+        if not res_m.get("ok"):
+            falla_m = cls._classify_http_failure(res_m)
+            report = {
+                "modo_verificacion": "LIVE_RENDER",
+                "ok": False,
+                "estado_integracion": "FALLA_LIVE",
+                "api_key_configurada": True,
+                "proveedor": "highlightly",
+                "tipo_falla": falla_m,
+                "http_status_matches": http_m,
+                "http_status_statistics": None,
+                "partido": partido_filtro or None,
+                "fecha": fecha_obj,
+                "fecha_consulta": now_iso,
+                "campos_recibidos": [],
+                "metricas_normalizadas": {},
+                "guardado_en_cache": False,
+                "detalle": cls._sanitize_error(res_m.get("error"), cls._get_api_key()),
+            }
+            with cls._LOCK:
+                cls._LAST_LIVE_VERIFICATION = report
+            logger.info("[HighlightlyLiveVerify] modo=LIVE_RENDER proveedor=highlightly http_matches=%s tipo_falla=%s fecha=%s", http_m, falla_m, fecha_obj)
+            return report
+
+        payload_m = res_m.get("data")
+        matches = payload_m.get("data", payload_m.get("matches", [])) if isinstance(payload_m, dict) else payload_m
+        if not isinstance(matches, list) or len(matches) == 0:
+            report = {
+                "modo_verificacion": "LIVE_RENDER",
+                "ok": False,
+                "estado_integracion": "SIN_PARTIDOS_EN_FECHA",
+                "api_key_configurada": True,
+                "proveedor": "highlightly",
+                "tipo_falla": "RESPUESTA_VACIA",
+                "http_status_matches": http_m,
+                "http_status_statistics": None,
+                "partido": partido_filtro or None,
+                "fecha": fecha_obj,
+                "fecha_consulta": now_iso,
+                "campos_recibidos": [],
+                "metricas_normalizadas": {},
+                "guardado_en_cache": False,
+                "detalle": f"Highlightly /matches devolvió 0 partidos para {fecha_obj}.",
+            }
+            with cls._LOCK:
+                cls._LAST_LIVE_VERIFICATION = report
+            logger.info("[HighlightlyLiveVerify] modo=LIVE_RENDER proveedor=highlightly http_matches=%s tipo_falla=RESPUESTA_VACIA fecha=%s", http_m, fecha_obj)
+            return report
+
+        chosen = None
+        if home_name and away_name:
+            for m in matches:
+                h_n = ((m.get("homeTeam") or m.get("home") or {}).get("name") or "")
+                a_n = ((m.get("awayTeam") or m.get("away") or {}).get("name") or "")
+                if matches_team_alias(home_name, h_n) and matches_team_alias(away_name, a_n):
+                    chosen = m
+                    break
+        if not chosen:
+            chosen = next((m for m in matches if (m.get("id") or m.get("matchId"))), matches[0])
+
+        match_id = chosen.get("id") or chosen.get("matchId")
+        h_real = ((chosen.get("homeTeam") or chosen.get("home") or {}).get("name") or home_name or "Local")
+        a_real = ((chosen.get("awayTeam") or chosen.get("away") or {}).get("name") or away_name or "Visitante")
+        partido_real = f"{h_real} vs {a_real}"
+
+        # 2. Consulta en vivo a /statistics/{matchId}
+        res_s = cls.fetch_json(
+            f"/statistics/{match_id}",
+            ttl_seconds=0,
+            partido_label=partido_real,
+        )
+        http_s = res_s.get("status_code")
+        if not res_s.get("ok"):
+            falla_s = cls._classify_http_failure(res_s)
+            report = {
+                "modo_verificacion": "LIVE_RENDER",
+                "ok": False,
+                "estado_integracion": "FALLA_LIVE",
+                "api_key_configurada": True,
+                "proveedor": "highlightly",
+                "tipo_falla": falla_s,
+                "http_status_matches": http_m,
+                "http_status_statistics": http_s,
+                "match_id": match_id,
+                "partido": partido_real,
+                "fecha": fecha_obj,
+                "fecha_consulta": now_iso,
+                "campos_recibidos": [],
+                "metricas_normalizadas": {},
+                "guardado_en_cache": False,
+                "detalle": cls._sanitize_error(res_s.get("error"), cls._get_api_key()),
+            }
+            with cls._LOCK:
+                cls._LAST_LIVE_VERIFICATION = report
+            logger.info("[HighlightlyLiveVerify] modo=LIVE_RENDER proveedor=highlightly http_matches=%s http_stats=%s tipo_falla=%s partido=%s fecha=%s", http_m, http_s, falla_s, partido_real, fecha_obj)
+            return report
+
+        # Reusar fetch_statistics normalizado (usando caché recién poblada con el payload en vivo)
+        cls._CACHE[f"/statistics/{match_id}?{{}}"] = {"ts": time.time(), "data": res_s["data"]}
+        norm_stats = cls.fetch_statistics(match_id, home_name=h_real, away_name=a_real, ttl_seconds=60)
+        if not norm_stats:
+            report = {
+                "modo_verificacion": "LIVE_RENDER",
+                "ok": False,
+                "estado_integracion": "RESPUESTA_SIN_BLOQUES",
+                "api_key_configurada": True,
+                "proveedor": "highlightly",
+                "tipo_falla": "RESPUESTA_VACIA",
+                "http_status_matches": http_m,
+                "http_status_statistics": http_s,
+                "match_id": match_id,
+                "partido": partido_real,
+                "fecha": fecha_obj,
+                "fecha_consulta": now_iso,
+                "campos_recibidos": [],
+                "metricas_normalizadas": {},
+                "guardado_en_cache": False,
+                "detalle": "Highlightly /statistics devolvió estructura sin bloques de equipo.",
+            }
+            with cls._LOCK:
+                cls._LAST_LIVE_VERIFICATION = report
+            return report
+
+        metricas_norm = {
+            "corners_home": norm_stats.get("corners_home"),
+            "corners_away": norm_stats.get("corners_away"),
+            "cards_home": norm_stats.get("cards_home"),
+            "cards_away": norm_stats.get("cards_away"),
+            "shots_home": norm_stats.get("shots_home"),
+            "shots_away": norm_stats.get("shots_away"),
+            "shots_on_target_home": norm_stats.get("shots_on_target_home"),
+            "shots_on_target_away": norm_stats.get("shots_on_target_away"),
+            "fouls_home": norm_stats.get("fouls_home"),
+            "fouls_away": norm_stats.get("fouls_away"),
+        }
+        campos_rec = norm_stats.get("indicadores_recibidos", [])
+
+        guardado = False
+        if "MatchEnrichmentCache" in globals():
+            try:
+                MatchEnrichmentCache.store_observations(
+                    {"id_partido": f"hl_{match_id}", "fecha": fecha_obj, "local": h_real, "visitante": a_real},
+                    [{
+                        "fuente": "highlightly",
+                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
+                        "metricas": {
+                            "corners_home": norm_stats.get("corners_home"),
+                            "corners_away": norm_stats.get("corners_away"),
+                            "corners": norm_stats.get("corners_total"),
+                            "tarjetas_home": norm_stats.get("cards_home"),
+                            "tarjetas_away": norm_stats.get("cards_away"),
+                            "tarjetas": norm_stats.get("cards_total"),
+                            "tiros_home": norm_stats.get("shots_home"),
+                            "tiros_away": norm_stats.get("shots_away"),
+                            "tiros": norm_stats.get("shots_total"),
+                            "tiros_puerta_home": norm_stats.get("shots_on_target_home"),
+                            "tiros_puerta_away": norm_stats.get("shots_on_target_away"),
+                            "tiros_puerta": norm_stats.get("shots_on_target"),
+                            "faltas_home": norm_stats.get("fouls_home"),
+                            "faltas_away": norm_stats.get("fouls_away"),
+                            "faltas": norm_stats.get("fouls_total"),
+                        },
+                    }],
+                    ttl_seconds=3600,
+                )
+                guardado = True
+            except Exception as exc_cache:
+                logger.debug("Error guardando verificación Highlightly en caché: %s", exc_cache)
+
+        report = {
+            "modo_verificacion": "LIVE_RENDER",
+            "ok": True,
+            "estado_integracion": "FUNCIONANDO_LIVE_RENDER",
+            "api_key_configurada": True,
+            "proveedor": "highlightly",
+            "tipo_falla": "OK",
+            "http_status_matches": http_m,
+            "http_status_statistics": http_s,
+            "match_id": match_id,
+            "partido": partido_real,
+            "fecha": fecha_obj,
+            "fecha_consulta": now_iso,
+            "campos_recibidos": campos_rec,
+            "metricas_normalizadas": metricas_norm,
+            "guardado_en_cache": guardado,
+        }
+        with cls._LOCK:
+            cls._LAST_LIVE_VERIFICATION = report
+        logger.info(
+            "[HighlightlyLiveVerify] modo=LIVE_RENDER proveedor=highlightly http_matches=%s http_stats=%s partido=%s fecha=%s campos=%s guardado_en_cache=%s",
+            http_m, http_s, partido_real, fecha_obj, campos_rec, guardado
+        )
+        return report
+
     @classmethod
     def get_status_report(cls) -> dict:
         with cls._LOCK:
+            last_ver = cls._LAST_LIVE_VERIFICATION
+            if last_ver and last_ver.get("ok") and last_ver.get("modo_verificacion") == "LIVE_RENDER":
+                est_int = "FUNCIONANDO_LIVE_RENDER"
+            elif last_ver:
+                est_int = last_ver.get("estado_integracion", "FALLA_LIVE")
+            else:
+                est_int = "PENDIENTE_VERIFICACION_LIVE"
             return {
                 **cls._STATUS,
                 "api_key_configurada": bool(cls._get_api_key()),
+                "estado_integracion": est_int,
+                "verificacion_produccion": last_ver,
                 "ultimas_solicitudes": list(cls._REQUEST_LOGS[-20:]),
             }
 
@@ -2485,6 +2782,73 @@ class MatchEnrichmentCache:
                 }
             return dict(entry)
 
+    _METRIC_SYNONYMS = {
+        "corners_home": ("corners_home",),
+        "corners_away": ("corners_away",),
+        "corners": ("corners", "corners_total"),
+        "tarjetas_home": ("tarjetas_home", "cards_home"),
+        "tarjetas_away": ("tarjetas_away", "cards_away"),
+        "tarjetas": ("tarjetas", "cards_total", "cards"),
+        "tiros_home": ("tiros_home", "shots_home"),
+        "tiros_away": ("tiros_away", "shots_away"),
+        "tiros": ("tiros", "shots_total", "shots"),
+        "tiros_puerta_home": ("tiros_puerta_home", "shots_on_target_home"),
+        "tiros_puerta_away": ("tiros_puerta_away", "shots_on_target_away"),
+        "tiros_puerta": ("tiros_puerta", "shots_on_target", "shots_on_target_total"),
+        "faltas_home": ("faltas_home", "fouls_home"),
+        "faltas_away": ("faltas_away", "fouls_away"),
+        "faltas": ("faltas", "fouls_total", "fouls"),
+        "bajas_confirmadas": ("bajas_confirmadas", "injuries_confirmed"),
+        "arbitro": ("arbitro", "referee"),
+        "arbitro_avg_cards": ("arbitro_avg_cards", "referee_avg_cards"),
+        "resultado": ("resultado",),
+    }
+
+    _ENGLISH_MIRROR_KEYS = {
+        "tarjetas_home": "cards_home",
+        "tarjetas_away": "cards_away",
+        "tarjetas": "cards_total",
+        "tiros_home": "shots_home",
+        "tiros_away": "shots_away",
+        "tiros": "shots_total",
+        "tiros_puerta_home": "shots_on_target_home",
+        "tiros_puerta_away": "shots_on_target_away",
+        "tiros_puerta": "shots_on_target",
+        "faltas_home": "fouls_home",
+        "faltas_away": "fouls_away",
+        "faltas": "fouls_total",
+        "corners": "corners_total",
+    }
+
+    @classmethod
+    def _normalize_observation_metrics(cls, raw_m: dict) -> dict:
+        if not isinstance(raw_m, dict):
+            return {}
+        norm = {}
+        for canon_key, aliases in cls._METRIC_SYNONYMS.items():
+            val = None
+            for al in aliases:
+                v_cand = raw_m.get(al)
+                if v_cand is not None and v_cand != "":
+                    val = v_cand
+                    break
+            norm[canon_key] = val
+
+        # Completar totales automáticamente cuando existen home y away
+        for h_k, a_k, tot_k in (
+            ("corners_home", "corners_away", "corners"),
+            ("tarjetas_home", "tarjetas_away", "tarjetas"),
+            ("tiros_home", "tiros_away", "tiros"),
+            ("tiros_puerta_home", "tiros_puerta_away", "tiros_puerta"),
+            ("faltas_home", "faltas_away", "faltas"),
+        ):
+            if norm.get(tot_k) is None and norm.get(h_k) is not None and norm.get(a_k) is not None:
+                try:
+                    norm[tot_k] = int(norm[h_k]) + int(norm[a_k])
+                except Exception:
+                    pass
+        return norm
+
     @classmethod
     def store_observations(cls, match_data: dict, observations: list, ttl_seconds: int = 3600) -> dict:
         fecha = str(match_data.get("fecha") or match_data.get("fecha_utc") or "")[:10]
@@ -2502,21 +2866,21 @@ class MatchEnrichmentCache:
             "visitante": away,
         }
 
+        normalized_obs = []
+        for obs in (observations or []):
+            normalized_obs.append({
+                "fuente": obs.get("fuente", "desconocida"),
+                "nivel_verificacion": obs.get("nivel_verificacion", "RESPALDO_SECUNDARIO"),
+                "metricas": cls._normalize_observation_metrics(obs.get("metricas") or {}),
+            })
+
         consolidated = {}
         discrepancias = []
-        target_metrics = (
-            "corners_home", "corners_away", "corners",
-            "tarjetas_home", "tarjetas_away", "tarjetas",
-            "tiros_home", "tiros_away", "tiros",
-            "tiros_puerta_home", "tiros_puerta_away", "tiros_puerta",
-            "faltas_home", "faltas_away", "faltas",
-            "bajas_confirmadas",
-            "arbitro", "arbitro_avg_cards", "resultado",
-        )
+        target_metrics = tuple(cls._METRIC_SYNONYMS.keys())
 
         for metric in target_metrics:
             seen_vals = []
-            for obs in observations:
+            for obs in normalized_obs:
                 val = (obs.get("metricas") or {}).get(metric)
                 if val is not None and val != "":
                     seen_vals.append({
@@ -2536,7 +2900,13 @@ class MatchEnrichmentCache:
                 continue
 
             distinct_repr = {json.dumps(x["valor"], sort_keys=True, default=str) for x in seen_vals}
-            if len(distinct_repr) > 1:
+            # Si una fuente prioritaria con API Key (football-data.org o highlightly) entregó el dato,
+            # no se descarta por diferencias de scrapers secundarios (espn/sofascore).
+            auth_val = next(
+                (x for x in seen_vals if str(x.get("fuente", "")).lower() in ("football-data.org", "highlightly")),
+                None,
+            )
+            if len(distinct_repr) > 1 and auth_val is None:
                 discrepancias.append({
                     "metrica": metric,
                     "partido": partido_asoc,
@@ -2553,7 +2923,7 @@ class MatchEnrichmentCache:
                     "reportes": seen_vals,
                 }
             else:
-                chosen = next((x for x in seen_vals if x["fuente"] == "football-data.org"), seen_vals[0])
+                chosen = auth_val or seen_vals[0]
                 consolidated[metric] = {
                     "valor": chosen["valor"],
                     "fuente": chosen["fuente"],
@@ -2562,6 +2932,12 @@ class MatchEnrichmentCache:
                     "nivel_verificacion": chosen["nivel_verificacion"],
                     "partido_asociado": partido_asoc,
                 }
+
+        # Espejar claves en inglés (shots_home, shots_away, shots_on_target_home, cards_home, fouls_home, etc.)
+        # para garantizar trazabilidad 1:1 entre Highlightly, MatchEnrichmentCache y SportsAnalyticsEngine
+        for es_key, en_key in cls._ENGLISH_MIRROR_KEYS.items():
+            if es_key in consolidated:
+                consolidated[en_key] = dict(consolidated[es_key])
 
         fuentes_activas = sorted({
             m["fuente"] for m in consolidated.values()
@@ -2597,16 +2973,31 @@ class MatchEnrichmentCache:
     @classmethod
     def enrich_match_worker(cls, match_data: dict, ttl_seconds: int = 3600) -> dict:
         """
-        Worker controlado de enriquecimiento:
-        1. Consulta football-data.org como fuente principal.
-        2. Si faltan métricas, consulta respaldos secundarios (SofaScore, ESPN, API-Sports)
-           SIN modificar ni sobrescribir el calendario manual.
+        Worker controlado de enriquecimiento en cascada:
+        1. Consulta football-data.org como fuente principal (resultado, árbitro).
+        2. Consulta Highlightly Football API para las 10 métricas estadísticas por equipo.
+        3. Solo para las métricas que sigan faltando, consulta respaldos secundarios (SofaScore, ESPN, API-Sports).
         """
         fecha = str(match_data.get("fecha") or match_data.get("fecha_utc") or "")[:10]
         home = match_data.get("local", "")
         away = match_data.get("visitante", "")
         code = match_data.get("codigo_liga", "")
         observations = []
+        filled_canon = set()
+
+        def _register_obs(fuente_name: str, nivel: str, raw_dict: dict):
+            norm_m = cls._normalize_observation_metrics(raw_dict)
+            filtered_m = {}
+            for k_c, v_c in norm_m.items():
+                if v_c is not None and k_c not in filled_canon:
+                    filtered_m[k_c] = v_c
+                    filled_canon.add(k_c)
+            if filtered_m:
+                observations.append({
+                    "fuente": fuente_name,
+                    "nivel_verificacion": nivel,
+                    "metricas": filtered_m,
+                })
 
         # 1. Fuente principal: football-data.org
         fd_code = FootballDataOrgClient.COMPETITION_CODE_MAP.get(code, code)
@@ -2626,13 +3017,9 @@ class MatchEnrichmentCache:
                         refs = m.get("referees") or []
                         arb_name = refs[0].get("name") if refs else None
                         res_str = f"{ft.get('home')}-{ft.get('away')}" if (m.get("status") == "FINISHED" and ft.get("home") is not None) else None
-                        observations.append({
-                            "fuente": "football-data.org",
-                            "nivel_verificacion": "PRIMARIO_OFICIAL",
-                            "metricas": {
-                                "resultado": res_str,
-                                "arbitro": arb_name,
-                            }
+                        _register_obs("football-data.org", "PRIMARIO_OFICIAL", {
+                            "resultado": res_str,
+                            "arbitro": arb_name,
                         })
                         break
 
@@ -2641,27 +3028,23 @@ class MatchEnrichmentCache:
             try:
                 hl = HighlightlyFootballClient.fetch_match_stats(home, away, fecha, liga_code=code)
                 if hl:
-                    observations.append({
-                        "fuente": "highlightly",
-                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
-                        "metricas": {
-                            "corners_home": hl.get("corners_home"),
-                            "corners_away": hl.get("corners_away"),
-                            "corners": hl.get("corners_total"),
-                            "tarjetas_home": hl.get("cards_home"),
-                            "tarjetas_away": hl.get("cards_away"),
-                            "tarjetas": hl.get("cards_total"),
-                            "tiros_home": hl.get("shots_home"),
-                            "tiros_away": hl.get("shots_away"),
-                            "tiros": hl.get("shots_total"),
-                            "tiros_puerta_home": hl.get("shots_on_target_home"),
-                            "tiros_puerta_away": hl.get("shots_on_target_away"),
-                            "tiros_puerta": hl.get("shots_on_target"),
-                            "faltas_home": hl.get("fouls_home"),
-                            "faltas_away": hl.get("fouls_away"),
-                            "faltas": hl.get("fouls_total"),
-                            "resultado": f"{hl.get('score_home')}-{hl.get('score_away')}" if (hl.get("finished") and hl.get("score_home") is not None and hl.get("score_away") is not None) else None,
-                        }
+                    _register_obs("highlightly", "RESPALDO_SECUNDARIO", {
+                        "corners_home": hl.get("corners_home"),
+                        "corners_away": hl.get("corners_away"),
+                        "corners": hl.get("corners_total"),
+                        "tarjetas_home": hl.get("cards_home"),
+                        "tarjetas_away": hl.get("cards_away"),
+                        "tarjetas": hl.get("cards_total"),
+                        "tiros_home": hl.get("shots_home"),
+                        "tiros_away": hl.get("shots_away"),
+                        "tiros": hl.get("shots_total"),
+                        "tiros_puerta_home": hl.get("shots_on_target_home"),
+                        "tiros_puerta_away": hl.get("shots_on_target_away"),
+                        "tiros_puerta": hl.get("shots_on_target"),
+                        "faltas_home": hl.get("fouls_home"),
+                        "faltas_away": hl.get("fouls_away"),
+                        "faltas": hl.get("fouls_total"),
+                        "resultado": f"{hl.get('score_home')}-{hl.get('score_away')}" if (hl.get("finished") and hl.get("score_home") is not None and hl.get("score_away") is not None) else None,
                     })
                     if hl.get("finished") and hl.get("score_home") is not None and hl.get("score_away") is not None and "_VERIFIED_RESULTS_CACHE" in globals():
                         v_key = (fecha, home, away)
@@ -2694,112 +3077,124 @@ class MatchEnrichmentCache:
             except Exception as e:
                 logger.debug("Worker Highlightly fallback error: %s", e)
 
-        # 2. Respaldo secundario: SofaScore
-        if "SofascoreLiveService" in globals():
+        required_core = {
+            "corners_home", "corners_away",
+            "tarjetas_home", "tarjetas_away",
+            "tiros_home", "tiros_away",
+            "tiros_puerta_home", "tiros_puerta_away",
+            "faltas_home", "faltas_away",
+            "arbitro",
+        }
+
+        # 2. Respaldo secundario: SofaScore (solo si faltan métricas)
+        if not required_core.issubset(filled_canon) and "SofascoreLiveService" in globals():
             try:
                 sofa = SofascoreLiveService.fetch_match_stats(home, away, fecha)
                 if sofa:
-                    observations.append({
-                        "fuente": "sofascore",
-                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
-                        "metricas": {
-                            "corners_home": sofa.get("corners_home"),
-                            "corners_away": sofa.get("corners_away"),
-                            "corners": sofa.get("corners_total"),
-                            "tarjetas_home": sofa.get("cards_home"),
-                            "tarjetas_away": sofa.get("cards_away"),
-                            "tarjetas": sofa.get("cards_total"),
-                            "tiros_home": sofa.get("shots_home"),
-                            "tiros_away": sofa.get("shots_away"),
-                            "tiros": sofa.get("shots_total"),
-                            "tiros_puerta_home": sofa.get("shots_on_target_home"),
-                            "tiros_puerta_away": sofa.get("shots_on_target_away"),
-                            "tiros_puerta": sofa.get("shots_on_target"),
-                            "faltas_home": sofa.get("fouls_home"),
-                            "faltas_away": sofa.get("fouls_away"),
-                            "faltas": sofa.get("fouls_total"),
-                            "bajas_confirmadas": sofa.get("bajas_confirmadas"),
-                            "arbitro": sofa.get("referee"),
-                            "arbitro_avg_cards": sofa.get("referee_avg_cards"),
-                            "resultado": f"{sofa.get('score_home')}-{sofa.get('score_away')}" if sofa.get("finished") else None,
-                        }
+                    _register_obs("sofascore", "RESPALDO_SECUNDARIO", {
+                        "corners_home": sofa.get("corners_home"),
+                        "corners_away": sofa.get("corners_away"),
+                        "corners": sofa.get("corners_total"),
+                        "tarjetas_home": sofa.get("cards_home"),
+                        "tarjetas_away": sofa.get("cards_away"),
+                        "tarjetas": sofa.get("cards_total"),
+                        "tiros_home": sofa.get("shots_home"),
+                        "tiros_away": sofa.get("shots_away"),
+                        "tiros": sofa.get("shots_total"),
+                        "tiros_puerta_home": sofa.get("shots_on_target_home"),
+                        "tiros_puerta_away": sofa.get("shots_on_target_away"),
+                        "tiros_puerta": sofa.get("shots_on_target"),
+                        "faltas_home": sofa.get("fouls_home"),
+                        "faltas_away": sofa.get("fouls_away"),
+                        "faltas": sofa.get("fouls_total"),
+                        "bajas_confirmadas": sofa.get("bajas_confirmadas"),
+                        "arbitro": sofa.get("referee"),
+                        "arbitro_avg_cards": sofa.get("referee_avg_cards"),
+                        "resultado": f"{sofa.get('score_home')}-{sofa.get('score_away')}" if sofa.get("finished") else None,
                     })
             except Exception as e:
                 logger.debug("Worker SofaScore fallback error: %s", e)
 
-        # 3. Respaldo secundario: ESPN
-        if "ESPNLiveService" in globals() and hasattr(ESPNLiveService, "fetch_match_stats"):
+        # 3. Respaldo secundario: ESPN (solo si faltan métricas)
+        if not required_core.issubset(filled_canon) and "ESPNLiveService" in globals() and hasattr(ESPNLiveService, "fetch_match_stats"):
             try:
                 espn = ESPNLiveService.fetch_match_stats(home, away, fecha, liga=match_data.get("liga") or code)
                 if espn:
-                    observations.append({
-                        "fuente": "espn",
-                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
-                        "metricas": {
-                            "corners_home": espn.get("corners_home"),
-                            "corners_away": espn.get("corners_away"),
-                            "corners": espn.get("corners_total"),
-                            "tarjetas_home": espn.get("cards_home"),
-                            "tarjetas_away": espn.get("cards_away"),
-                            "tarjetas": espn.get("cards_total"),
-                            "tiros_home": espn.get("shots_home"),
-                            "tiros_away": espn.get("shots_away"),
-                            "tiros": espn.get("shots_total"),
-                            "tiros_puerta_home": espn.get("shots_on_target_home"),
-                            "tiros_puerta_away": espn.get("shots_on_target_away"),
-                            "tiros_puerta": espn.get("shots_on_target"),
-                            "faltas_home": espn.get("fouls_home"),
-                            "faltas_away": espn.get("fouls_away"),
-                            "faltas": espn.get("fouls_total"),
-                            "bajas_confirmadas": espn.get("bajas_confirmadas"),
-                            "arbitro": espn.get("referee"),
-                            "arbitro_avg_cards": espn.get("referee_avg_cards"),
-                            "resultado": f"{espn.get('score_home')}-{espn.get('score_away')}" if espn.get("finished") else None,
-                        }
+                    _register_obs("espn", "RESPALDO_SECUNDARIO", {
+                        "corners_home": espn.get("corners_home"),
+                        "corners_away": espn.get("corners_away"),
+                        "corners": espn.get("corners_total"),
+                        "tarjetas_home": espn.get("cards_home"),
+                        "tarjetas_away": espn.get("cards_away"),
+                        "tarjetas": espn.get("cards_total"),
+                        "tiros_home": espn.get("shots_home"),
+                        "tiros_away": espn.get("shots_away"),
+                        "tiros": espn.get("shots_total"),
+                        "tiros_puerta_home": espn.get("shots_on_target_home"),
+                        "tiros_puerta_away": espn.get("shots_on_target_away"),
+                        "tiros_puerta": espn.get("shots_on_target"),
+                        "faltas_home": espn.get("fouls_home"),
+                        "faltas_away": espn.get("fouls_away"),
+                        "faltas": espn.get("fouls_total"),
+                        "bajas_confirmadas": espn.get("bajas_confirmadas"),
+                        "arbitro": espn.get("referee"),
+                        "arbitro_avg_cards": espn.get("referee_avg_cards"),
+                        "resultado": f"{espn.get('score_home')}-{espn.get('score_away')}" if espn.get("finished") else None,
                     })
             except Exception as e:
                 logger.debug("Worker ESPN fallback error: %s", e)
 
-        # 4. Respaldo secundario: API-Sports (estadísticas por partido, árbitro y bajas)
-        if "ApiSportsETL" in globals() and hasattr(ApiSportsETL, "fetch_match_stats"):
+        # 4. Respaldo secundario: API-Sports (solo si faltan métricas)
+        if not required_core.issubset(filled_canon) and "ApiSportsETL" in globals() and hasattr(ApiSportsETL, "fetch_match_stats"):
             try:
                 apisp = ApiSportsETL.fetch_match_stats(home, away, fecha, liga_code=code)
                 if apisp:
-                    observations.append({
-                        "fuente": "api-sports",
-                        "nivel_verificacion": "RESPALDO_SECUNDARIO",
-                        "metricas": {
-                            "corners_home": apisp.get("corners_home"),
-                            "corners_away": apisp.get("corners_away"),
-                            "corners": apisp.get("corners_total"),
-                            "tarjetas_home": apisp.get("cards_home"),
-                            "tarjetas_away": apisp.get("cards_away"),
-                            "tarjetas": apisp.get("cards_total"),
-                            "tiros_home": apisp.get("shots_home"),
-                            "tiros_away": apisp.get("shots_away"),
-                            "tiros": apisp.get("shots_total"),
-                            "tiros_puerta_home": apisp.get("shots_on_target_home"),
-                            "tiros_puerta_away": apisp.get("shots_on_target_away"),
-                            "tiros_puerta": apisp.get("shots_on_target"),
-                            "faltas_home": apisp.get("fouls_home"),
-                            "faltas_away": apisp.get("fouls_away"),
-                            "faltas": apisp.get("fouls_total"),
-                            "bajas_confirmadas": apisp.get("bajas_confirmadas"),
-                            "arbitro": apisp.get("referee"),
-                            "arbitro_avg_cards": apisp.get("referee_avg_cards"),
-                            "resultado": f"{apisp.get('score_home')}-{apisp.get('score_away')}" if apisp.get("finished") else None,
-                        }
+                    _register_obs("api-sports", "RESPALDO_SECUNDARIO", {
+                        "corners_home": apisp.get("corners_home"),
+                        "corners_away": apisp.get("corners_away"),
+                        "corners": apisp.get("corners_total"),
+                        "tarjetas_home": apisp.get("cards_home"),
+                        "tarjetas_away": apisp.get("cards_away"),
+                        "tarjetas": apisp.get("cards_total"),
+                        "tiros_home": apisp.get("shots_home"),
+                        "tiros_away": apisp.get("shots_away"),
+                        "tiros": apisp.get("shots_total"),
+                        "tiros_puerta_home": apisp.get("shots_on_target_home"),
+                        "tiros_puerta_away": apisp.get("shots_on_target_away"),
+                        "tiros_puerta": apisp.get("shots_on_target"),
+                        "faltas_home": apisp.get("fouls_home"),
+                        "faltas_away": apisp.get("fouls_away"),
+                        "faltas": apisp.get("fouls_total"),
+                        "bajas_confirmadas": apisp.get("bajas_confirmadas"),
+                        "arbitro": apisp.get("referee"),
+                        "arbitro_avg_cards": apisp.get("referee_avg_cards"),
+                        "resultado": f"{apisp.get('score_home')}-{apisp.get('score_away')}" if apisp.get("finished") else None,
                     })
             except Exception as e:
                 logger.debug("Worker API-Sports fallback error: %s", e)
 
         rec = cls.store_observations(match_data, observations, ttl_seconds=ttl_seconds)
+        metricas_rec = rec.get("metricas") or {}
         resp_log = {
             k: v.get("fuente")
-            for k, v in (rec.get("metricas") or {}).items()
+            for k, v in metricas_rec.items()
             if v.get("valor") is not None
         }
-        logger.info("[EnrichmentWorker] %s vs %s (%s) -> proveedores=%s", home, away, fecha, resp_log or "SIN_DATOS")
+        ten_fields = {
+            k: (metricas_rec.get(k) or {}).get("valor")
+            for k in (
+                "corners_home", "corners_away",
+                "cards_home", "cards_away",
+                "shots_home", "shots_away",
+                "shots_on_target_home", "shots_on_target_away",
+                "fouls_home", "fouls_away",
+            )
+            if (metricas_rec.get(k) or {}).get("valor") is not None
+        }
+        logger.info(
+            "[EnrichmentWorker] %s vs %s (%s) -> proveedores=%s valores_10=%s",
+            home, away, fecha, resp_log or "SIN_DATOS", ten_fields
+        )
         return rec
 
     @classmethod
@@ -14066,14 +14461,27 @@ class SportsAnalyticsEngine:
         enr_metricas = (enrichment_cache.get("metricas") or {}) if enr_valid else {}
         enr_discrepancias = enrichment_cache.get("discrepancias") or []
 
+        _enr_aliases = {
+            "tarjetas_home": "cards_home",
+            "tarjetas_away": "cards_away",
+            "tiros_home": "shots_home",
+            "tiros_away": "shots_away",
+            "tiros_puerta_home": "shots_on_target_home",
+            "tiros_puerta_away": "shots_on_target_away",
+            "faltas_home": "fouls_home",
+            "faltas_away": "fouls_away",
+        }
         def _enr_metric(m_key: str):
-            m_obj = enr_metricas.get(m_key) or {}
-            if (
-                m_obj.get("nivel_verificacion") in ("PRIMARIO_OFICIAL", "RESPALDO_SECUNDARIO")
-                and m_obj.get("valor") is not None
-                and m_obj.get("valor") != ""
-            ):
-                return m_obj.get("valor"), m_obj.get("fuente", "RESPALDO_SECUNDARIO"), m_obj.get("nivel_verificacion")
+            for k_try in (m_key, _enr_aliases.get(m_key)):
+                if not k_try:
+                    continue
+                m_obj = enr_metricas.get(k_try) or {}
+                if (
+                    m_obj.get("nivel_verificacion") in ("PRIMARIO_OFICIAL", "RESPALDO_SECUNDARIO")
+                    and m_obj.get("valor") is not None
+                    and m_obj.get("valor") != ""
+                ):
+                    return m_obj.get("valor"), m_obj.get("fuente", "RESPALDO_SECUNDARIO"), m_obj.get("nivel_verificacion")
             return None, "NO_DISPONIBLE", "NO_DISPONIBLE"
 
         enr_ch, enr_ch_src, _ = _enr_metric("corners_home")
@@ -16366,6 +16774,18 @@ def build_all_club_fixtures():
 CLUB_INTEGRATED_FIXTURES = build_all_club_fixtures()
 ALL_FIXTURES_POOL = CLUB_INTEGRATED_FIXTURES
 
+def _log_pool_counts(etapa: str):
+    """Registra el total de partidos y el conteo por competición en ALL_FIXTURES_POOL sin modificar el calendario."""
+    pool = globals().get("ALL_FIXTURES_POOL") or []
+    conteo = {}
+    for f in pool:
+        c = f.get("codigo_liga") or "OTRA"
+        conteo[c] = conteo.get(c, 0) + 1
+    logger.info("[CalendarPool:%s] total=%d por_competicion=%s", etapa, len(pool), dict(sorted(conteo.items())))
+    return {"total": len(pool), "por_competicion": conteo}
+
+_log_pool_counts("ARRANQUE_INICIAL")
+
 
 class CalendarSyncService:
     """
@@ -17957,6 +18377,7 @@ class ApiSportsETL:
             logger.info("Clave de API-Football (APISPORTS_KEY o RAPIDAPI_KEY) no configurada. Operando con fixture oficial integrado.")
             return False
 
+        _log_pool_counts("ANTES_SYNC_UNL")
         cls._sync_running = True
         try:
             headers = client["headers"]
@@ -18039,6 +18460,7 @@ class ApiSportsETL:
             return False
         finally:
             cls._sync_running = False
+            _log_pool_counts("DESPUES_SYNC_UNL")
         return False
 
 apisports_service = ApiSportsETL()
@@ -20553,24 +20975,29 @@ def create_app() -> Flask:
             scans_start = SportsAnalyticsEngine._PERF_COUNTERS["history_scans"]
 
             _, active_end_date = get_active_calendar_window()
-            matches_target = list(_FIXTURES_BY_DATE_INDEX.get(target_featured_date, []))
-            hay_partidos_hoy = len(matches_target) > 0
+            fechas_activas = [
+                d for d in _FIXTURES_DATES_SORTED
+                if today_str <= d <= active_end_date
+            ]
+            matches_hoy = list(_FIXTURES_BY_DATE_INDEX.get(target_featured_date, []))
+            hay_partidos_hoy = len(matches_hoy) > 0
             fecha_mostrada_destacados = target_featured_date
 
             if not hay_partidos_hoy:
-                fechas_fut = [
-                    d for d in _FIXTURES_DATES_SORTED
-                    if target_featured_date <= d <= active_end_date
-                ]
+                fechas_fut = [d for d in fechas_activas if d >= target_featured_date]
                 if fechas_fut:
                     fecha_mostrada_destacados = fechas_fut[0]
-                    matches_target = list(_FIXTURES_BY_DATE_INDEX.get(fecha_mostrada_destacados, []))
+
+            # Recorrer el calendario completo pre-indexado dentro de la ventana activa (todas las 10 competiciones)
+            matches_to_process = []
+            for d in fechas_activas:
+                matches_to_process.extend(_FIXTURES_BY_DATE_INDEX.get(d, []))
 
             todos = {}
             destacados = []
             partidos_fallidos = 0
 
-            for fix in matches_target:
+            for fix in matches_to_process:
                 try:
                     f_utc = fix.get("fecha_utc") or ""
                     fecha_dia_solo = str(f_utc)[:10] or fecha_mostrada_destacados
@@ -20624,7 +21051,8 @@ def create_app() -> Flask:
                         "consenso_triple_ia": analisis.get("consenso_dual_ia", {})
                     }
                     todos.setdefault(div_name, []).append(item)
-                    destacados.append(item)
+                    if fecha_dia_solo == fecha_mostrada_destacados:
+                        destacados.append(item)
                 except Exception as match_exc:
                     partidos_fallidos += 1
                     logger.warning("Partido omitido en /obtener-pronostico (%s vs %s): %s", fix.get("local"), fix.get("visitante"), match_exc)
@@ -20978,12 +21406,32 @@ def create_app() -> Flask:
     def admin_football_data_status():
         if not _verificar_es_admin():
             return jsonify({"success": False, "error": "Acceso restringido al administrador."}), 403
+        verify_hl = str(request.args.get("verify_highlightly", "")).strip().lower() in ("1", "true", "si")
+        if verify_hl:
+            HighlightlyFootballClient.verify_live_production(
+                date_str=str(request.args.get("fecha") or "").strip(),
+                home_name=str(request.args.get("local") or "").strip(),
+                away_name=str(request.args.get("visitante") or "").strip(),
+            )
         return jsonify({
             "success": True,
             "estado_ratings": dict(RATINGS_ESTADO),
             "football_data_org": FootballDataOrgClient.get_status_report(),
             "highlightly": HighlightlyFootballClient.get_status_report(),
         }), 200
+
+    @app.route("/api/v1/admin/highlightly/verify", methods=["POST"])
+    @require_auth
+    def admin_highlightly_verify():
+        if not _verificar_es_admin():
+            return jsonify({"success": False, "error": "Acceso restringido al administrador."}), 403
+        body = request.get_json(silent=True) or {}
+        rep = HighlightlyFootballClient.verify_live_production(
+            date_str=str(body.get("fecha") or "").strip(),
+            home_name=str(body.get("local") or "").strip(),
+            away_name=str(body.get("visitante") or "").strip(),
+        )
+        return jsonify({"success": bool(rep.get("ok")), **rep}), (200 if rep.get("ok") else 400)
 
     @app.route("/api/v1/admin/top3/rotate", methods=["POST"])
     @require_auth
