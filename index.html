@@ -2590,9 +2590,15 @@
                     html += `
                         <div onclick="mostrarDetalle('${p.id_partido}')" class="p-2.5 px-3 hover:bg-cardDark/80 cursor-pointer transition">
                             <div class="flex items-center justify-between">
-                                <div class="space-y-0.5 w-[75%] text-left">
-                                    <div class="font-bold text-slate-200 truncate text-[11px]">${p.local}</div>
-                                    <div class="text-slate-400 font-medium truncate text-[11px]">${p.visitante}</div>
+                                <div class="space-y-1 w-[75%] text-left">
+                                    <div class="flex items-center gap-1.5 font-bold text-slate-200 truncate text-[11px]">
+                                        ${generarEscudoEquipoHtml(p.local, true, p.logo_local, p.fallback_logo_local, "w-4 h-4", "text-[7px]")}
+                                        <span class="truncate">${esc(p.local)}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 text-slate-400 font-medium truncate text-[11px]">
+                                        ${generarEscudoEquipoHtml(p.visitante, false, p.logo_visitante, p.fallback_logo_visitante, "w-4 h-4", "text-[7px]")}
+                                        <span class="truncate">${esc(p.visitante)}</span>
+                                    </div>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-[9px] text-accentGreen font-bold font-mono">${p.fecha ? p.fecha.slice(5) : ''}</div>
@@ -2683,8 +2689,14 @@
                                 }
                                 <span class="text-[9px] text-slate-500 font-mono">${(d.fecha || '').split(' ')[0]}</span>
                             </div>
-                            <div class="font-black text-white text-xs truncate">${d.local}</div>
-                            <div class="font-bold text-slate-400 text-xs truncate mt-0.5">${d.visitante}</div>
+                            <div class="flex items-center gap-2 font-black text-white text-xs truncate">
+                                ${generarEscudoEquipoHtml(d.local, true, d.logo_local, d.fallback_logo_local, "w-5 h-5", "text-[8px]")}
+                                <span class="truncate">${esc(d.local)}</span>
+                            </div>
+                            <div class="flex items-center gap-2 font-bold text-slate-400 text-xs truncate mt-1">
+                                ${generarEscudoEquipoHtml(d.visitante, false, d.logo_visitante, d.fallback_logo_visitante, "w-5 h-5", "text-[8px]")}
+                                <span class="truncate">${esc(d.visitante)}</span>
+                            </div>
                             ${bloqueadoDestacado
                                 ? `<div class="mt-2 text-[10px] text-amber-300/90 bg-baseDark/80 p-1.5 rounded border border-amber-500/30 truncate font-mono">🔒 Desbloquea todos los destacados con Pase Pro</div>`
                                 : `<div class="mt-2 text-[10px] text-cyan-300 bg-baseDark/80 p-1.5 rounded border border-cardBorder truncate font-mono">${n1.etiqueta ? n1.etiqueta.split(" ")[0] : "🛡️"} ${n1.mercado || 'Mercado Base'}</div>`
@@ -2821,10 +2833,16 @@
                         </div>
                     </div>
 
-                    <div class="flex items-center justify-between py-2 border-b border-cardBorder text-center">
-                        <div class="w-[42%]"><h3 class="text-base sm:text-xl font-black text-white m-0">${item.local}</h3></div>
+                    <div class="flex items-center justify-between py-3 border-b border-cardBorder text-center">
+                        <div class="w-[42%] flex flex-col items-center gap-1.5">
+                            ${generarEscudoEquipoHtml(item.local, true, item.logo_local, item.fallback_logo_local, "w-12 h-12", "text-xs")}
+                            <h3 class="text-base sm:text-xl font-black text-white m-0">${esc(item.local)}</h3>
+                        </div>
                         <div class="text-xs font-black text-slate-500 uppercase px-2">VS</div>
-                        <div class="w-[42%]"><h3 class="text-base sm:text-xl font-black text-white m-0">${item.visitante}</h3></div>
+                        <div class="w-[42%] flex flex-col items-center gap-1.5">
+                            ${generarEscudoEquipoHtml(item.visitante, false, item.logo_visitante, item.fallback_logo_visitante, "w-12 h-12", "text-xs")}
+                            <h3 class="text-base sm:text-xl font-black text-white m-0">${esc(item.visitante)}</h3>
+                        </div>
                     </div>
 
                     <!-- TARJETA DESTACADA ESTILO ODDSTER + METODOLOGÍA CUANTITATIVA -->
@@ -3309,12 +3327,13 @@
             return '🌍 ' + (ligaStr || 'Fútbol Oficial');
         }
 
-        function generarEscudoEquipoHtml(nombreEquipo, esLocal = true) {
+        function generarEscudoEquipoHtml(nombreEquipo, esLocal = true, logoUrl = null, fallbackIniciales = null, sizeClass = "w-10 h-10", textClass = "text-[11px]") {
             const limpio = String(nombreEquipo || 'Club').trim();
-            const partes = limpio.split(/\s+/);
-            const iniciales = partes.length >= 2
+            const partes = limpio.split(/[\s\-]+/).filter(t => t && !['de','del','la','el','fc','cf','sc','ac','as','cd','ud'].includes(t.toLowerCase()));
+            const calcIni = partes.length >= 2
                 ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
-                : limpio.slice(0, 2).toUpperCase();
+                : limpio.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase();
+            const iniciales = String(fallbackIniciales || calcIni || 'CL').toUpperCase();
             let hash = 0;
             for (let i = 0; i < limpio.length; i++) hash = limpio.charCodeAt(i) + ((hash << 5) - hash);
             const paletas = [
@@ -3326,9 +3345,20 @@
                 'from-cyan-600 to-slate-900 border-cyan-400/60'
             ];
             const pal = paletas[Math.abs(hash) % paletas.length];
+            const urlLimpia = (logoUrl && String(logoUrl).trim().startsWith('http')) ? String(logoUrl).trim() : '';
+            if (urlLimpia) {
+                return `
+                    <div class="${sizeClass} mx-auto rounded-full bg-slate-900/90 border border-slate-700/80 flex items-center justify-center shadow-lg relative overflow-hidden p-1 flex-shrink-0">
+                        <img src="${esc(urlLimpia)}" alt="${esc(limpio)}" loading="lazy" class="w-full h-full object-contain" onerror="this.style.display='none'; if(this.nextElementSibling){this.nextElementSibling.style.display='flex';}" />
+                        <div style="display:none;" class="w-full h-full rounded-full bg-gradient-to-br ${pal} items-center justify-center">
+                            <span class="font-outfit font-black ${textClass} text-white tracking-tighter">${esc(iniciales)}</span>
+                        </div>
+                    </div>
+                `;
+            }
             return `
-                <div class="w-10 h-10 mx-auto rounded-full bg-gradient-to-br ${pal} border-2 flex items-center justify-center shadow-lg relative">
-                    <span class="font-outfit font-black text-[11px] text-white tracking-tighter">${esc(iniciales)}</span>
+                <div class="${sizeClass} mx-auto rounded-full bg-gradient-to-br ${pal} border-2 flex items-center justify-center shadow-lg relative flex-shrink-0" title="${esc(limpio)}">
+                    <span class="font-outfit font-black ${textClass} text-white tracking-tighter">${esc(iniciales)}</span>
                 </div>
             `;
         }
@@ -3463,14 +3493,14 @@
                                         </div>
                                         <div class="grid grid-cols-3 items-center gap-1">
                                             <div class="flex flex-col items-center">
-                                                ${generarEscudoEquipoHtml(t.local, true)}
+                                                ${generarEscudoEquipoHtml(t.local, true, t.logo_local, t.fallback_logo_local)}
                                                 <span class="text-xs font-bold text-white mt-1.5 leading-tight line-clamp-1" title="${esc(t.local)}">${esc(t.local)}</span>
                                             </div>
                                             <div class="flex flex-col items-center justify-center">
                                                 <span class="text-xs font-bold text-slate-500 lowercase">vs</span>
                                             </div>
                                             <div class="flex flex-col items-center">
-                                                ${generarEscudoEquipoHtml(t.visitante, false)}
+                                                ${generarEscudoEquipoHtml(t.visitante, false, t.logo_visitante, t.fallback_logo_visitante)}
                                                 <span class="text-xs font-bold text-white mt-1.5 leading-tight line-clamp-1" title="${esc(t.visitante)}">${esc(t.visitante)}</span>
                                             </div>
                                         </div>
