@@ -1892,14 +1892,19 @@
                     avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1)
                 },
                 avg_corners: {
-                    val: (cornersInsuf || avgCornersVal == null ? 'N/D' : avgCornersVal.toFixed(1)), num: avgCornersVal,
-                    home: (cornersInsuf || cornersH == null ? 'N/D' : cornersH.toFixed(1)), away: (cornersInsuf || cornersA == null ? 'N/D' : cornersA.toFixed(1)),
+                    val: (!cornersInsuf && avgCornersVal != null) ? avgCornersVal.toFixed(1) : (kp.avg_corners?.valor != null ? `${parseFloat(kp.avg_corners.valor).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    num: (!cornersInsuf && avgCornersVal != null) ? avgCornersVal : (kp.avg_corners?.valor != null ? parseFloat(kp.avg_corners.valor) : 0),
+                    home: (!cornersInsuf && cornersH != null) ? cornersH.toFixed(1) : (kp.avg_corners?.home_modelado != null ? `${parseFloat(kp.avg_corners.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    away: (!cornersInsuf && cornersA != null) ? cornersA.toFixed(1) : (kp.avg_corners?.away_modelado != null ? `${parseFloat(kp.avg_corners.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    tipo_dato: kp.avg_corners?.tipo_dato || (!cornersInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1),
                     avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners),
-                    rec: recCorners, prob: probCorners
+                    rec: !cornersInsuf ? recCorners : (kp.avg_corners?.valor != null ? `${kp.avg_corners.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    prob: !cornersInsuf ? probCorners : (kp.avg_corners?.prob_pct_modelado || 0)
                 },
                 cards_totals: {
-                    rec: recCards, prob: probCards,
+                    rec: !cardsInsuf ? recCards : (kp.avg_cards?.valor != null ? `${kp.avg_cards.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    prob: !cardsInsuf ? probCards : (kp.avg_cards?.prob_pct_modelado || 0),
                     over_35: over35Cards, under_45: under45Cards,
                     avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
                     refName: kp.avg_cards?.referee_name || item.arbitro_designado?.nombre || item.parametros_xg?.referee_name || "Árbitro Oficial",
@@ -1907,31 +1912,43 @@
                     refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO"
                 },
                 avg_cards: {
-                    val: (cardsInsuf || avgCardsVal == null ? 'N/D' : avgCardsVal.toFixed(2)), num: avgCardsVal,
-                    home: (cardsInsuf || cardsH == null ? 'N/D' : cardsH.toFixed(1)), away: (cardsInsuf || cardsA == null ? 'N/D' : cardsA.toFixed(1)),
-                    provH: parseFloat(kp.avg_cards?.provoked_home ?? cardsA).toFixed(1),
-                    provA: parseFloat(kp.avg_cards?.provoked_away ?? cardsH).toFixed(1),
+                    val: (!cardsInsuf && avgCardsVal != null) ? avgCardsVal.toFixed(2) : (kp.avg_cards?.valor != null ? `${parseFloat(kp.avg_cards.valor).toFixed(2)} (Estimación del modelo)` : 'No estimable'),
+                    num: (!cardsInsuf && avgCardsVal != null) ? avgCardsVal : (kp.avg_cards?.valor != null ? parseFloat(kp.avg_cards.valor) : 0),
+                    home: (!cardsInsuf && cardsH != null) ? cardsH.toFixed(1) : (kp.avg_cards?.home_modelado != null ? `${parseFloat(kp.avg_cards.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    away: (!cardsInsuf && cardsA != null) ? cardsA.toFixed(1) : (kp.avg_cards?.away_modelado != null ? `${parseFloat(kp.avg_cards.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    tipo_dato: kp.avg_cards?.tipo_dato || (!cardsInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
+                    provH: parseFloat(kp.avg_cards?.provoked_home ?? cardsA ?? 0).toFixed(1),
+                    provA: parseFloat(kp.avg_cards?.provoked_away ?? cardsH ?? 0).toFixed(1),
                     refName: kp.avg_cards?.referee_name || item.arbitro_designado?.nombre || item.parametros_xg?.referee_name || "Árbitro Oficial",
                     refAvg: parseFloat(kp.avg_cards?.referee_avg ?? item.arbitro_designado?.avg_cards ?? item.parametros_xg?.referee_avg_cards ?? lAvg.cards).toFixed(2),
                     refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO",
                     avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
                     avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards),
-                    rec: recCards, prob: probCards
+                    rec: !cardsInsuf ? recCards : (kp.avg_cards?.valor != null ? `${kp.avg_cards.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    prob: !cardsInsuf ? probCards : (kp.avg_cards?.prob_pct_modelado || 0)
                 },
                 avg_shots: {
-                    val: shotsInsuf ? 'N/D' : avgShotsVal.toFixed(1), num: shotsInsuf ? 0 : avgShotsVal,
-                    home: shotsInsuf ? 'N/D' : shotsH.toFixed(1), away: shotsInsuf ? 'N/D' : shotsA.toFixed(1),
+                    val: !shotsInsuf ? avgShotsVal.toFixed(1) : (kp.avg_shots?.valor != null ? `${parseFloat(kp.avg_shots.valor).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    num: !shotsInsuf ? avgShotsVal : (kp.avg_shots?.valor != null ? parseFloat(kp.avg_shots.valor) : 0),
+                    home: !shotsInsuf ? shotsH.toFixed(1) : (kp.avg_shots?.home_modelado != null ? `${parseFloat(kp.avg_shots.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    away: !shotsInsuf ? shotsA.toFixed(1) : (kp.avg_shots?.away_modelado != null ? `${parseFloat(kp.avg_shots.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    tipo_dato: kp.avg_shots?.tipo_dato || (!shotsInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     avg: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1),
                     avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots),
-                    rec: shotsInsuf ? 'Datos insuficientes' : recShots, prob: shotsInsuf ? 0 : probShots,
+                    rec: !shotsInsuf ? recShots : (kp.avg_shots?.valor != null ? `${kp.avg_shots.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    prob: !shotsInsuf ? probShots : (kp.avg_shots?.prob_pct_modelado || 0),
                     insuficiente: shotsInsuf
                 },
                 avg_shots_ot: {
-                    val: shotsOTInsuf ? 'N/D' : avgShotsOTVal.toFixed(1), num: shotsOTInsuf ? 0 : avgShotsOTVal,
-                    home: shotsOTInsuf ? 'N/D' : shotsOTH.toFixed(1), away: shotsOTInsuf ? 'N/D' : shotsOTA.toFixed(1),
+                    val: !shotsOTInsuf ? avgShotsOTVal.toFixed(1) : (kp.avg_shots_on_target?.valor != null ? `${parseFloat(kp.avg_shots_on_target.valor).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    num: !shotsOTInsuf ? avgShotsOTVal : (kp.avg_shots_on_target?.valor != null ? parseFloat(kp.avg_shots_on_target.valor) : 0),
+                    home: !shotsOTInsuf ? shotsOTH.toFixed(1) : (kp.avg_shots_on_target?.home_modelado != null ? `${parseFloat(kp.avg_shots_on_target.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    away: !shotsOTInsuf ? shotsOTA.toFixed(1) : (kp.avg_shots_on_target?.away_modelado != null ? `${parseFloat(kp.avg_shots_on_target.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    tipo_dato: kp.avg_shots_on_target?.tipo_dato || (!shotsOTInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     avg: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1),
                     avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target),
-                    rec: shotsOTInsuf ? 'Datos insuficientes' : recShotsOT, prob: shotsOTInsuf ? 0 : probShotsOT,
+                    rec: !shotsOTInsuf ? recShotsOT : (kp.avg_shots_on_target?.valor != null ? `${kp.avg_shots_on_target.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    prob: !shotsOTInsuf ? probShotsOT : (kp.avg_shots_on_target?.prob_pct_modelado || 0),
                     insuficiente: shotsOTInsuf
                 }
             };
@@ -4230,11 +4247,15 @@
 
             const gfLoc = locAnt.gf_ultimos3 != null ? locAnt.gf_ultimos3 : "—";
             const gcLoc = locAnt.gc_ultimos3 != null ? locAnt.gc_ultimos3 : "—";
-            const tpLoc = locAnt.tiros_puerta_prom != null ? `${locAnt.tiros_puerta_prom}/p` : "N/D";
+            const tpLoc = locAnt.tiros_puerta_prom != null
+                ? `${locAnt.tiros_puerta_prom}/p`
+                : (locAnt.tiros_puerta_estimado != null ? `${locAnt.tiros_puerta_estimado}/p (Estimación del modelo)` : "No estimable");
 
             const gfVis = visAnt.gf_ultimos3 != null ? visAnt.gf_ultimos3 : "—";
             const gcVis = visAnt.gc_ultimos3 != null ? visAnt.gc_ultimos3 : "—";
-            const tpVis = visAnt.tiros_puerta_prom != null ? `${visAnt.tiros_puerta_prom}/p` : "N/D";
+            const tpVis = visAnt.tiros_puerta_prom != null
+                ? `${visAnt.tiros_puerta_prom}/p`
+                : (visAnt.tiros_puerta_estimado != null ? `${visAnt.tiros_puerta_estimado}/p (Estimación del modelo)` : "No estimable");
 
             return `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
