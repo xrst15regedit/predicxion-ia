@@ -1,3 +1,6 @@
+_CARTELERA_MEMO_CACHE = {}
+_CARTELERA_MEMO_TS = {}
+
 # ======================================================================================
 # ARCHIVO: app.py
 # DESCRIPCIÓN: Backend Institucional PredicXion IA
@@ -1970,6 +1973,10 @@ class HighlightlyFootballClient:
             a_obj = m.get("awayTeam") or m.get("away") or {}
             h_n = h_obj.get("name", "") if isinstance(h_obj, dict) else str(h_obj)
             a_n = a_obj.get("name", "") if isinstance(a_obj, dict) else str(a_obj)
+            if isinstance(h_obj, dict) and (h_obj.get("logo") or h_obj.get("crest")) and "register_team_logo" in globals():
+                register_team_logo(h_n or home_name, h_obj.get("logo") or h_obj.get("crest"), source="highlightly", team_id=h_obj.get("id"))
+            if isinstance(a_obj, dict) and (a_obj.get("logo") or a_obj.get("crest")) and "register_team_logo" in globals():
+                register_team_logo(a_n or away_name, a_obj.get("logo") or a_obj.get("crest"), source="highlightly", team_id=a_obj.get("id"))
             if matches_team_alias(home_name, h_n) and matches_team_alias(away_name, a_n):
                 match_id = m.get("id") or m.get("matchId")
                 state = m.get("state") or {}
@@ -3010,8 +3017,14 @@ class MatchEnrichmentCache:
             )
             if fd_res.get("ok") and fd_res.get("data"):
                 for m in (fd_res["data"].get("matches") or []):
-                    h_fd = (m.get("homeTeam") or {}).get("name", "")
-                    a_fd = (m.get("awayTeam") or {}).get("name", "")
+                    h_team_obj = m.get("homeTeam") or {}
+                    a_team_obj = m.get("awayTeam") or {}
+                    h_fd = h_team_obj.get("name", "")
+                    a_fd = a_team_obj.get("name", "")
+                    if (h_team_obj.get("crest") or h_team_obj.get("logo")) and "register_team_logo" in globals():
+                        register_team_logo(h_fd or home, h_team_obj.get("crest") or h_team_obj.get("logo"), source="football-data.org", team_id=h_team_obj.get("id"), competition_code=code)
+                    if (a_team_obj.get("crest") or a_team_obj.get("logo")) and "register_team_logo" in globals():
+                        register_team_logo(a_fd or away, a_team_obj.get("crest") or a_team_obj.get("logo"), source="football-data.org", team_id=a_team_obj.get("id"), competition_code=code)
                     if matches_team_alias(home, h_fd) and matches_team_alias(away, a_fd):
                         ft = (m.get("score") or {}).get("fullTime") or {}
                         refs = m.get("referees") or []
@@ -14405,10 +14418,18 @@ class SportsAnalyticsEngine:
 
     @classmethod
     def generate_institutional_analysis(cls, match_data: dict) -> dict:
-        home = match_data.get("local", "Local")
-        away = match_data.get("visitante", "Visitante")
-        code = match_data.get("codigo_liga", "")
-        fecha_partido = (match_data.get("fecha_utc") or match_data.get("fecha") or "2026-10-19")[:10]
+        if not isinstance(match_data, dict):
+            match_data = {}
+        raw_home = match_data.get("local")
+        raw_away = match_data.get("visitante")
+        home = str(raw_home).strip() if raw_home is not None else ""
+        away = str(raw_away).strip() if raw_away is not None else ""
+        if not home or not away:
+            logger.warning("fixture descartado: equipos incompletos")
+            home = home or "Local"
+            away = away or "Visitante"
+        code = str(match_data.get("codigo_liga") or "").strip()
+        fecha_partido = str(match_data.get("fecha_utc") or match_data.get("fecha") or "2026-10-19")[:10]
 
         h_stat = cls.get_team_stats(home, code, before_date=fecha_partido)
         a_stat = cls.get_team_stats(away, code, before_date=fecha_partido)
@@ -14685,7 +14706,7 @@ class SportsAnalyticsEngine:
         # =========================================================================
         # MOTOR DE SELECCIÓN PRINCIPAL BIDIRECCIONAL (MÁS DE Y MENOS DE)
         # La selección ganadora de este bloque se asigna simultáneamente a:
-        # 1) pronostico_principal.seleccion (Top 5 y Tarjeta Principal)
+        # 1) pronostico_principal.seleccion (Top 3 y Tarjeta Principal)
         # 2) organizacion_stakazos.nivel_1_base.mercado (Auditoría del Partido)
         # 3) consenso_dual_ia.seleccion_final_consenso (Veredicto Unificado de las 3 IA)
         # =========================================================================
@@ -15528,7 +15549,7 @@ def _clasificar_categoria_mercado(sel_text: str) -> tuple:
 _LOCKED_TOP5_PICKS_BY_DATE = {}
 
 def _enriquecer_pick_con_estado_auditoria(item: dict, target_date: str) -> dict:
-    """Cruza el pick del Top 5 con los resultados oficiales (si el partido ya finalizó)
+    """Cruza el pick del Top 3 con los resultados oficiales (si el partido ya finalizó)
     para mostrar el bloque derecho idéntico a Oddster (WIN / LOSS + marcador + conteo real,
     o SEÑAL ACTIVA + cuota rotativa 1.30-2.20 + proyección estadística)."""
     loc = item.get("local", "")
@@ -15668,6 +15689,7 @@ def _seleccionar_top3_verificado(matches_day: list, target_date: str, limit: int
             "consenso_5_modelos": p_princ.get("consenso_5_modelos") or an.get("consenso_5_modelos") or [],
             "an_data": an
         })
+        _attach_match_logos(candidates[-1], m.get("local"), m.get("visitante"), competition_code=m.get("codigo_liga"))
 
     candidates.sort(key=lambda x: x["prob_num"], reverse=True)
 
@@ -19680,6 +19702,46 @@ def _bloqueo_compra(uid, monto):
             return f"Esta compra superaría tu límite mensual de gasto (S/ {lim:.2f}). Llevas gastados S/ {gasto:.2f} este mes."
     return None
 
+ALIAS_EQUIPOS_RATINGS.update({
+    "psg": "paris saint germain",
+    "paris saint germain": "paris saint germain",
+    "paris saintgermain": "paris saint germain",
+    "paris sg": "paris saint germain",
+    "atletico de madrid": "atletico madrid",
+    "atletico madrid": "atletico madrid",
+    "club atletico de madrid": "atletico madrid",
+    "bayern munich": "bayern",
+    "fc bayern munich": "bayern",
+    "fc bayern munchen": "bayern",
+    "bayern munchen": "bayern",
+    "bayern": "bayern",
+    "real madrid cf": "real madrid",
+    "fc barcelona": "barcelona",
+    "manchester city fc": "manchester city",
+    "manchester united fc": "manchester united",
+    "arsenal fc": "arsenal",
+    "liverpool fc": "liverpool",
+    "chelsea fc": "chelsea",
+    "inter": "inter milan",
+    "fc internazionale milano": "inter milan",
+    "inter milan": "inter milan",
+    "ac milan": "ac milan",
+    "juventus fc": "juventus",
+    "bayer 04 leverkusen": "bayer leverkusen",
+    "borussia dortmund": "borussia dortmund",
+    "sport lisboa e benfica": "benfica",
+    "sl benfica": "benfica",
+    "fc porto": "porto",
+    "sporting clube de portugal": "sporting cp",
+    "sporting cp": "sporting cp",
+    "sporting lisboa": "sporting cp",
+    "cr flamengo": "flamengo",
+    "se palmeiras": "palmeiras",
+    "botafogo fr": "botafogo",
+    "sao paulo fc": "sao paulo",
+    "sc corinthians paulista": "corinthians",
+})
+
 _NORM_EQUIPO_CACHE = {}
 
 def _norm_equipo(nombre):
@@ -19690,12 +19752,379 @@ def _norm_equipo(nombre):
     if cached is not None:
         return cached
     s = key.lower().strip()
+    s = s.replace("-", " ")
     s = re.sub(r'[̀-ͯ]', '', unicodedata.normalize('NFD', s))
     s = re.sub(r'[^a-z0-9 ]', '', s)
     s = re.sub(r'\s+', ' ', s).strip()
     res = ALIAS_EQUIPOS_RATINGS.get(s, s)
     _NORM_EQUIPO_CACHE[key] = res
     return res
+
+# ======================================================================================
+# SISTEMA GLOBAL DE ESCUDOS / LOGOS POR EQUIPO (CACHÉ PERSISTENTE + PRIORIDAD DE FUENTES)
+# ======================================================================================
+TEAM_LOGOS_CACHE_FILE = "/tmp/predicxion_team_logos_cache.json"
+_TEAM_LOGOS_LOCK = threading.Lock()
+team_logos = {}
+_TEAM_LOGOS_DISK_LOADED = False
+
+_LOGO_SOURCE_PRIORITY = {
+    "football-data.org": 4,
+    "highlightly": 3,
+    "cache_local": 2,
+    "fallback_initials": 1,
+}
+
+# Semilla de caché local persistente (crests oficiales de football-data.org) para las 10 competiciones
+_PERSISTENT_LOCAL_CREST_SEED = {
+    # PL - Premier League
+    "arsenal": "https://crests.football-data.org/57.png",
+    "aston villa": "https://crests.football-data.org/58.png",
+    "chelsea": "https://crests.football-data.org/61.png",
+    "everton": "https://crests.football-data.org/62.png",
+    "fulham": "https://crests.football-data.org/63.png",
+    "liverpool": "https://crests.football-data.org/64.png",
+    "manchester city": "https://crests.football-data.org/65.png",
+    "manchester united": "https://crests.football-data.org/66.png",
+    "newcastle united": "https://crests.football-data.org/67.png",
+    "newcastle": "https://crests.football-data.org/67.png",
+    "tottenham hotspur": "https://crests.football-data.org/73.png",
+    "wolverhampton wanderers": "https://crests.football-data.org/76.png",
+    "nottingham forest": "https://crests.football-data.org/351.png",
+    "brighton": "https://crests.football-data.org/397.png",
+    "west ham": "https://crests.football-data.org/563.png",
+    "west ham united": "https://crests.football-data.org/563.png",
+    # PD - La Liga
+    "atletico madrid": "https://crests.football-data.org/78.png",
+    "athletic club": "https://crests.football-data.org/77.png",
+    "osasuna": "https://crests.football-data.org/79.png",
+    "barcelona": "https://crests.football-data.org/81.png",
+    "getafe": "https://crests.football-data.org/82.png",
+    "real madrid": "https://crests.football-data.org/86.png",
+    "rayo vallecano": "https://crests.football-data.org/87.png",
+    "mallorca": "https://crests.football-data.org/89.png",
+    "real betis": "https://crests.football-data.org/90.png",
+    "real sociedad": "https://crests.football-data.org/92.png",
+    "villarreal": "https://crests.football-data.org/94.png",
+    "valencia": "https://crests.football-data.org/95.png",
+    "girona": "https://crests.football-data.org/298.png",
+    "celta vigo": "https://crests.football-data.org/558.png",
+    "sevilla": "https://crests.football-data.org/559.png",
+    # SA - Serie A
+    "ac milan": "https://crests.football-data.org/98.png",
+    "fiorentina": "https://crests.football-data.org/99.png",
+    "as roma": "https://crests.football-data.org/100.png",
+    "atalanta": "https://crests.football-data.org/102.png",
+    "bologna": "https://crests.football-data.org/103.png",
+    "inter milan": "https://crests.football-data.org/108.png",
+    "juventus": "https://crests.football-data.org/109.png",
+    "lazio": "https://crests.football-data.org/110.png",
+    "napoli": "https://crests.football-data.org/113.png",
+    "torino": "https://crests.football-data.org/586.png",
+    # BL1 - Bundesliga
+    "bayern": "https://crests.football-data.org/5.png",
+    "borussia dortmund": "https://crests.football-data.org/4.png",
+    "bayer leverkusen": "https://crests.football-data.org/3.png",
+    "stuttgart": "https://crests.football-data.org/10.png",
+    "vfb stuttgart": "https://crests.football-data.org/10.png",
+    "wolfsburg": "https://crests.football-data.org/11.png",
+    "werder bremen": "https://crests.football-data.org/12.png",
+    "mainz": "https://crests.football-data.org/15.png",
+    "augsburg": "https://crests.football-data.org/16.png",
+    "freiburg": "https://crests.football-data.org/17.png",
+    "borussia monchengladbach": "https://crests.football-data.org/18.png",
+    "eintracht frankfurt": "https://crests.football-data.org/19.png",
+    "rb leipzig": "https://crests.football-data.org/721.png",
+    # FL1 - Ligue 1
+    "paris saint germain": "https://crests.football-data.org/524.png",
+    "olympique marseille": "https://crests.football-data.org/516.png",
+    "olympique lyonnais": "https://crests.football-data.org/523.png",
+    "lille": "https://crests.football-data.org/521.png",
+    "nice": "https://crests.football-data.org/522.png",
+    "monaco": "https://crests.football-data.org/548.png",
+    "as monaco": "https://crests.football-data.org/548.png",
+    "lens": "https://crests.football-data.org/546.png",
+    "rennes": "https://crests.football-data.org/529.png",
+    "brest": "https://crests.football-data.org/512.png",
+    # PPL - Primeira Liga
+    "porto": "https://crests.football-data.org/503.png",
+    "benfica": "https://crests.football-data.org/1903.png",
+    "sporting cp": "https://crests.football-data.org/498.png",
+    "sporting braga": "https://crests.football-data.org/5613.png",
+    "braga": "https://crests.football-data.org/5613.png",
+    "vitoria guimaraes": "https://crests.football-data.org/5543.png",
+    # BSA - Brasileirao Serie A
+    "flamengo": "https://crests.football-data.org/1783.png",
+    "palmeiras": "https://crests.football-data.org/1769.png",
+    "botafogo": "https://crests.football-data.org/1770.png",
+    "sao paulo": "https://crests.football-data.org/1776.png",
+    "corinthians": "https://crests.football-data.org/1779.png",
+    "gremio": "https://crests.football-data.org/1767.png",
+    "internacional": "https://crests.football-data.org/6684.png",
+    "atletico mineiro": "https://crests.football-data.org/1766.png",
+    "fluminense": "https://crests.football-data.org/1765.png",
+    "cruzeiro": "https://crests.football-data.org/1771.png",
+    "fortaleza": "https://crests.football-data.org/3984.png",
+    "bahia": "https://crests.football-data.org/1777.png",
+    "vasco da gama": "https://crests.football-data.org/1780.png",
+    # UCL & UEL clubs adicionales
+    "brugge": "https://crests.football-data.org/851.png",
+    "feyenoord": "https://crests.football-data.org/675.png",
+    "psv": "https://crests.football-data.org/674.png",
+    "psv eindhoven": "https://crests.football-data.org/674.png",
+    "ajax": "https://crests.football-data.org/678.png",
+    "celtic": "https://crests.football-data.org/732.png",
+    "rangers": "https://crests.football-data.org/697.png",
+    "galatasaray": "https://crests.football-data.org/610.png",
+    "fenerbahce": "https://crests.football-data.org/613.png",
+    "besiktas": "https://crests.football-data.org/595.png",
+    "anderlecht": "https://crests.football-data.org/1858.png",
+    "salzburg": "https://crests.football-data.org/1877.png",
+    "salzburgo": "https://crests.football-data.org/1877.png",
+    "sturm graz": "https://crests.football-data.org/2021.png",
+    "young boys": "https://crests.football-data.org/1871.png",
+    "slavia prague": "https://crests.football-data.org/930.png",
+    "sparta prague": "https://crests.football-data.org/907.png",
+    "sparta praga": "https://crests.football-data.org/907.png",
+    "olympiacos": "https://crests.football-data.org/654.png",
+    "paok": "https://crests.football-data.org/615.png",
+    # UNL - UEFA Nations League (Selecciones)
+    "espana": "https://crests.football-data.org/760.svg",
+    "spain": "https://crests.football-data.org/760.svg",
+    "francia": "https://crests.football-data.org/773.svg",
+    "france": "https://crests.football-data.org/773.svg",
+    "alemania": "https://crests.football-data.org/759.svg",
+    "germany": "https://crests.football-data.org/759.svg",
+    "italia": "https://crests.football-data.org/784.svg",
+    "italy": "https://crests.football-data.org/784.svg",
+    "portugal": "https://crests.football-data.org/765.svg",
+    "inglaterra": "https://crests.football-data.org/770.svg",
+    "england": "https://crests.football-data.org/770.svg",
+    "paises bajos": "https://crests.football-data.org/8601.svg",
+    "netherlands": "https://crests.football-data.org/8601.svg",
+    "belgica": "https://crests.football-data.org/805.svg",
+    "belgium": "https://crests.football-data.org/805.svg",
+    "croacia": "https://crests.football-data.org/799.svg",
+    "croatia": "https://crests.football-data.org/799.svg",
+    "dinamarca": "https://crests.football-data.org/782.svg",
+    "denmark": "https://crests.football-data.org/782.svg",
+    "suiza": "https://crests.football-data.org/788.svg",
+    "switzerland": "https://crests.football-data.org/788.svg",
+    "serbia": "https://crests.football-data.org/780.svg",
+    "polonia": "https://crests.football-data.org/794.svg",
+    "poland": "https://crests.football-data.org/794.svg",
+    "escocia": "https://crests.football-data.org/814.svg",
+    "scotland": "https://crests.football-data.org/814.svg",
+    "hungria": "https://crests.football-data.org/827.svg",
+    "hungary": "https://crests.football-data.org/827.svg",
+    "austria": "https://crests.football-data.org/816.svg",
+    "turquia": "https://crests.football-data.org/803.svg",
+    "turkey": "https://crests.football-data.org/803.svg",
+    "grecia": "https://crests.football-data.org/787.svg",
+    "greece": "https://crests.football-data.org/787.svg",
+    "noruega": "https://crests.football-data.org/808.svg",
+    "norway": "https://crests.football-data.org/808.svg",
+    "suecia": "https://crests.football-data.org/792.svg",
+    "sweden": "https://crests.football-data.org/792.svg",
+    "ucrania": "https://crests.football-data.org/790.svg",
+    "ukraine": "https://crests.football-data.org/790.svg",
+    "republica checa": "https://crests.football-data.org/798.svg",
+    "czechia": "https://crests.football-data.org/798.svg",
+    "gales": "https://crests.football-data.org/833.svg",
+    "wales": "https://crests.football-data.org/833.svg",
+    "irlanda": "https://crests.football-data.org/806.svg",
+    "ireland": "https://crests.football-data.org/806.svg",
+}
+
+
+def _build_team_initials(team_name: str) -> str:
+    clean = str(team_name or "Club").strip()
+    if not clean:
+        return "CL"
+    # Eliminar conectores cortos para obtener iniciales limpias (ej. Atlético de Madrid -> AM)
+    tokens = [
+        t for t in re.split(r"[\s\-]+", clean)
+        if t and not t.isdigit() and t.lower() not in ("de", "del", "la", "el", "los", "las", "fc", "cf", "sc", "ac", "as", "cd", "ud", "rc", "rcd")
+    ]
+    if not tokens:
+        tokens = [t for t in re.split(r"[\s\-]+", clean) if t]
+    if len(tokens) >= 2:
+        return (tokens[0][0] + tokens[-1][0]).upper()
+    word = re.sub(r"[^A-Za-z0-9]", "", tokens[0]) if tokens else "CL"
+    return (word[:2] if len(word) >= 2 else (word + "X")[:2]).upper()
+
+
+def _ensure_team_logos_loaded():
+    global _TEAM_LOGOS_DISK_LOADED
+    if _TEAM_LOGOS_DISK_LOADED:
+        return
+    with _TEAM_LOGOS_LOCK:
+        if _TEAM_LOGOS_DISK_LOADED:
+            return
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # 1. Cargar semilla persistente local
+        for t_key, url in _PERSISTENT_LOCAL_CREST_SEED.items():
+            norm_k = _norm_equipo(t_key) or t_key
+            if norm_k not in team_logos:
+                team_logos[norm_k] = {
+                    "team_name": t_key.title(),
+                    "logo_url": url,
+                    "source": "cache_local",
+                    "updated_at": now_iso,
+                }
+        # 2. Cargar caché persistente en disco si existe
+        try:
+            if os.path.exists(TEAM_LOGOS_CACHE_FILE):
+                with open(TEAM_LOGOS_CACHE_FILE, "r", encoding="utf-8") as f:
+                    disk_data = json.load(f)
+                if isinstance(disk_data, dict):
+                    for k, rec in disk_data.items():
+                        if not isinstance(rec, dict):
+                            continue
+                        existing = team_logos.get(k)
+                        ex_prio = _LOGO_SOURCE_PRIORITY.get((existing or {}).get("source", ""), 0)
+                        new_prio = _LOGO_SOURCE_PRIORITY.get(rec.get("source", ""), 0)
+                        if not existing or new_prio >= ex_prio:
+                            team_logos[k] = {
+                                "team_name": str(rec.get("team_name") or k),
+                                "logo_url": rec.get("logo_url"),
+                                "source": str(rec.get("source") or "cache_local"),
+                                "updated_at": str(rec.get("updated_at") or now_iso),
+                            }
+        except Exception as e:
+            logger.debug("No se pudo leer cache local de logos: %s", e)
+        _TEAM_LOGOS_DISK_LOADED = True
+
+
+def _persist_team_logos_to_disk():
+    try:
+        with open(TEAM_LOGOS_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(team_logos, f, ensure_ascii=False)
+    except Exception as e:
+        logger.debug("No se pudo guardar cache local de logos: %s", e)
+
+
+def register_team_logo(team_name, logo_url, source="football-data.org", team_id=None, competition_code=None, persist=False):
+    """
+    Registra el escudo de un equipo respetando estrictamente la prioridad de fuentes:
+    1) football-data.org
+    2) highlightly
+    3) cache_local
+    4) fallback_initials
+    """
+    _ensure_team_logos_loaded()
+    if not team_name or not str(team_name).strip():
+        return None
+    clean_url = str(logo_url or "").strip() or None
+    if clean_url and not (clean_url.startswith("http://") or clean_url.startswith("https://")):
+        clean_url = None
+    team_key = _norm_equipo(team_name)
+    if not team_key:
+        return None
+    src_norm = str(source or "cache_local").strip().lower()
+    if src_norm not in _LOGO_SOURCE_PRIORITY:
+        src_norm = "cache_local"
+    if not clean_url:
+        src_norm = "fallback_initials"
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with _TEAM_LOGOS_LOCK:
+        existing = team_logos.get(team_key)
+        if existing:
+            old_prio = _LOGO_SOURCE_PRIORITY.get(existing.get("source", ""), 0)
+            new_prio = _LOGO_SOURCE_PRIORITY.get(src_norm, 0)
+            # No sobrescribir una fuente de mayor prioridad con una menor o sin URL
+            if existing.get("logo_url") and (not clean_url or new_prio < old_prio):
+                return dict(existing)
+
+        record = {
+            "team_name": str(team_name).strip(),
+            "logo_url": clean_url,
+            "source": src_norm,
+            "updated_at": now_iso,
+        }
+        team_logos[team_key] = record
+        if persist and clean_url:
+            _persist_team_logos_to_disk()
+        return dict(record)
+
+
+def get_team_logo(team_name, team_id=None, competition_code=None) -> dict:
+    """
+    Función única y canónica de resolución de escudos para todos los equipos y las 10 competiciones.
+    No realiza ninguna petición HTTP externa por renderizado ni bloquea el análisis si falta un logo.
+    Orden de fuentes:
+      1. crest/logo recibido desde football-data.org
+      2. logo recibido desde Highlightly
+      3. caché local persistente por equipo
+      4. fallback visual con iniciales si no existe
+    """
+    _ensure_team_logos_loaded()
+    raw_name = str(team_name or "Equipo").strip() or "Equipo"
+    team_key = _norm_equipo(raw_name) or raw_name.lower()
+    initials = _build_team_initials(raw_name)
+
+    with _TEAM_LOGOS_LOCK:
+        cached = team_logos.get(team_key)
+        if cached and cached.get("logo_url"):
+            res = dict(cached)
+            res["fallback_initials"] = initials
+            res["team_key"] = team_key
+            if competition_code:
+                res["competition_code"] = competition_code
+            return res
+
+        # Verificar semilla local en caso de que team_logos haya sido limpiado en tests
+        seed_url = _PERSISTENT_LOCAL_CREST_SEED.get(team_key)
+        if seed_url:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            rec = {
+                "team_name": raw_name,
+                "logo_url": seed_url,
+                "source": "cache_local",
+                "updated_at": now_iso,
+            }
+            team_logos[team_key] = rec
+            out = dict(rec)
+            out["fallback_initials"] = initials
+            out["team_key"] = team_key
+            if competition_code:
+                out["competition_code"] = competition_code
+            return out
+
+        # Fallback visual con iniciales si no existe URL en ninguna fuente
+        now_iso = datetime.now(timezone.utc).isoformat()
+        fallback_rec = {
+            "team_name": raw_name,
+            "logo_url": None,
+            "source": "fallback_initials",
+            "updated_at": now_iso,
+        }
+        team_logos[team_key] = fallback_rec
+        out = dict(fallback_rec)
+        out["fallback_initials"] = initials
+        out["team_key"] = team_key
+        if competition_code:
+            out["competition_code"] = competition_code
+        return out
+
+
+def _attach_match_logos(item_dict: dict, local_name: str = None, away_name: str = None, competition_code: str = None) -> dict:
+    """Añade logo_local, logo_visitante, fallback_logo_local y fallback_logo_visitante a cualquier respuesta de partido."""
+    if not isinstance(item_dict, dict):
+        return item_dict
+    loc = (local_name if local_name is not None else item_dict.get("local")) or "Local"
+    vis = (away_name if away_name is not None else item_dict.get("visitante")) or "Visitante"
+    comp = competition_code or item_dict.get("codigo_liga")
+    info_loc = get_team_logo(loc, competition_code=comp)
+    info_vis = get_team_logo(vis, competition_code=comp)
+    item_dict["logo_local"] = info_loc.get("logo_url")
+    item_dict["logo_visitante"] = info_vis.get("logo_url")
+    item_dict["fallback_logo_local"] = info_loc.get("fallback_initials") or _build_team_initials(loc)
+    item_dict["fallback_logo_visitante"] = info_vis.get("fallback_initials") or _build_team_initials(vis)
+    item_dict["logo_source_local"] = info_loc.get("source")
+    item_dict["logo_source_visitante"] = info_vis.get("source")
+    return item_dict
 
 def _fecha_csv(texto):
     for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
@@ -19760,10 +20189,16 @@ def actualizar_ratings_reales(descargar=None):
                 f_iso = utc_dt[:10]
                 if not f_iso:
                     continue
-                h_name = ((m.get("homeTeam") or {}).get("name") or "").strip()
-                a_name = ((m.get("awayTeam") or {}).get("name") or "").strip()
+                h_team_obj = m.get("homeTeam") or {}
+                a_team_obj = m.get("awayTeam") or {}
+                h_name = (h_team_obj.get("name") or "").strip()
+                a_name = (a_team_obj.get("name") or "").strip()
                 if not h_name or not a_name:
                     continue
+                if h_team_obj.get("crest") or h_team_obj.get("logo"):
+                    register_team_logo(h_name, h_team_obj.get("crest") or h_team_obj.get("logo"), source="football-data.org", team_id=h_team_obj.get("id"), competition_code=cod_interno)
+                if a_team_obj.get("crest") or a_team_obj.get("logo"):
+                    register_team_logo(a_name, a_team_obj.get("crest") or a_team_obj.get("logo"), source="football-data.org", team_id=a_team_obj.get("id"), competition_code=cod_interno)
                 score_ft = ((m.get("score") or {}).get("fullTime") or {})
                 gh, ga = score_ft.get("home"), score_ft.get("away")
                 if gh is None or ga is None:
@@ -20057,7 +20492,7 @@ _AVISO_ILUSTRATIVO = {
 
 
 # ======================================================================================
-# GENERADOR DE CAPTURA VISUAL (PNG) DEL TOP 5 LIQUIDADO Y AUTOMATIZACIÓN DE MANTENIMIENTO
+# GENERADOR DE CAPTURA VISUAL (PNG) DEL TOP 3 LIQUIDADO Y AUTOMATIZACIÓN DE MANTENIMIENTO
 # ======================================================================================
 _ultimo_envio_resultados_top5 = set()
 _auto_resultados_lock = threading.Lock()
@@ -20104,7 +20539,7 @@ def _marcar_enviado_resultados_top5_fecha(target_date: str, motivo: str = "AUTO_
 def generar_imagen_resultados_top5(fecha_str: str, picks_liquidados: list) -> bytes:
     """
     Renderiza en memoria una imagen PNG de alta resolución (1280x1220) con la MISMA interfaz
-    del apartado Top 5 de la aplicación web:
+    del apartado Top 3 de la aplicación web:
     - Columna 1: #Rank + Liga + Escudos Circulares con Iniciales + Equipos.
     - Columna 2 (Caja Central): Categoría + Jugada Recomendada + % Confidence + Barra Neón + Explicación concisa (SIN CUOTAS).
     - Columna 3 (Caja Derecha): Sello WIN / LOSS + Marcador Final grande + Conteo real completo sin recortes.
@@ -20339,7 +20774,7 @@ def generar_imagen_resultados_top5(fecha_str: str, picks_liquidados: list) -> by
         img.save(buf, format="PNG", optimize=True)
         return buf.getvalue()
     except Exception as exc:
-        logger.error("Error generando imagen PNG de resultados Top 5: %s", exc)
+        logger.error("Error generando imagen PNG de resultados Top 3: %s", exc)
         return b""
 
 def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados: list, force: bool = False, motivo: str = "AUTO_3_DE_3_FINALIZADOS"):
@@ -20360,7 +20795,7 @@ def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados
 
     with _auto_resultados_lock:
         if not force and _ya_enviado_resultados_top5_fecha(target_date):
-            return False, f"Ya se envió la captura de resultados del Top 5 para {target_date}."
+            return False, f"Ya se envió la captura de resultados del Top 3 para {target_date}."
 
         bot_token = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
         channel_id = (os.getenv("TELEGRAM_CHANNEL_ID") or "").strip()
@@ -20401,7 +20836,7 @@ def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados
                 )
                 if resp.status_code == 200:
                     _marcar_enviado_resultados_top5_fecha(target_date, motivo)
-                    logger.info("✓ Captura PNG de resultados Top 5 (%s) enviada automáticamente a Telegram VIP.", target_date)
+                    logger.info("✓ Captura PNG de resultados Top 3 (%s) enviada automáticamente a Telegram VIP.", target_date)
                     return True, f"Captura de resultados ({target_date}) enviada a Telegram VIP."
 
             # Fallback en caso de que sendPhoto falle en la red
@@ -20417,7 +20852,7 @@ def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados
                 return True, f"Resumen de resultados ({target_date}) enviado a Telegram VIP."
             return False, f"Error Telegram API: {resp_m.text}"
         except Exception as err:
-            logger.error("Error enviando resultados Top 5 a Telegram: %s", err)
+            logger.error("Error enviando resultados Top 3 a Telegram: %s", err)
             return False, str(err)
 
 
@@ -20945,8 +21380,6 @@ def create_app() -> Flask:
         }), 410
 
     # Cartelera Completa y Pronósticos (Con Inyección Completa de UEFA Nations League 2026)
-    _CARTELERA_MEMO_CACHE = {}
-    _CARTELERA_MEMO_TS = {}
 
     @app.route("/obtener-pronostico", methods=["GET"])
     def obtener_pronostico():
@@ -20999,12 +21432,16 @@ def create_app() -> Flask:
 
             for fix in matches_to_process:
                 try:
-                    f_utc = fix.get("fecha_utc") or ""
-                    fecha_dia_solo = str(f_utc)[:10] or fecha_mostrada_destacados
-                    div_name = fix.get("_liga_norm") or normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
+                    loc = str(fix.get("local") or "").strip() if fix.get("local") is not None else ""
+                    vis = str(fix.get("visitante") or "").strip() if fix.get("visitante") is not None else ""
+                    if not loc or not vis:
+                        partidos_fallidos += 1
+                        logger.warning("fixture descartado: equipos incompletos")
+                        continue
+                    f_utc = str(fix.get("fecha_utc") or "")
+                    fecha_dia_solo = f_utc[:10] or fecha_mostrada_destacados
+                    div_name = fix.get("_liga_norm") or normalizar_nombre_liga(fix.get("liga") or "Otras Ligas")
                     fix["liga"] = div_name
-                    loc = (fix.get("local") or "").strip()
-                    vis = (fix.get("visitante") or "").strip()
 
                     analisis = analytics.generate_institutional_analysis(fix)
 
@@ -21050,6 +21487,7 @@ def create_app() -> Flask:
                         "consenso_dual_ia": analisis.get("consenso_dual_ia", {}),
                         "consenso_triple_ia": analisis.get("consenso_dual_ia", {})
                     }
+                    _attach_match_logos(item, loc, vis, competition_code=fix.get("codigo_liga", "OFL"))
                     todos.setdefault(div_name, []).append(item)
                     if fecha_dia_solo == fecha_mostrada_destacados:
                         destacados.append(item)
@@ -21240,6 +21678,7 @@ def create_app() -> Flask:
                         "confianza": "Proyección Estadística",
                         "fecha": f"{f_dia} {hora} UTC"
                     })
+                    _attach_match_logos(anclas[-1], m.get("local"), m.get("visitante"), competition_code=m.get("codigo_liga"))
 
             anclas.sort(key=lambda x: x["probabilidad"], reverse=True)
             top_anclas = anclas[:13]
@@ -21338,14 +21777,19 @@ def create_app() -> Flask:
             analisis = analytics.generate_institutional_analysis(partido)
             res = DualAIEngine.analyze_match_pipeline(partido, analisis, live_call=True)
 
-            return jsonify({
+            resp_payload = {
                 "success": True,
                 "partido": f"{partido['local']} vs {partido['visitante']}",
+                "local": partido.get("local"),
+                "visitante": partido.get("visitante"),
                 "liga": partido["liga"],
+                "codigo_liga": partido.get("codigo_liga"),
                 "fecha": (partido.get("fecha_utc") or "")[:10],
                 "consenso_dual_ia": res,
                 "consenso_triple_ia": res
-            })
+            }
+            _attach_match_logos(resp_payload, partido.get("local"), partido.get("visitante"), competition_code=partido.get("codigo_liga"))
+            return jsonify(resp_payload)
         except Exception as exc:
             logger.error("Error en /api/v1/ai/triple-analysis: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
@@ -21680,7 +22124,7 @@ def create_app() -> Flask:
         except Exception as e:
             logger.error("Error en broadcast_telegram_alert: %s", e)
             return jsonify({"success": False, "error": str(e)}), 500
-    # VIP 6: Historial de Auditoría Transparente (Estilo Oddster & Consenso Top 5 Tipsters Mundiales)
+    # VIP 6: Historial de Auditoría Transparente (Estilo Oddster & Consenso Top 3 Tipsters Mundiales)
     global _HISTORICAL_ISSUED_TOP5
     _HISTORICAL_ISSUED_TOP5 = {}
 
@@ -21692,9 +22136,9 @@ def create_app() -> Flask:
         return _seleccionar_top3_verificado(matches_fecha, target_date, limit=3)
 
     def _auditar_y_liquidar_fecha(fecha_str: str) -> list:
-        """Evalúa los 5 partidos del Top 5 de `fecha_str` contra resultados reales (Firestore, SofaScore, ESPN, CSV).
+        """Evalúa los 3 partidos del Top 3 de `fecha_str` contra resultados reales (Firestore, SofaScore, ESPN, CSV).
         Nunca inventa datos: califica matemáticamente cada pick cuando el partido ha finalizado."""
-        # 1. Revisar si en Firestore ya están guardados y liquidados los 5 picks de esa fecha
+        # 1. Revisar si en Firestore ya están guardados y liquidados los 3 picks de esa fecha
         firestore_map = {}
         if db:
             try:
@@ -21780,8 +22224,8 @@ def create_app() -> Flask:
 
         return resultados_auditados
 
-    # Hilo demonio 24/7 que liquida automáticamente el Top 5 conforme acaban los partidos cada día
-    # y envía automáticamente la captura PNG de resultados a Telegram VIP cuando terminan los 5 partidos
+    # Hilo demonio 24/7 que liquida automáticamente el Top 3 conforme acaban los partidos cada día
+    # y envía automáticamente la captura PNG de resultados a Telegram VIP cuando terminan los 3 partidos
     def _loop_auto_auditoria():
         time.sleep(15)
         while True:
@@ -21805,7 +22249,7 @@ def create_app() -> Flask:
     @app.route("/api/v1/vip/auditoria", methods=["GET"])
     def get_auditoria():
         """Historial Oficial 24/7 Automático:
-        - Si los partidos del Top 5 de HOY ya terminaron, muestra automáticamente el historial de HOY.
+        - Si los partidos del Top 3 de HOY ya terminaron, muestra automáticamente el historial de HOY.
         - Si los partidos de HOY siguen en juego o aún no inician, muestra el historial liquidado de la jornada anterior (AYER).
         - Extrae resultados reales de SofaScore, ESPN y actas oficiales para cada partido sin inventar datos."""
         op_date = get_current_operational_date()
@@ -21822,11 +22266,11 @@ def create_app() -> Flask:
             fecha_auditada = req_fecha
             historial = _auditar_y_liquidar_fecha(fecha_auditada)
         else:
-            # Verificar primero si el Top 5 de HOY ya concluyó
+            # Verificar primero si el Top 3 de HOY ya concluyó
             picks_hoy = _auditar_y_liquidar_fecha(op_date)
             liquidados_hoy = [p for p in picks_hoy if p["estado"] in ("GANADA", "PERDIDA")]
 
-            # Si al menos 4 de los 5 partidos del Top 5 de hoy ya finalizaron, rotar automáticamente al historial de HOY
+            # Si al menos 4 de los 3 partidos del Top 3 de hoy ya finalizaron, rotar automáticamente al historial de HOY
             if len(picks_hoy) > 0 and len(liquidados_hoy) >= 4:
                 fecha_auditada = op_date
                 historial = picks_hoy
@@ -21908,7 +22352,7 @@ def create_app() -> Flask:
             "historial": historial
         })
 
-    # EMISIÓN DE PARLAY COMBINADA / TOP 5 DIRECTO A TELEGRAM VIP (SOLO ADMINISTRADOR)
+    # EMISIÓN DE PARLAY COMBINADA / TOP 3 DIRECTO A TELEGRAM VIP (SOLO ADMINISTRADOR)
     @app.route("/api/v1/vip/telegram-parlay/broadcast", methods=["POST"])
     def broadcast_telegram_parlay():
         if not _verificar_es_admin():
@@ -21997,7 +22441,7 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/top3/results-image", methods=["GET"])
     def get_top3_results_image():
-        """Devuelve la captura visual (PNG) de los resultados del Top 5 de la jornada indicada."""
+        """Devuelve la captura visual (PNG) de los resultados del Top 3 de la jornada indicada."""
         req_fecha = (request.args.get("fecha") or "").strip()
         if not req_fecha:
             audit_res = get_auditoria().get_json()
@@ -22010,7 +22454,7 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/vip/telegram-auditoria/broadcast", methods=["POST"])
     def broadcast_telegram_auditoria():
-        """Transmite la captura visual (PNG) y balance oficial de resultados del Top 5 al canal VIP de Telegram."""
+        """Transmite la captura visual (PNG) y balance oficial de resultados del Top 3 al canal VIP de Telegram."""
         if not _verificar_es_admin():
             return jsonify({
                 "success": False,
@@ -22972,7 +23416,7 @@ def create_app() -> Flask:
 
     @app.route("/api/v1/admin/auditoria/sync-results", methods=["POST"])
     def sync_auditoria_results():
-        """Sincroniza y liquida automáticamente los pronósticos del Top 5 de una fecha
+        """Sincroniza y liquida automáticamente los pronósticos del Top 3 de una fecha
         consultando SofaScore, ESPN y API-Sports en tiempo real."""
         if not _verificar_es_admin():
             return jsonify({"success": False, "error": "Acceso restringido: Se requieren permisos de administrador."}), 403
