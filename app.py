@@ -2109,6 +2109,134 @@ class HighlightlyFootballClient:
         return out
 
     @classmethod
+    def fetch_team_last_5_matches(cls, team_name: str, before_date: str = "", competition_code: str = "", limit: int = 5, ttl_seconds: int = 1800) -> list:
+        """
+        Obtiene hasta los últimos `limit` (5) partidos finalizados de `team_name` desde Highlightly Football API
+        cuya fecha sea estrictamente anterior a `before_date` (`m_date < cutoff`).
+        Extrae goles, resultado (V/E/D) y estadísticas por equipo (córners, tarjetas, tiros, tiros a puerta, faltas).
+        """
+        if not team_name or not str(team_name).strip():
+            return []
+        cutoff = str(before_date or "")[:10]
+        res = cls.fetch_json(
+            "/matches",
+            params={"team": str(team_name).strip()},
+            ttl_seconds=ttl_seconds,
+            partido_label=f"HIST5_{team_name}",
+        )
+        if not res.get("ok") or not res.get("data"):
+            return []
+        payload = res["data"]
+        matches = payload.get("data", payload.get("matches", [])) if isinstance(payload, dict) else payload
+        if not isinstance(matches, list):
+            return []
+
+        found = []
+        for m in matches:
+            if not isinstance(m, dict):
+                continue
+            stage_str = str(m.get("stage") or m.get("round") or (m.get("league") or {}).get("name", "")).upper()
+            if "FRIENDLY" in stage_str or "AMISTOSO" in stage_str:
+                continue
+            raw_dt = str(m.get("date") or m.get("utcDate") or m.get("startTimestamp") or "")
+            f_iso = raw_dt[:10]
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", f_iso):
+                continue
+            if cutoff and f_iso >= cutoff:
+                continue
+
+            state = m.get("state") or {}
+            desc = str(state.get("description") or m.get("status") or "").lower()
+            is_fin = desc in ("finished", "ended", "ft", "aet", "pen", "full time")
+            if not is_fin:
+                continue
+
+            h_obj = m.get("homeTeam") or m.get("home") or {}
+            a_obj = m.get("awayTeam") or m.get("away") or {}
+            h_n = h_obj.get("name", "") if isinstance(h_obj, dict) else str(h_obj)
+            a_n = a_obj.get("name", "") if isinstance(a_obj, dict) else str(a_obj)
+            if not h_n or not a_n:
+                continue
+            if isinstance(h_obj, dict) and (h_obj.get("logo") or h_obj.get("crest")) and "register_team_logo" in globals():
+                register_team_logo(h_n, h_obj.get("logo") or h_obj.get("crest"), source="highlightly", team_id=h_obj.get("id"))
+            if isinstance(a_obj, dict) and (a_obj.get("logo") or a_obj.get("crest")) and "register_team_logo" in globals():
+                register_team_logo(a_n, a_obj.get("logo") or a_obj.get("crest"), source="highlightly", team_id=a_obj.get("id"))
+
+            is_home = matches_team_alias(team_name, h_n)
+            is_away = matches_team_alias(team_name, a_n)
+            if not is_home and not is_away:
+                continue
+
+            score_obj = state.get("score") or m.get("score") or {}
+            cur_score = score_obj.get("current") or ""
+            sh = sa = None
+            if isinstance(cur_score, str) and "-" in cur_score:
+                parts = [p.strip() for p in cur_score.split("-", 1)]
+                sh = cls._parse_int_stat(parts[0])
+                sa = cls._parse_int_stat(parts[1])
+            elif isinstance(score_obj, dict):
+                sh = cls._parse_int_stat(score_obj.get("home"))
+                sa = cls._parse_int_stat(score_obj.get("away"))
+            if sh is None or sa is None:
+                continue
+
+            match_id = m.get("id") or m.get("matchId")
+            st_norm = {}
+            if match_id:
+                st_norm = cls.fetch_statistics(match_id, home_name=h_n, away_name=a_n, ttl_seconds=ttl_seconds) or {}
+
+            gf, gc = (sh, sa) if is_home else (sa, sh)
+            res_ved = "V" if gf > gc else ("E" if gf == gc else "D")
+            c_team = st_norm.get("corners_home") if is_home else st_norm.get("corners_away")
+            t_team = st_norm.get("cards_home") if is_home else st_norm.get("cards_away")
+            sh_team = st_norm.get("shots_home") if is_home else st_norm.get("shots_away")
+            sot_team = st_norm.get("shots_on_target_home") if is_home else st_norm.get("shots_on_target_away")
+            fl_team = st_norm.get("fouls_home") if is_home else st_norm.get("fouls_away")
+
+            found.append({
+                "fecha": f_iso,
+                "local": h_n,
+                "visitante": a_n,
+                "rival": a_n if is_home else h_n,
+                "condicion": "L" if is_home else "V",
+                "gf": gf,
+                "gc": gc,
+                "score_home": sh,
+                "score_away": sa,
+                "marcador": f"{sh} - {sa}",
+                "resultado": res_ved,
+                "corners": c_team,
+                "corners_home": st_norm.get("corners_home"),
+                "corners_away": st_norm.get("corners_away"),
+                "corners_total": st_norm.get("corners_total"),
+                "tarjetas": t_team,
+                "cards_home": st_norm.get("cards_home"),
+                "cards_away": st_norm.get("cards_away"),
+                "cards_total": st_norm.get("cards_total"),
+                "tiros_totales": sh_team,
+                "shots_home": st_norm.get("shots_home"),
+                "shots_away": st_norm.get("shots_away"),
+                "shots_total": st_norm.get("shots_total"),
+                "tiros_puerta": sot_team,
+                "shots_on_target_home": st_norm.get("shots_on_target_home"),
+                "shots_on_target_away": st_norm.get("shots_on_target_away"),
+                "shots_on_target": st_norm.get("shots_on_target"),
+                "faltas": fl_team,
+                "fouls_home": st_norm.get("fouls_home"),
+                "fouls_away": st_norm.get("fouls_away"),
+                "fouls_total": st_norm.get("fouls_total"),
+                "codigo_liga": competition_code or "OFL",
+                "competicion": (m.get("league") or {}).get("name") or "Competición Oficial",
+                "es_oficial": True,
+                "simulado": False,
+                "tipo_dato": "VERIFICADO",
+                "fuente": "highlightly",
+            })
+
+        found.sort(key=lambda x: x["fecha"], reverse=True)
+        return found[: max(1, int(limit or 5))]
+
+    @classmethod
     def fetch_match_stats(cls, home_name: str, away_name: str, date_str: str, liga_code: str = "", ttl_seconds: int = 3600) -> dict:
         if not cls._get_api_key() or not date_str:
             return None
@@ -2652,6 +2780,17 @@ Tu misión:
                 "tag_local": tag_loc,
                 "tag_visitante": tag_vis
             },
+            "separacion_datos": {
+                "metricas_verificadas": [
+                    k for k in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target")
+                    if (quant_analysis.get("key_probabilities", {}).get(k, {}) or {}).get("tipo_dato") == "VERIFICADO"
+                ],
+                "metricas_estimadas_modelo": {
+                    k: (quant_analysis.get("key_probabilities", {}).get(k, {}) or {}).get("estimacion_modelada")
+                    for k in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target")
+                    if (quant_analysis.get("key_probabilities", {}).get(k, {}) or {}).get("tipo_dato") == "ESTIMADO_MODELO"
+                },
+            },
             "nivel_seguridad": "Consenso de 3 modelos de IA (no garantiza el resultado)",
             "llaves_activas": {
                 "gemini": bool(gemini_key),
@@ -2978,6 +3117,105 @@ class MatchEnrichmentCache:
         return record
 
     @classmethod
+    def enrich_team_last_5_matches(cls, team_name: str, before_date: str = "", competition_code: str = "", limit: int = 5) -> list:
+        """
+        Obtiene y persiste en caché los últimos 5 partidos verificados de un equipo antes de `before_date`:
+        1) Consulta primero Highlightly Football API (`HighlightlyFootballClient.fetch_team_last_5_matches`).
+        2) Si faltan partidos (<5) o métricas secundarias, consulta ESPN (`ESPNLiveService.fetch_team_last_5_matches`) como respaldo.
+        Solo conserva partidos cuya fecha sea estrictamente anterior a `before_date`.
+        """
+        if not team_name or not str(team_name).strip():
+            return []
+        cutoff = str(before_date or "")[:10]
+        existing = []
+        if "SportsAnalyticsEngine" in globals():
+            hist_cur = SportsAnalyticsEngine.get_verified_last_5_matches(team_name, before_date=cutoff, competition_code=competition_code)
+            existing = list(hist_cur.get("partidos") or [])
+            if (
+                len(existing) >= limit
+                and hist_cur.get("corners_avg") is not None
+                and hist_cur.get("tarjetas_avg") is not None
+                and hist_cur.get("tiros_totales_avg") is not None
+                and hist_cur.get("tiros_puerta_avg") is not None
+            ):
+                return existing[:limit]
+
+        collected = []
+        # 1. Primaria para históricos de últimos 5 con estadísticas detalladas: Highlightly
+        if "HighlightlyFootballClient" in globals() and hasattr(HighlightlyFootballClient, "fetch_team_last_5_matches"):
+            try:
+                hl_list = HighlightlyFootballClient.fetch_team_last_5_matches(
+                    team_name, before_date=cutoff, competition_code=competition_code, limit=limit
+                )
+                if hl_list:
+                    collected.extend(hl_list)
+            except Exception as e:
+                logger.debug("Highlightly fetch_team_last_5_matches fallo para %s: %s", team_name, e)
+
+        # 2. Respaldo secundario si Highlightly no completó los 5 partidos o faltan métricas: ESPN
+        need_espn = len(collected) < limit or any(
+            x.get("corners") is None or x.get("tarjetas") is None or x.get("tiros_totales") is None or x.get("tiros_puerta") is None
+            for x in collected
+        )
+        if need_espn and "ESPNLiveService" in globals() and hasattr(ESPNLiveService, "fetch_team_last_5_matches"):
+            try:
+                espn_list = ESPNLiveService.fetch_team_last_5_matches(
+                    team_name, before_date=cutoff, competition_code=competition_code, limit=limit
+                )
+                if espn_list:
+                    collected.extend(espn_list)
+            except Exception as e:
+                logger.debug("ESPN fetch_team_last_5_matches fallo para %s: %s", team_name, e)
+
+        if not collected:
+            return existing[:limit]
+
+        # Guardar/combinar en _VERIFIED_RESULTS_CACHE (solo fechas < cutoff)
+        if "_VERIFIED_RESULTS_CACHE" in globals():
+            for m in collected:
+                f_m = str(m.get("fecha") or "")[:10]
+                if not f_m or (cutoff and f_m >= cutoff):
+                    continue
+                loc_m = str(m.get("local") or "").strip()
+                vis_m = str(m.get("visitante") or "").strip()
+                if not loc_m or not vis_m:
+                    continue
+                v_key = (f_m, loc_m, vis_m)
+                prev = _VERIFIED_RESULTS_CACHE.get(v_key) or {}
+                merged = {
+                    "finished": True,
+                    "simulado": False,
+                    "competicion": m.get("competicion") or prev.get("competicion") or "Competición Oficial",
+                    "codigo_liga": m.get("codigo_liga") or prev.get("codigo_liga") or competition_code or "OFL",
+                    "score_home": prev.get("score_home") if prev.get("score_home") is not None else m.get("score_home"),
+                    "score_away": prev.get("score_away") if prev.get("score_away") is not None else m.get("score_away"),
+                    "corners_home": prev.get("corners_home") if prev.get("corners_home") is not None else m.get("corners_home"),
+                    "corners_away": prev.get("corners_away") if prev.get("corners_away") is not None else m.get("corners_away"),
+                    "corners_total": prev.get("corners_total") if prev.get("corners_total") is not None else m.get("corners_total"),
+                    "cards_home": prev.get("cards_home") if prev.get("cards_home") is not None else m.get("cards_home"),
+                    "cards_away": prev.get("cards_away") if prev.get("cards_away") is not None else m.get("cards_away"),
+                    "cards_total": prev.get("cards_total") if prev.get("cards_total") is not None else m.get("cards_total"),
+                    "shots_home": prev.get("shots_home") if prev.get("shots_home") is not None else m.get("shots_home"),
+                    "shots_away": prev.get("shots_away") if prev.get("shots_away") is not None else m.get("shots_away"),
+                    "shots_total": prev.get("shots_total") if prev.get("shots_total") is not None else m.get("shots_total"),
+                    "shots_on_target_home": prev.get("shots_on_target_home") if prev.get("shots_on_target_home") is not None else m.get("shots_on_target_home"),
+                    "shots_on_target_away": prev.get("shots_on_target_away") if prev.get("shots_on_target_away") is not None else m.get("shots_on_target_away"),
+                    "shots_on_target": prev.get("shots_on_target") if prev.get("shots_on_target") is not None else m.get("shots_on_target"),
+                    "fouls_home": prev.get("fouls_home") if prev.get("fouls_home") is not None else m.get("fouls_home"),
+                    "fouls_away": prev.get("fouls_away") if prev.get("fouls_away") is not None else m.get("fouls_away"),
+                    "fouls_total": prev.get("fouls_total") if prev.get("fouls_total") is not None else m.get("fouls_total"),
+                    "source": prev.get("source") or m.get("fuente") or "highlightly",
+                    "tipo_entidad": SportsAnalyticsEngine._infer_entity_type(loc_m, competition_code) if "SportsAnalyticsEngine" in globals() else "club",
+                }
+                _VERIFIED_RESULTS_CACHE[v_key] = merged
+
+        if "SportsAnalyticsEngine" in globals():
+            SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
+            updated = SportsAnalyticsEngine.get_verified_last_5_matches(team_name, before_date=cutoff, competition_code=competition_code)
+            return list(updated.get("partidos") or [])[:limit]
+        return collected[:limit]
+
+    @classmethod
     def enrich_match_worker(cls, match_data: dict, ttl_seconds: int = 3600) -> dict:
         """
         Worker controlado de enriquecimiento en cascada:
@@ -3185,6 +3423,13 @@ class MatchEnrichmentCache:
                     })
             except Exception as e:
                 logger.debug("Worker API-Sports fallback error: %s", e)
+
+        if fecha and home and away:
+            try:
+                cls.enrich_team_last_5_matches(home, before_date=fecha, competition_code=code, limit=5)
+                cls.enrich_team_last_5_matches(away, before_date=fecha, competition_code=code, limit=5)
+            except Exception as e_h5:
+                logger.debug("Worker enrich_team_last_5_matches aviso: %s", e_h5)
 
         rec = cls.store_observations(match_data, observations, ttl_seconds=ttl_seconds)
         metricas_rec = rec.get("metricas") or {}
@@ -14001,8 +14246,11 @@ class SportsAnalyticsEngine:
             "tarjetas_avg": round(sum(t_vals) / len(t_vals), 2) if t_vals else None,
             "tarjetas_muestra": len(t_vals),
             "tiros_totales_avg": round(sum(sh_vals) / len(sh_vals), 2) if sh_vals else None,
+            "tiros_totales_muestra": len(sh_vals),
             "tiros_puerta_avg": round(sum(sot_vals) / len(sot_vals), 2) if sot_vals else None,
+            "tiros_puerta_muestra": len(sot_vals),
             "faltas_avg": round(sum(fl_vals) / len(fl_vals), 2) if fl_vals else None,
+            "faltas_muestra": len(fl_vals),
             "confianza_insuficiente": (n < 5),
             "tipo_entidad": ent_type,
             "fuente": last_5[0].get("fuente", "Sin fuente") if n > 0 else "Sin partidos verificados"
@@ -14540,8 +14788,8 @@ class SportsAnalyticsEngine:
             "fuente": "NO_DISPONIBLE",
         }
 
-        match_hash = sum(ord(c) for c in (home + away + code + fecha_partido))
-        estilo_partido = match_hash % 6
+        match_hash = 0
+        estilo_partido = 0
 
         if tiros_disponibles:
             tiros_comb = float(eff_shots_h) + float(eff_shots_a)
@@ -14734,7 +14982,7 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Promedian {corners_estimados:.1f} córners ({round(float(linea_c_under) - corners_estimados, 1)} debajo del tope {linea_c_under})"
 
         # Caso 2: SEÑAL BIDIRECCIONAL EN TARJETAS (Menos de 4.5 / 5.5 en duelos limpios o Más de 3.5 / 4.5 en alta fricción)
-        elif tarjetas_activas and (tarjetas_esperadas <= 3.55 or (estilo_partido == 0 and tarjetas_esperadas <= 3.75)):
+        elif tarjetas_activas and tarjetas_esperadas <= 3.60:
             linea_t_under = "4.5" if tarjetas_esperadas <= 3.15 else "5.5"
             base_c_prob = prob_cards_under_45 if linea_t_under == "4.5" else prob_cards_under_55
             conf_val = int(round(base_c_prob))
@@ -14750,7 +14998,7 @@ class SportsAnalyticsEngine:
             stat_projection_label = f"Promedio: {tarjetas_esperadas:.1f} tarjetas"
             safety_margin_label = f"Promedian {tarjetas_esperadas:.1f} tarjetas ({round(float(linea_t_under) - tarjetas_esperadas, 1)} debajo del límite {linea_t_under})"
 
-        elif tarjetas_activas and ((tarjetas_esperadas >= 5.05 and suma_xg < 2.95 and estilo_partido in (1, 4, 5)) or (tarjetas_esperadas >= 4.45 and diferencia_xg <= 0.45 and estilo_partido == 1)):
+        elif tarjetas_activas and ((tarjetas_esperadas >= 5.05 and suma_xg < 2.95) or (tarjetas_esperadas >= 4.65 and diferencia_xg <= 0.40)):
             linea_t = "4.5" if tarjetas_esperadas >= 5.30 else "3.5"
             conf_val = int(round(prob_cards_over_45 if linea_t == "4.5" else prob_cards_over_35))
             mercado_sugerido = f"Más de {linea_t} tarjetas"
@@ -14778,7 +15026,7 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Ventaja de +{diferencia_xg} goles esperados y total de {suma_xg} goles"
 
         # Caso 4: CÓRNERS BIDIRECCIONAL (Más de 8.5/9.5 en asedio de bandas vs Menos de 9.5/10.5 en control interior)
-        elif corners_disponibles and es_asedio_bandas and corners_estimados >= 10.8 and (estilo_partido in (0, 2) or (fav_is_away and pts_h >= 9)):
+        elif corners_disponibles and es_asedio_bandas and corners_estimados >= 10.8:
             linea_c = "9.5" if corners_estimados >= 12.2 else "8.5"
             conf_val = int(round(prob_corners_95 if linea_c == "9.5" else prob_corners_85))
             mercado_sugerido = f"Más de {linea_c} córners"
@@ -14793,7 +15041,7 @@ class SportsAnalyticsEngine:
             stat_projection_label = f"Promedio: {corners_estimados:.1f} córners"
             safety_margin_label = f"Promedian {corners_estimados:.1f} córners (supera por +{round(corners_estimados - float(linea_c), 1)} la línea {linea_c})"
 
-        elif corners_disponibles and corners_estimados <= 8.85 and (es_ataque_interior_vertical or estilo_partido in (2, 3)):
+        elif corners_disponibles and corners_estimados <= 8.85 and es_ataque_interior_vertical:
             linea_c_u = "9.5" if corners_estimados <= 8.15 else "10.5"
             conf_val = int(round(prob_corners_under_95 if linea_c_u == "9.5" else prob_corners_under_105))
             mercado_sugerido = f"Menos de {linea_c_u} córners"
@@ -14809,7 +15057,7 @@ class SportsAnalyticsEngine:
             safety_margin_label = f"Promedian {corners_estimados:.1f} córners ({round(float(linea_c_u) - corners_estimados, 1)} debajo del tope {linea_c_u})"
 
         # Caso 5: DOBLE OPORTUNIDAD + GOLES (Más de 1.5 goles o Menos de 3.5 goles según ritmo xG)
-        elif p_do_fav >= 74.0 and pGoles15["over"] >= 75.5 and suma_xg >= 2.52 and diferencia_xg >= 0.28 and (estilo_partido in (1, 2, 4) or fav_is_away):
+        elif p_do_fav >= 74.0 and pGoles15["over"] >= 75.5 and suma_xg >= 2.52 and diferencia_xg >= 0.28:
             conf_val = int(round(min(p_do_fav, pGoles15["over"])))
             mercado_sugerido = f"{fav_team} gana o empata y Más de 1.5 goles"
             prob_principal = f"{conf_val}%"
@@ -14820,7 +15068,7 @@ class SportsAnalyticsEngine:
             stat_projection_label = f"Estabilidad {do_code_fav}: {p_do_fav}%"
             safety_margin_label = f"Cubre victoria o empate ({p_do_fav}%) con {suma_xg} goles esp."
 
-        elif p_do_fav >= 75.0 and prob_under_35_pct >= 74.0 and suma_xg <= 2.38 and diferencia_xg >= 0.22 and estilo_partido in (3, 5):
+        elif p_do_fav >= 75.0 and prob_under_35_pct >= 74.0 and suma_xg <= 2.25 and diferencia_xg >= 0.22:
             conf_val = int(round(min(p_do_fav, prob_under_35_pct)))
             mercado_sugerido = f"{fav_team} gana o empata y Menos de 3.5 goles"
             prob_principal = f"{conf_val}%"
@@ -15322,17 +15570,334 @@ class SportsAnalyticsEngine:
                   else "MUESTRA_PARCIAL")
         )
 
+        # =========================================================================
+        # ESTIMACIONES MODELADAS SEPARADAS (CUANDO FALTAN DATOS VERIFICADOS PERO EXISTE BASE)
+        # Usa únicamente: promedio de liga, promedio histórico disponible del equipo,
+        # localía, muestra disponible (muestra_h / muestra_a) y distribución Poisson/Dixon-Coles.
+        # Si no existe ninguna base estadística suficiente o hay discrepancia, devuelve "Sin base suficiente para estimar".
+        # =========================================================================
+        discrepant_metrics = {d.get("metrica") for d in enr_discrepancias if isinstance(d, dict)}
+        muestra_comb = int(muestra_h + muestra_a)
+        tiene_base_general = bool(
+            muestra_h > 0 or muestra_a > 0
+            or h_stat.get("base_att") is not None or a_stat.get("base_att") is not None
+        )
+        w_h_sample = min(1.0, float(muestra_h) / 5.0)
+        w_a_sample = min(1.0, float(muestra_a) / 5.0)
+        league_goals_loc_base = max(0.8, float(l_avg["goals"]) * 0.55)
+        league_goals_vis_base = max(0.6, float(l_avg["goals"]) * 0.45)
+        att_ratio_h = lh / league_goals_loc_base
+        att_ratio_a = la / league_goals_vis_base
+        def_ratio_h = float(h_stat.get("base_def") or 1.25) / league_goals_vis_base
+        def_ratio_a = float(a_stat.get("base_def") or 1.25) / league_goals_loc_base
+
+        def _confianza_por_muestra(n_val: int, es_verificado: bool) -> str:
+            if n_val <= 0:
+                return "NULA"
+            if es_verificado:
+                return "ALTA" if n_val >= 5 else "MEDIA"
+            return "MEDIA" if n_val >= 6 else "BAJA"
+
+        # 1. Córners (Verificado vs Estimado Modelo)
+        corners_has_disc = bool({"corners", "corners_home", "corners_away"} & discrepant_metrics)
+        corners_base_ok = (not corners_has_disc) and (tiene_base_general or eff_corners_h is not None or eff_corners_a is not None)
+        if corners_disponibles:
+            c_muestra_n = max(1, min(int(h_stat.get("corners_muestra") or muestra_h or 1), int(a_stat.get("corners_muestra") or muestra_a or 1)))
+            c_conf = _confianza_por_muestra(c_muestra_n, True)
+            c_estimacion_obj = None
+            c_valor_unificado = corners_match
+            c_tipo_dato = "VERIFICADO"
+            c_fuente_out = corners_fuente
+            c_etiqueta_ui = f"{corners_match}"
+            c_mensaje_base = "Dato verificado"
+        elif corners_base_ok:
+            mod_ch_in = float(eff_corners_h) if eff_corners_h is not None else (prom_corn_loc_liga * (w_h_sample * att_ratio_h + (1.0 - w_h_sample) * 1.0))
+            mod_ca_in = float(eff_corners_a) if eff_corners_a is not None else (prom_corn_vis_liga * (w_a_sample * att_ratio_a + (1.0 - w_a_sample) * 1.0))
+            mod_cc_h = prom_corn_vis_liga * (w_h_sample * def_ratio_h + (1.0 - w_h_sample) * 1.0)
+            mod_cc_a = prom_corn_loc_liga * (w_a_sample * def_ratio_a + (1.0 - w_a_sample) * 1.0)
+            mod_lam_ch = round(max(2.8, min(7.8, ((mod_ch_in / prom_corn_loc_liga) * (mod_cc_a / prom_corn_loc_liga) * prom_corn_loc_liga) * 0.75 + mod_ch_in * 0.25)), 1)
+            mod_lam_ca = round(max(2.2, min(6.8, ((mod_ca_in / prom_corn_vis_liga) * (mod_cc_h / prom_corn_vis_liga) * prom_corn_vis_liga) * 0.75 + mod_ca_in * 0.25)), 1)
+            mod_c_tot = round(mod_lam_ch + mod_lam_ca, 1)
+            mod_p_u95 = round(sum(cls.calculate_poisson(k, mod_c_tot) for k in range(10)) * 100.0, 1)
+            mod_p_o85 = round((1.0 - sum(cls.calculate_poisson(k, mod_c_tot) for k in range(9))) * 100.0, 1)
+            mod_rec_c = "Más de 8.5 córners" if mod_c_tot >= 9.5 else ("Menos de 10.5 córners" if mod_c_tot >= 8.5 else "Menos de 9.5 córners")
+            mod_prob_c = int(round(mod_p_o85 if "Más" in mod_rec_c else mod_p_u95))
+            c_muestra_n = max(1, muestra_comb)
+            c_conf = _confianza_por_muestra(c_muestra_n, False)
+            c_valor_unificado = mod_c_tot
+            c_tipo_dato = "ESTIMADO_MODELO"
+            c_fuente_out = "modelo_poisson_liga_historico"
+            c_etiqueta_ui = "Estimación del modelo"
+            c_mensaje_base = "Estimación del modelo"
+            c_estimacion_obj = {
+                "valor": mod_c_tot,
+                "home": mod_lam_ch,
+                "away": mod_lam_ca,
+                "recommended": mod_rec_c,
+                "prob_pct": mod_prob_c,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "modelo_poisson_liga_historico",
+                "muestra_n": c_muestra_n,
+                "confianza": c_conf,
+                "etiqueta_ui": "Estimación del modelo",
+            }
+        else:
+            c_muestra_n = 0
+            c_conf = "NULA"
+            c_valor_unificado = None
+            c_tipo_dato = "ESTIMADO_MODELO"
+            c_fuente_out = "NO_DISPONIBLE"
+            c_etiqueta_ui = "No estimable"
+            c_mensaje_base = "Sin base suficiente para estimar"
+            c_estimacion_obj = {
+                "valor": None,
+                "home": None,
+                "away": None,
+                "recommended": "Sin base suficiente para estimar",
+                "prob_pct": None,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "NO_DISPONIBLE",
+                "muestra_n": 0,
+                "confianza": "NULA",
+                "etiqueta_ui": "No estimable",
+                "mensaje": "Sin base suficiente para estimar",
+            }
+
+        # 2. Tarjetas (Verificado vs Estimado Modelo)
+        cards_has_disc = bool({"tarjetas", "tarjetas_home", "tarjetas_away", "cards_home", "cards_away"} & discrepant_metrics)
+        cards_base_ok = (not cards_has_disc) and (tiene_base_general or eff_cards_h is not None or eff_cards_a is not None)
+        if tarjetas_activas:
+            t_muestra_n = max(1, min(int(h_stat.get("tarjetas_muestra") or muestra_h or 1), int(a_stat.get("tarjetas_muestra") or muestra_a or 1)))
+            t_conf = _confianza_por_muestra(t_muestra_n, True)
+            t_estimacion_obj = None
+            t_valor_unificado = round(tarjetas_esperadas, 2)
+            t_tipo_dato = "VERIFICADO"
+            t_fuente_out = (ref_info.get("fuente") if arbitro_confirmado else cards_fuente)
+            t_etiqueta_ui = f"{round(tarjetas_esperadas, 2)}"
+            t_mensaje_base = "Dato verificado"
+        elif cards_base_ok:
+            base_c_loc = float(l_avg["cards"]) * 0.47
+            base_c_vis = float(l_avg["cards"]) * 0.53
+            mod_th = round(float(eff_cards_h) if eff_cards_h is not None else max(1.1, min(3.2, base_c_loc * (w_h_sample * def_ratio_h + (1.0 - w_h_sample) * 1.0))), 2)
+            mod_ta = round(float(eff_cards_a) if eff_cards_a is not None else max(1.1, min(3.3, base_c_vis * (w_a_sample * def_ratio_a + (1.0 - w_a_sample) * 1.0))), 2)
+            mod_t_tot = round(mod_th + mod_ta, 2)
+            mod_p_to35 = round((1.0 - sum(cls.calculate_poisson(k, mod_t_tot) for k in range(4))) * 100.0, 1)
+            mod_p_tu55 = round(sum(cls.calculate_poisson(k, mod_t_tot) for k in range(6)) * 100.0, 1)
+            mod_rec_t = "Más de 3.5 tarjetas" if mod_t_tot >= 4.25 else "Menos de 5.5 tarjetas"
+            mod_prob_t = int(round(mod_p_to35 if "Más" in mod_rec_t else mod_p_tu55))
+            t_muestra_n = max(1, muestra_comb)
+            t_conf = _confianza_por_muestra(t_muestra_n, False)
+            t_valor_unificado = mod_t_tot
+            t_tipo_dato = "ESTIMADO_MODELO"
+            t_fuente_out = "modelo_poisson_liga_historico"
+            t_etiqueta_ui = "Estimación del modelo"
+            t_mensaje_base = "Estimación del modelo"
+            t_estimacion_obj = {
+                "valor": mod_t_tot,
+                "home": round(mod_th, 1),
+                "away": round(mod_ta, 1),
+                "recommended": mod_rec_t,
+                "prob_pct": mod_prob_t,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "modelo_poisson_liga_historico",
+                "muestra_n": t_muestra_n,
+                "confianza": t_conf,
+                "etiqueta_ui": "Estimación del modelo",
+            }
+        else:
+            t_muestra_n = 0
+            t_conf = "NULA"
+            t_valor_unificado = None
+            t_tipo_dato = "ESTIMADO_MODELO"
+            t_fuente_out = "NO_DISPONIBLE"
+            t_etiqueta_ui = "No estimable"
+            t_mensaje_base = "Sin base suficiente para estimar"
+            t_estimacion_obj = {
+                "valor": None,
+                "home": None,
+                "away": None,
+                "recommended": "Sin base suficiente para estimar",
+                "prob_pct": None,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "NO_DISPONIBLE",
+                "muestra_n": 0,
+                "confianza": "NULA",
+                "etiqueta_ui": "No estimable",
+                "mensaje": "Sin base suficiente para estimar",
+            }
+
+        # 3. Tiros totales (Verificado vs Estimado Modelo)
+        shots_has_disc = bool({"tiros", "tiros_home", "tiros_away", "shots_home", "shots_away"} & discrepant_metrics)
+        shots_base_ok = (not shots_has_disc) and (tiene_base_general or eff_shots_h is not None or eff_shots_a is not None)
+        if shots_disponibles:
+            sh_muestra_n = max(1, min(int(muestra_h or 1), int(muestra_a or 1)))
+            sh_conf = _confianza_por_muestra(sh_muestra_n, True)
+            sh_estimacion_obj = None
+            sh_valor_unificado = shots_tot_match
+            sh_tipo_dato = "VERIFICADO"
+            sh_fuente_out = (h_stat.get("fuente") if h_stat.get("tiros_totales") is not None else enr_sh_src)
+            sh_etiqueta_ui = f"{shots_tot_match}"
+            sh_mensaje_base = "Dato verificado"
+        elif shots_base_ok:
+            base_sh_loc = float(l_avg["shots"]) * 0.54
+            base_sh_vis = float(l_avg["shots"]) * 0.46
+            mod_sh_h = round(float(eff_shots_h) if eff_shots_h is not None else max(7.0, min(18.0, base_sh_loc * (w_h_sample * att_ratio_h + (1.0 - w_h_sample) * 1.0))), 1)
+            mod_sh_a = round(float(eff_shots_a) if eff_shots_a is not None else max(6.0, min(16.0, base_sh_vis * (w_a_sample * att_ratio_a + (1.0 - w_a_sample) * 1.0))), 1)
+            mod_sh_tot = round(mod_sh_h + mod_sh_a, 1)
+            linea_m_sh = int(math.floor(mod_sh_tot - 2.5)) + 0.5
+            mod_rec_sh = f"Más de {linea_m_sh} remates"
+            mod_prob_sh = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, mod_sh_tot) for k in range(int(linea_m_sh) + 1))) * 100.0))))
+            sh_muestra_n = max(1, muestra_comb)
+            sh_conf = _confianza_por_muestra(sh_muestra_n, False)
+            sh_valor_unificado = mod_sh_tot
+            sh_tipo_dato = "ESTIMADO_MODELO"
+            sh_fuente_out = "modelo_poisson_liga_historico"
+            sh_etiqueta_ui = "Estimación del modelo"
+            sh_mensaje_base = "Estimación del modelo"
+            sh_estimacion_obj = {
+                "valor": mod_sh_tot,
+                "home": mod_sh_h,
+                "away": mod_sh_a,
+                "recommended": mod_rec_sh,
+                "prob_pct": mod_prob_sh,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "modelo_poisson_liga_historico",
+                "muestra_n": sh_muestra_n,
+                "confianza": sh_conf,
+                "etiqueta_ui": "Estimación del modelo",
+            }
+        else:
+            sh_muestra_n = 0
+            sh_conf = "NULA"
+            sh_valor_unificado = None
+            sh_tipo_dato = "ESTIMADO_MODELO"
+            sh_fuente_out = "NO_DISPONIBLE"
+            sh_etiqueta_ui = "No estimable"
+            sh_mensaje_base = "Sin base suficiente para estimar"
+            sh_estimacion_obj = {
+                "valor": None,
+                "home": None,
+                "away": None,
+                "recommended": "Sin base suficiente para estimar",
+                "prob_pct": None,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "NO_DISPONIBLE",
+                "muestra_n": 0,
+                "confianza": "NULA",
+                "etiqueta_ui": "No estimable",
+                "mensaje": "Sin base suficiente para estimar",
+            }
+
+        # 4. Tiros a puerta (Verificado vs Estimado Modelo)
+        sot_has_disc = bool({"tiros_puerta", "tiros_puerta_home", "tiros_puerta_away", "shots_on_target_home", "shots_on_target_away"} & discrepant_metrics)
+        sot_base_ok = (not sot_has_disc) and (tiene_base_general or eff_sot_h is not None or eff_sot_a is not None)
+        if sot_disponibles:
+            sot_muestra_n = max(1, min(int(muestra_h or 1), int(muestra_a or 1)))
+            sot_conf = _confianza_por_muestra(sot_muestra_n, True)
+            sot_estimacion_obj = None
+            sot_valor_unificado = shots_ot_match
+            sot_tipo_dato = "VERIFICADO"
+            sot_fuente_out = (h_stat.get("fuente") if h_stat.get("tiros_puerta") is not None else enr_sot_src)
+            sot_etiqueta_ui = f"{shots_ot_match}"
+            sot_mensaje_base = "Dato verificado"
+        elif sot_base_ok:
+            base_sot_loc = float(l_avg["shots_on_target"]) * 0.55
+            base_sot_vis = float(l_avg["shots_on_target"]) * 0.45
+            mod_sot_h = round(float(eff_sot_h) if eff_sot_h is not None else max(2.2, min(7.6, base_sot_loc * (w_h_sample * att_ratio_h + (1.0 - w_h_sample) * 1.0))), 1)
+            mod_sot_a = round(float(eff_sot_a) if eff_sot_a is not None else max(1.8, min(6.8, base_sot_vis * (w_a_sample * att_ratio_a + (1.0 - w_a_sample) * 1.0))), 1)
+            mod_sot_tot = round(mod_sot_h + mod_sot_a, 1)
+            linea_m_sot = max(5.5, int(math.floor(mod_sot_tot - 1.5)) + 0.5)
+            mod_rec_sot = f"Más de {linea_m_sot} tiros a puerta"
+            mod_prob_sot = int(round(max(0.0, min(100.0, (1.0 - sum(cls.calculate_poisson(k, mod_sot_tot) for k in range(int(linea_m_sot) + 1))) * 100.0))))
+            sot_muestra_n = max(1, muestra_comb)
+            sot_conf = _confianza_por_muestra(sot_muestra_n, False)
+            sot_valor_unificado = mod_sot_tot
+            sot_tipo_dato = "ESTIMADO_MODELO"
+            sot_fuente_out = "modelo_poisson_liga_historico"
+            sot_etiqueta_ui = "Estimación del modelo"
+            sot_mensaje_base = "Estimación del modelo"
+            sot_estimacion_obj = {
+                "valor": mod_sot_tot,
+                "home": mod_sot_h,
+                "away": mod_sot_a,
+                "recommended": mod_rec_sot,
+                "prob_pct": mod_prob_sot,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "modelo_poisson_liga_historico",
+                "muestra_n": sot_muestra_n,
+                "confianza": sot_conf,
+                "etiqueta_ui": "Estimación del modelo",
+            }
+        else:
+            sot_muestra_n = 0
+            sot_conf = "NULA"
+            sot_valor_unificado = None
+            sot_tipo_dato = "ESTIMADO_MODELO"
+            sot_fuente_out = "NO_DISPONIBLE"
+            sot_etiqueta_ui = "No estimable"
+            sot_mensaje_base = "Sin base suficiente para estimar"
+            sot_estimacion_obj = {
+                "valor": None,
+                "home": None,
+                "away": None,
+                "recommended": "Sin base suficiente para estimar",
+                "prob_pct": None,
+                "tipo_dato": "ESTIMADO_MODELO",
+                "fuente": "NO_DISPONIBLE",
+                "muestra_n": 0,
+                "confianza": "NULA",
+                "etiqueta_ui": "No estimable",
+                "mensaje": "Sin base suficiente para estimar",
+            }
+
+        # Añadir estimación modelada de tiros a puerta en analisis_partidos_anteriores sin mezclarla con tiros_puerta_prom verificado
+        analisis_partidos_anteriores["local"]["tiros_puerta_tipo_dato"] = "VERIFICADO" if h_stat.get("tiros_puerta") is not None else "ESTIMADO_MODELO"
+        analisis_partidos_anteriores["local"]["tiros_puerta_estimado"] = (sot_estimacion_obj or {}).get("home") if h_stat.get("tiros_puerta") is None else None
+        analisis_partidos_anteriores["visitante"]["tiros_puerta_tipo_dato"] = "VERIFICADO" if a_stat.get("tiros_puerta") is not None else "ESTIMADO_MODELO"
+        analisis_partidos_anteriores["visitante"]["tiros_puerta_estimado"] = (sot_estimacion_obj or {}).get("away") if a_stat.get("tiros_puerta") is None else None
+
+        goals_tipo_dato = "VERIFICADO" if (muestra_h >= 5 and muestra_a >= 5) else "ESTIMADO_MODELO"
+        goals_conf = _confianza_por_muestra(muestra_comb, goals_tipo_dato == "VERIFICADO")
+        goals_fuente = fuente_h if goals_tipo_dato == "VERIFICADO" else "modelo_poisson_dixon_coles"
+
         key_probabilities = {
-            "over_2_5": {"value": int(round(pGoles["over"])), "under_value": int(round(prob_under_25_pct)), "league_avg": l_avg["over_2_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob},
-            "over_1_5": {"value": int(round(pGoles15["over"])), "under_value": int(round(prob_under_15_pct)), "under_3_5": int(round(prob_under_35_pct)), "league_avg": l_avg["over_1_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob},
-            "btts": {"value": int(round(pBtts["yes"])), "no_value": int(round(pBtts["no"])), "prob_pct": btts_rec_prob, "league_avg": l_avg["btts"], "unit": "%", "recommended": btts_rec_line},
-            "avg_goals": {"value": round(suma_xg, 2), "home": lh, "away": la, "prob_pct": rec_goals_prob, "under_3_5_pct": int(round(prob_under_35_pct)), "league_avg": l_avg["goals"], "unit": "", "recommended": rec_goals_line},
+            "over_2_5": {
+                "value": int(round(pGoles["over"])), "valor": int(round(pGoles["over"])),
+                "tipo_dato": goals_tipo_dato, "fuente": goals_fuente, "muestra_n": muestra_comb, "confianza": goals_conf,
+                "under_value": int(round(prob_under_25_pct)), "league_avg": l_avg["over_2_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob
+            },
+            "over_1_5": {
+                "value": int(round(pGoles15["over"])), "valor": int(round(pGoles15["over"])),
+                "tipo_dato": goals_tipo_dato, "fuente": goals_fuente, "muestra_n": muestra_comb, "confianza": goals_conf,
+                "under_value": int(round(prob_under_15_pct)), "under_3_5": int(round(prob_under_35_pct)), "league_avg": l_avg["over_1_5"], "unit": "%", "recommended": rec_goals_line, "prob_pct": rec_goals_prob
+            },
+            "btts": {
+                "value": int(round(pBtts["yes"])), "valor": int(round(pBtts["yes"])),
+                "tipo_dato": goals_tipo_dato, "fuente": goals_fuente, "muestra_n": muestra_comb, "confianza": goals_conf,
+                "no_value": int(round(pBtts["no"])), "prob_pct": btts_rec_prob, "league_avg": l_avg["btts"], "unit": "%", "recommended": btts_rec_line
+            },
+            "avg_goals": {
+                "value": round(suma_xg, 2) if tiene_datos_parciales else None,
+                "valor": round(suma_xg, 2) if tiene_datos_parciales else None,
+                "tipo_dato": goals_tipo_dato, "fuente": goals_fuente if tiene_datos_parciales else "NO_DISPONIBLE",
+                "muestra_n": muestra_comb, "confianza": goals_conf if tiene_datos_parciales else "NULA",
+                "home": lh, "away": la, "prob_pct": rec_goals_prob, "under_3_5_pct": int(round(prob_under_35_pct)), "league_avg": l_avg["goals"], "unit": "", "recommended": rec_goals_line if tiene_datos_parciales else "Sin base suficiente para estimar"
+            },
             "avg_cards": {
                 "value": round(tarjetas_esperadas, 2) if tarjetas_activas else None,
+                "valor": t_valor_unificado,
+                "tipo_dato": t_tipo_dato,
+                "fuente": t_fuente_out,
+                "muestra_n": t_muestra_n,
+                "confianza": t_conf,
+                "etiqueta_ui": t_etiqueta_ui,
+                "mensaje_base": t_mensaje_base,
+                "estimacion_modelada": t_estimacion_obj,
                 "home": round(cards_h, 1) if tarjetas_activas else None,
                 "away": round(cards_a, 1) if tarjetas_activas else None,
+                "home_modelado": (t_estimacion_obj or {}).get("home"),
+                "away_modelado": (t_estimacion_obj or {}).get("away"),
                 "datos_insuficientes": not tarjetas_activas,
-                "fuente": (ref_info.get("fuente") if arbitro_confirmado else cards_fuente) if tarjetas_activas else "NO_DISPONIBLE",
                 "lambda_home": cards_h if tarjetas_activas else None,
                 "lambda_away": cards_a if tarjetas_activas else None,
                 "provoked_home": round(tarjetas_provocadas_h, 1) if tarjetas_activas else None,
@@ -15342,54 +15907,99 @@ class SportsAnalyticsEngine:
                 "referee_profile": ref_info.get("perfil") if arbitro_confirmado else None,
                 "referee_factor": ref_info.get("factor_rigor") if arbitro_confirmado else None,
                 "prob_pct": rec_cards_prob if tarjetas_activas else None,
+                "prob_pct_modelado": (t_estimacion_obj or {}).get("prob_pct"),
                 "over_3_5_pct": int(round(prob_cards_over_35)) if tarjetas_activas else None,
                 "over_4_5_pct": int(round(prob_cards_over_45)) if tarjetas_activas else None,
                 "under_4_5_pct": int(round(prob_cards_under_45)) if tarjetas_activas else None,
                 "under_5_5_pct": int(round(prob_cards_under_55)) if tarjetas_activas else None,
                 "league_avg": l_avg["cards"], "unit": "",
-                "recommended": rec_cards_line if tarjetas_activas else "Datos insuficientes"
+                "recommended": rec_cards_line if tarjetas_activas else "Datos insuficientes",
+                "recommended_modelado": (t_estimacion_obj or {}).get("recommended", "Sin base suficiente para estimar"),
             },
             "avg_corners": {
                 "value": corners_match if corners_disponibles else None,
+                "valor": c_valor_unificado,
+                "tipo_dato": c_tipo_dato,
+                "fuente": c_fuente_out,
+                "muestra_n": c_muestra_n,
+                "confianza": c_conf,
+                "etiqueta_ui": c_etiqueta_ui,
+                "mensaje_base": c_mensaje_base,
+                "estimacion_modelada": c_estimacion_obj,
                 "home": corners_h if corners_disponibles else None,
                 "away": corners_a if corners_disponibles else None,
+                "home_modelado": (c_estimacion_obj or {}).get("home"),
+                "away_modelado": (c_estimacion_obj or {}).get("away"),
                 "datos_insuficientes": not corners_disponibles,
-                "fuente": corners_fuente if corners_disponibles else "NO_DISPONIBLE",
                 "conceded_home": round(corners_concedidos_h, 1) if corners_disponibles else None,
                 "conceded_away": round(corners_concedidos_a, 1) if corners_disponibles else None,
                 "prob_pct": rec_corners_prob if corners_disponibles else None,
+                "prob_pct_modelado": (c_estimacion_obj or {}).get("prob_pct"),
                 "over_8_5_pct": int(round(prob_corners_85)) if corners_disponibles else None,
                 "over_9_5_pct": int(round(prob_corners_95)) if corners_disponibles else None,
                 "under_9_5_pct": int(round(prob_corners_under_95)) if corners_disponibles else None,
                 "under_10_5_pct": int(round(prob_corners_under_105)) if corners_disponibles else None,
-                "style_note": ("Juego Interior (Tendencia Under)" if es_ataque_interior_vertical else ("Desborde por Bandas (Tendencia Over)" if es_asedio_bandas else "Flujo Equilibrado")) if corners_disponibles else "Datos insuficientes",
+                "style_note": ("Juego Interior (Tendencia Under)" if es_ataque_interior_vertical else ("Desborde por Bandas (Tendencia Over)" if es_asedio_bandas else "Flujo Equilibrado")) if corners_disponibles else c_mensaje_base,
                 "league_avg": l_avg["corners"], "unit": "",
-                "recommended": rec_corners_line if corners_disponibles else "Datos insuficientes"
+                "recommended": rec_corners_line if corners_disponibles else "Datos insuficientes",
+                "recommended_modelado": (c_estimacion_obj or {}).get("recommended", "Sin base suficiente para estimar"),
             },
             "avg_shots": {
                 "value": shots_tot_match if shots_disponibles else None,
+                "valor": sh_valor_unificado,
+                "tipo_dato": sh_tipo_dato,
+                "fuente": sh_fuente_out,
+                "muestra_n": sh_muestra_n,
+                "confianza": sh_conf,
+                "etiqueta_ui": sh_etiqueta_ui,
+                "mensaje_base": sh_mensaje_base,
+                "estimacion_modelada": sh_estimacion_obj,
                 "home": shots_h if shots_disponibles else None, "away": shots_a if shots_disponibles else None,
+                "home_modelado": (sh_estimacion_obj or {}).get("home"),
+                "away_modelado": (sh_estimacion_obj or {}).get("away"),
                 "prob_pct": rec_shots_prob if shots_disponibles else None,
-                "fuente": (h_stat.get("fuente") if h_stat.get("tiros_totales") is not None else enr_sh_src) if shots_disponibles else "NO_DISPONIBLE",
+                "prob_pct_modelado": (sh_estimacion_obj or {}).get("prob_pct"),
                 "league_avg": l_avg["shots"], "unit": "",
                 "recommended": rec_shots_line if shots_disponibles else "Datos insuficientes",
+                "recommended_modelado": (sh_estimacion_obj or {}).get("recommended", "Sin base suficiente para estimar"),
                 "datos_insuficientes": not shots_disponibles
             },
             "avg_shots_on_target": {
                 "value": shots_ot_match if sot_disponibles else None,
+                "valor": sot_valor_unificado,
+                "tipo_dato": sot_tipo_dato,
+                "fuente": sot_fuente_out,
+                "muestra_n": sot_muestra_n,
+                "confianza": sot_conf,
+                "etiqueta_ui": sot_etiqueta_ui,
+                "mensaje_base": sot_mensaje_base,
+                "estimacion_modelada": sot_estimacion_obj,
                 "home": shots_ot_h if sot_disponibles else None, "away": shots_ot_a if sot_disponibles else None,
+                "home_modelado": (sot_estimacion_obj or {}).get("home"),
+                "away_modelado": (sot_estimacion_obj or {}).get("away"),
                 "prob_pct": rec_sot_prob if sot_disponibles else None,
-                "fuente": (h_stat.get("fuente") if h_stat.get("tiros_puerta") is not None else enr_sot_src) if sot_disponibles else "NO_DISPONIBLE",
+                "prob_pct_modelado": (sot_estimacion_obj or {}).get("prob_pct"),
                 "league_avg": l_avg["shots_on_target"], "unit": "",
                 "recommended": rec_sot_line if sot_disponibles else "Datos insuficientes",
+                "recommended_modelado": (sot_estimacion_obj or {}).get("recommended", "Sin base suficiente para estimar"),
                 "datos_insuficientes": not sot_disponibles
             },
             "avg_fouls": {
                 "value": round(float(eff_fouls_h) + float(eff_fouls_a), 1) if faltas_disponibles else None,
+                "valor": round(float(eff_fouls_h) + float(eff_fouls_a), 1) if faltas_disponibles else None,
+                "tipo_dato": "VERIFICADO" if faltas_disponibles else "ESTIMADO_MODELO",
+                "muestra_n": max(1, min(int(muestra_h or 1), int(muestra_a or 1))) if faltas_disponibles else 0,
+                "confianza": _confianza_por_muestra(min(int(muestra_h or 1), int(muestra_a or 1)), True) if faltas_disponibles else "NULA",
                 "home": round(float(eff_fouls_h), 1) if faltas_disponibles else None,
                 "away": round(float(eff_fouls_a), 1) if faltas_disponibles else None,
                 "fuente": (h_stat.get("fuente") if h_stat.get("faltas") is not None else enr_fl_src) if faltas_disponibles else "NO_DISPONIBLE",
                 "datos_insuficientes": not faltas_disponibles,
+            },
+            "estimaciones_modeladas": {
+                "avg_corners": c_estimacion_obj,
+                "avg_cards": t_estimacion_obj,
+                "avg_shots": sh_estimacion_obj,
+                "avg_shots_on_target": sot_estimacion_obj,
             },
             "_meta": {
                 "fuente_local": fuente_h,
@@ -15405,7 +16015,8 @@ class SportsAnalyticsEngine:
                 "tiros_disponibles": tiros_disponibles,
                 "metricas_faltantes": metricas_faltantes,
                 "nivel_verificacion": nivel_verif_global,
-                "fecha_consulta": enrichment_cache.get("fecha_consulta")
+                "fecha_consulta": enrichment_cache.get("fecha_consulta"),
+                "separacion_verificado_modelado": True,
             }
         }
 
@@ -15452,7 +16063,8 @@ class SportsAnalyticsEngine:
                 {
                     "pilares_cuantitativos": pilares,
                     "pronostico_principal": pronostico_principal_obj,
-                    "probabilidades": probs
+                    "probabilidades": probs,
+                    "key_probabilities": key_probabilities,
                 },
                 live_call=False
             ),
@@ -17819,6 +18431,132 @@ class ESPNLiveService:
                     reds += val
                     found_cards = True
         return (corners if found_corners else None, yellows, reds, found_cards)
+
+    @classmethod
+    def fetch_team_last_5_matches(cls, team_name: str, before_date: str = "", competition_code: str = "", limit: int = 5) -> list:
+        """
+        Respaldo oficial en ESPN API para obtener hasta los últimos 5 partidos finalizados de `team_name`
+        estrictamente antes de `before_date` (`f_iso < cutoff`).
+        """
+        if not team_name or not str(team_name).strip():
+            return []
+        cutoff = str(before_date or "")[:10]
+        primary_slug = cls.LEAGUES_MAP.get(competition_code)
+        slugs_to_try = ([primary_slug] if primary_slug else []) + [s for s in cls.ALL_SLUGS if s != primary_slug]
+        found = []
+        seen_ev = set()
+
+        def _stat_val(comp_obj, names):
+            for st in (comp_obj or {}).get("statistics", []):
+                if (st.get("name") or "").lower() in names:
+                    return int(re.sub(r"[^0-9]", "", str(st.get("displayValue") or st.get("value") or "0")) or 0)
+            return None
+
+        for slug in slugs_to_try[:3]:
+            url = f"https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard"
+            try:
+                resp = requests.get(url, timeout=6)
+                if resp.status_code != 200:
+                    continue
+                events = (resp.json() or {}).get("events", [])
+                for ev in events:
+                    ev_id = ev.get("id")
+                    if ev_id and ev_id in seen_ev:
+                        continue
+                    comps = (ev.get("competitions") or [{}])[0]
+                    raw_dt = str(comps.get("date") or ev.get("date") or "")
+                    f_iso = raw_dt[:10]
+                    if not re.match(r"^\d{4}-\d{2}-\d{2}$", f_iso):
+                        continue
+                    if cutoff and f_iso >= cutoff:
+                        continue
+                    st_type = (comps.get("status") or {}).get("type") or {}
+                    is_fin = bool(st_type.get("completed", False)) or str(st_type.get("state", "")).lower() == "post"
+                    if not is_fin:
+                        continue
+                    competitors = comps.get("competitors", [])
+                    if len(competitors) < 2:
+                        continue
+                    h = competitors[0] if competitors[0].get("homeAway") == "home" else competitors[1]
+                    a = competitors[1] if competitors[1].get("homeAway") == "away" else competitors[0]
+                    h_obj = h.get("team") or {}
+                    a_obj = a.get("team") or {}
+                    h_name = h_obj.get("displayName") or h_obj.get("name") or ""
+                    a_name = a_obj.get("displayName") or a_obj.get("name") or ""
+                    h_cands = [h_obj.get("displayName", ""), h_obj.get("name", ""), h_obj.get("shortDisplayName", "")]
+                    a_cands = [a_obj.get("displayName", ""), a_obj.get("name", ""), a_obj.get("shortDisplayName", "")]
+
+                    is_home = any(matches_team_alias(team_name, hc) for hc in h_cands if hc)
+                    is_away = any(matches_team_alias(team_name, ac) for ac in a_cands if ac)
+                    if not is_home and not is_away:
+                        continue
+                    if ev_id:
+                        seen_ev.add(ev_id)
+
+                    sh = int(re.sub(r"[^0-9]", "", str(h.get("score", "0"))) or 0)
+                    sa = int(re.sub(r"[^0-9]", "", str(a.get("score", "0"))) or 0)
+                    c_h = _stat_val(h, ("woncorners", "corners", "cornerkicks"))
+                    c_a = _stat_val(a, ("woncorners", "corners", "cornerkicks"))
+                    sh_h = _stat_val(h, ("totalshots", "shots"))
+                    sh_a = _stat_val(a, ("totalshots", "shots"))
+                    sot_h = _stat_val(h, ("shotsontarget",))
+                    sot_a = _stat_val(a, ("shotsontarget",))
+                    fl_h = _stat_val(h, ("foulscommitted", "fouls"))
+                    fl_a = _stat_val(a, ("foulscommitted", "fouls"))
+                    yh = _stat_val(h, ("yellowcards", "yellow"))
+                    ya = _stat_val(a, ("yellowcards", "yellow"))
+                    rh = _stat_val(h, ("redcards", "red"))
+                    ra = _stat_val(a, ("redcards", "red"))
+                    cards_h = (yh + (rh or 0) * 2) if yh is not None else None
+                    cards_a = (ya + (ra or 0) * 2) if ya is not None else None
+
+                    gf, gc = (sh, sa) if is_home else (sa, sh)
+                    res_ved = "V" if gf > gc else ("E" if gf == gc else "D")
+
+                    found.append({
+                        "fecha": f_iso,
+                        "local": h_name,
+                        "visitante": a_name,
+                        "rival": a_name if is_home else h_name,
+                        "condicion": "L" if is_home else "V",
+                        "gf": gf,
+                        "gc": gc,
+                        "score_home": sh,
+                        "score_away": sa,
+                        "marcador": f"{sh} - {sa}",
+                        "resultado": res_ved,
+                        "corners": c_h if is_home else c_a,
+                        "corners_home": c_h,
+                        "corners_away": c_a,
+                        "corners_total": (c_h + c_a) if (c_h is not None and c_a is not None) else None,
+                        "tarjetas": cards_h if is_home else cards_a,
+                        "cards_home": cards_h,
+                        "cards_away": cards_a,
+                        "cards_total": (cards_h + cards_a) if (cards_h is not None and cards_a is not None) else None,
+                        "tiros_totales": sh_h if is_home else sh_a,
+                        "shots_home": sh_h,
+                        "shots_away": sh_a,
+                        "shots_total": (sh_h + sh_a) if (sh_h is not None and sh_a is not None) else None,
+                        "tiros_puerta": sot_h if is_home else sot_a,
+                        "shots_on_target_home": sot_h,
+                        "shots_on_target_away": sot_a,
+                        "shots_on_target": (sot_h + sot_a) if (sot_h is not None and sot_a is not None) else None,
+                        "faltas": fl_h if is_home else fl_a,
+                        "fouls_home": fl_h,
+                        "fouls_away": fl_a,
+                        "fouls_total": (fl_h + fl_a) if (fl_h is not None and fl_a is not None) else None,
+                        "codigo_liga": competition_code or "OFL",
+                        "competicion": "Competición Oficial",
+                        "es_oficial": True,
+                        "simulado": False,
+                        "tipo_dato": "VERIFICADO",
+                        "fuente": "espn",
+                    })
+            except Exception as e:
+                logger.debug("ESPN fetch_team_last_5_matches error (%s): %s", slug, e)
+
+        found.sort(key=lambda x: x["fecha"], reverse=True)
+        return found[: max(1, int(limit or 5))]
 
     @classmethod
     def fetch_match_stats(cls, home_name: str, away_name: str, date_str: str, liga: str = "") -> dict:
