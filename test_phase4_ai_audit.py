@@ -56,6 +56,8 @@ sys.modules["flask_cors"] = flask_cors_stub
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import app as pred_app
+flask_stub.request = pred_app.request
+flask_stub.g = pred_app.g
 
 
 class TestPhase4AIAuditAndUI(unittest.TestCase):
@@ -69,6 +71,8 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         pred_app.RATINGS_REALES.clear()
         pred_app.MatchEnrichmentCache._STORE.clear()
         pred_app.Top3RotationManager.reset_state()
+        pred_app._CARTELERA_MEMO_CACHE.clear()
+        pred_app._CARTELERA_MEMO_TS.clear()
         pred_app._ultimo_envio_resultados_top5.clear()
         try:
             if os.path.exists("/tmp/predicxion_last_tg_res_2026-11-14.txt"):
@@ -362,8 +366,12 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         with patch.object(pred_app, "ALL_FIXTURES_POOL", perf_pool):
             pred_app.ensure_fixtures_date_index(force=True)
             t0 = _t.perf_counter()
-            resp, status_code = handler()
+            with self.assertLogs(pred_app.logger, level="INFO") as cm_perf:
+                resp, status_code = handler()
             elapsed = _t.perf_counter() - t0
+        perf_logs = "\n".join(cm_perf.output)
+        self.assertIn("fixture descartado: equipos incompletos", perf_logs)
+        self.assertNotIn("unsupported operand type(s)", perf_logs)
 
         self.assertEqual(status_code, 200)
         self.assertTrue(resp["success"])
@@ -479,5 +487,144 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             self.assertIsNotNone(kp[k_m]["value"], f"{k_m} sin valor en motor")
 
 
+    def test_10_global_team_logo_system_all_10_competitions_and_priority_order(self):
+        # 1. Equivalencias de normalización (tildes, abreviaturas y alias)
+        self.assertEqual(pred_app._norm_equipo("Atlético de Madrid"), pred_app._norm_equipo("Atletico Madrid"))
+        self.assertEqual(pred_app._norm_equipo("Bayern Múnich"), pred_app._norm_equipo("Bayern Munich"))
+        self.assertEqual(pred_app._norm_equipo("PSG"), pred_app._norm_equipo("Paris Saint-Germain"))
+
+        logo_atm_1 = pred_app.get_team_logo("Atlético de Madrid", competition_code="PD")
+        logo_atm_2 = pred_app.get_team_logo("Atletico Madrid", competition_code="PD")
+        self.assertEqual(logo_atm_1["logo_url"], logo_atm_2["logo_url"])
+
+        logo_bay_1 = pred_app.get_team_logo("Bayern Múnich", competition_code="BL1")
+        logo_bay_2 = pred_app.get_team_logo("Bayern Munich", competition_code="BL1")
+        self.assertEqual(logo_bay_1["logo_url"], logo_bay_2["logo_url"])
+
+        logo_psg_1 = pred_app.get_team_logo("PSG", competition_code="FL1")
+        logo_psg_2 = pred_app.get_team_logo("Paris Saint-Germain", competition_code="FL1")
+        self.assertEqual(logo_psg_1["logo_url"], logo_psg_2["logo_url"])
+
+        # 2. Equipos de las 10 competiciones configuradas y estructura de team_logos[team_key]
+        sample_teams_10_leagues = {
+            "BL1": "Bayern Múnich",
+            "BSA": "Flamengo",
+            "FL1": "PSG",
+            "PL": "Arsenal",
+            "PPL": "Benfica",
+            "PD": "Atlético de Madrid",
+            "SA": "Inter Milan",
+            "UCL": "Real Madrid",
+            "UEL": "Ajax",
+            "UNL": "España",
+        }
+        for comp_code, t_name in sample_teams_10_leagues.items():
+            info = pred_app.get_team_logo(t_name, competition_code=comp_code)
+            t_key = pred_app._norm_equipo(t_name)
+            self.assertIn(t_key, pred_app.team_logos)
+            cached_entry = pred_app.team_logos[t_key]
+            for req_k in ("team_name", "logo_url", "source", "updated_at"):
+                self.assertIn(req_k, cached_entry, f"Falta {req_k} en team_logos[{t_key}]")
+            self.assertTrue(
+                bool(info.get("logo_url")) or bool(info.get("fallback_initials")),
+                f"Sin logo ni fallback para {t_name} ({comp_code})",
+            )
+
+        # 3. Prioridad estricta de fuentes: football-data.org > highlightly > cache_local > fallback_initials
+        unknown_team = "Deportivo Inexistente 2099"
+        fb_info = pred_app.get_team_logo(unknown_team, competition_code="PD")
+        self.assertIsNone(fb_info["logo_url"])
+        self.assertEqual(fb_info["source"], "fallback_initials")
+        self.assertEqual(fb_info["fallback_initials"], "DI")
+
+        pred_app.register_team_logo(unknown_team, "https://cache.local/di.png", source="cache_local")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["source"], "cache_local")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["logo_url"], "https://cache.local/di.png")
+
+        pred_app.register_team_logo(unknown_team, "https://soccer.highlightly.net/logos/di.png", source="highlightly")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["source"], "highlightly")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["logo_url"], "https://soccer.highlightly.net/logos/di.png")
+
+        pred_app.register_team_logo(unknown_team, "https://crests.football-data.org/9999.png", source="football-data.org")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["source"], "football-data.org")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["logo_url"], "https://crests.football-data.org/9999.png")
+
+        # Intentar sobrescribir con fuente de menor prioridad NO debe reemplazar football-data.org
+        pred_app.register_team_logo(unknown_team, "https://soccer.highlightly.net/logos/old.png", source="highlightly")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["source"], "football-data.org")
+        self.assertEqual(pred_app.get_team_logo(unknown_team)["logo_url"], "https://crests.football-data.org/9999.png")
+
+    def test_11_all_endpoints_return_logos_or_fallbacks_with_zero_external_http_calls(self):
+        pred_app.ensure_fixtures_date_index(force=True)
+
+        # Verificar sin ninguna llamada HTTP externa (requests.get / requests.post bloqueados)
+        with patch.object(requests, "get", side_effect=AssertionError("HTTP GET prohibido durante renderizado")) as get_spy:
+            flask_stub.request.args = {"fecha": "2026-11-20"}
+            pron_handler = self.flask_app.routes["/obtener-pronostico"]
+            resp_pron, code_pron = pron_handler()
+            self.assertEqual(code_pron, 200)
+            self.assertTrue(resp_pron["success"])
+            self.assertEqual(get_spy.call_count, 0)
+
+            todos = resp_pron["todos"]
+            self.assertEqual(len(todos), 10, "Deben estar presentes las 10 competiciones en /obtener-pronostico")
+            total_checked = 0
+            for liga_name, matches in todos.items():
+                for m in matches:
+                    total_checked += 1
+                    self.assertTrue(
+                        bool(m.get("logo_local")) or bool(m.get("fallback_logo_local")),
+                        f"Partido sin logo_local ni fallback_logo_local: {m.get('partido')}",
+                    )
+                    self.assertTrue(
+                        bool(m.get("logo_visitante")) or bool(m.get("fallback_logo_visitante")),
+                        f"Partido sin logo_visitante ni fallback_logo_visitante: {m.get('partido')}",
+                    )
+            self.assertGreater(total_checked, 400)
+
+            # Verificar /api/v1/top3/daily
+            for t in ["Arsenal", "Chelsea", "Liverpool", "Everton", "Manchester City", "Fulham"]:
+                self._add_verified_team(t, gf=2, ga=1)
+            custom_pool = [
+                {"id_partido": "lg1", "local": "Arsenal", "visitante": "Chelsea", "liga": "Premier League", "codigo_liga": "PL", "fecha_utc": "2026-11-16T15:00:00Z"},
+                {"id_partido": "lg2", "local": "Liverpool", "visitante": "Everton", "liga": "Premier League", "codigo_liga": "PL", "fecha_utc": "2026-11-16T17:00:00Z"},
+                {"id_partido": "lg3", "local": "Club Sin Escudo Local", "visitante": "Club Sin Escudo Visita", "liga": "Premier League", "codigo_liga": "PL", "fecha_utc": "2026-11-16T19:00:00Z"},
+            ]
+            self._add_verified_team("Club Sin Escudo Local", gf=2, ga=0)
+            self._add_verified_team("Club Sin Escudo Visita", gf=1, ga=1)
+
+            with patch.object(pred_app, "ALL_FIXTURES_POOL", custom_pool):
+                flask_stub.request.args = {"fecha": "2026-11-16"}
+                top3_resp = self.flask_app.routes["/api/v1/top3/daily"]()
+                self.assertTrue(top3_resp["success"])
+                self.assertEqual(len(top3_resp["top3"]), 3)
+                for item in top3_resp["top3"]:
+                    self.assertIn("logo_local", item)
+                    self.assertIn("logo_visitante", item)
+                    self.assertIn("fallback_logo_local", item)
+                    self.assertIn("fallback_logo_visitante", item)
+                    self.assertTrue(bool(item.get("logo_local")) or bool(item.get("fallback_logo_local")))
+                    self.assertTrue(bool(item.get("logo_visitante")) or bool(item.get("fallback_logo_visitante")))
+
+                # Verificar /api/v1/ai/triple-analysis (sin llamadas externas a logos)
+                flask_stub.request.get_json = MagicMock(return_value={"match_id": "lg1"})
+                with patch.object(pred_app.DualAIEngine, "analyze_match_pipeline", return_value={"estado": "ACTIVO"}):
+                    ai_resp = self.flask_app.routes["/api/v1/ai/triple-analysis"]()
+                    self.assertTrue(ai_resp["success"])
+                    self.assertTrue(bool(ai_resp.get("logo_local")) or bool(ai_resp.get("fallback_logo_local")))
+                    self.assertTrue(bool(ai_resp.get("logo_visitante")) or bool(ai_resp.get("fallback_logo_visitante")))
+
+        # Verificar que index.html contiene el soporte de img + alt + onerror fallback
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn("t.logo_local", html)
+        self.assertIn("t.logo_visitante", html)
+        self.assertIn('alt="${esc(limpio)}"', html)
+        self.assertIn("onerror=", html)
+
+
 if __name__ == "__main__":
+    unittest.main(verbosity=2)
+
     unittest.main(verbosity=2)
