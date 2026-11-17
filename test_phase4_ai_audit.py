@@ -374,6 +374,110 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertEqual(m["recorridos_historicos"], 0)
         self.assertGreater(m["consultas_cache"], 0)
 
+    def test_09_highlightly_realistic_response_reaches_enrichment_cache_and_engine_all_10_fields(self):
+        import json as _json
+        match_data = {
+            "id_partido": "hl_real_1",
+            "local": "Arsenal",
+            "visitante": "Chelsea",
+            "codigo_liga": "PL",
+            "liga": "Premier League",
+            "fecha": "2026-11-15",
+            "fecha_utc": "2026-11-15T15:00:00Z",
+        }
+        matches_resp = MagicMock()
+        matches_resp.status_code = 200
+        matches_resp.text = _json.dumps({
+            "data": [{
+                "id": 554433,
+                "homeTeam": {"name": "Arsenal"},
+                "awayTeam": {"name": "Chelsea"},
+                "state": {"description": "Finished", "score": {"current": "2 - 1"}}
+            }]
+        })
+        matches_resp.json.return_value = _json.loads(matches_resp.text)
+
+        stats_resp = MagicMock()
+        stats_resp.status_code = 200
+        stats_resp.text = _json.dumps([
+            {
+                "team": {"name": "Arsenal"},
+                "statistics": [
+                    {"displayName": "Corner Kicks", "value": 7},
+                    {"displayName": "Yellow Cards", "value": 2},
+                    {"displayName": "Red Cards", "value": 0},
+                    {"displayName": "Shots on Goal", "value": 6},
+                    {"displayName": "Shots off Goal", "value": 5},
+                    {"displayName": "Blocked Shots", "value": 3},
+                    {"displayName": "Total Shots", "value": 14},
+                    {"displayName": "Fouls", "value": 10},
+                ]
+            },
+            {
+                "team": {"name": "Chelsea"},
+                "statistics": [
+                    {"displayName": "Corner Kicks", "value": 4},
+                    {"displayName": "Yellow Cards", "value": 3},
+                    {"displayName": "Red Cards", "value": 0},
+                    {"displayName": "Shots on Goal", "value": 4},
+                    {"displayName": "Shots off Goal", "value": 4},
+                    {"displayName": "Blocked Shots", "value": 1},
+                    {"displayName": "Total Shots", "value": 9},
+                    {"displayName": "Fouls", "value": 12},
+                ]
+            }
+        ])
+        stats_resp.json.return_value = _json.loads(stats_resp.text)
+
+        def _fake_hl_get(url, headers=None, params=None, timeout=12):
+            if url.endswith("/matches"):
+                return matches_resp
+            if url.endswith("/statistics/554433"):
+                return stats_resp
+            raise AssertionError(f"URL inesperada: {url}")
+
+        # Incluso si ESPN devuelve valores distintos en segundo plano, Highlightly debe prevalecer sin perder tiros_home/away
+        espn_conflicting = {
+            "finished": False, "corners_home": None, "corners_away": None,
+            "shots_home": 0, "shots_away": 0, "shots_on_target_home": 0, "shots_on_target_away": 0,
+        }
+
+        with patch.dict(os.environ, {"HIGHLIGHTLY_API_KEY": "test_hl_live_key"}), \
+             patch.object(pred_app.FootballDataOrgClient, "fetch_json", return_value={"ok": False, "data": None}), \
+             patch.object(requests, "get", side_effect=_fake_hl_get), \
+             patch.object(pred_app.SofascoreLiveService, "fetch_match_stats", return_value=None), \
+             patch.object(pred_app.ESPNLiveService, "fetch_match_stats", return_value=espn_conflicting), \
+             patch.object(pred_app.ApiSportsETL, "fetch_match_stats", return_value=None):
+            with self.assertLogs(pred_app.logger, level="INFO") as cm:
+                rec = pred_app.MatchEnrichmentCache.enrich_match_worker(match_data, ttl_seconds=3600)
+
+        joined_logs = "\n".join(cm.output)
+        for req_field in (
+            "corners_home", "corners_away",
+            "cards_home", "cards_away",
+            "shots_home", "shots_away",
+            "shots_on_target_home", "shots_on_target_away",
+            "fouls_home", "fouls_away",
+            "tiros_home", "tiros_away",
+            "tiros_puerta_home", "tiros_puerta_away",
+        ):
+            self.assertIn(req_field, joined_logs)
+            self.assertIsNotNone(rec["metricas"][req_field]["valor"], f"Falta {req_field} en MatchEnrichmentCache")
+
+        self.assertEqual(rec["metricas"]["tiros_home"]["valor"], 14)
+        self.assertEqual(rec["metricas"]["tiros_away"]["valor"], 9)
+        self.assertEqual(rec["metricas"]["tiros"]["valor"], 23)
+        self.assertEqual(rec["metricas"]["tiros_puerta_home"]["valor"], 6)
+        self.assertEqual(rec["metricas"]["tiros_puerta_away"]["valor"], 4)
+        self.assertEqual(rec["metricas"]["tiros_puerta"]["valor"], 10)
+
+        # Confirmar que incluso si otra métrica (ej. arbitro) tiene discrepancia, tiros_home/away NO se descarta
+        an = pred_app.SportsAnalyticsEngine.generate_institutional_analysis(match_data)
+        kp = an["key_probabilities"]
+        for k_m in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target", "avg_fouls"):
+            self.assertFalse(kp[k_m]["datos_insuficientes"], f"{k_m} marcado como insuficiente")
+            self.assertIsNotNone(kp[k_m]["value"], f"{k_m} sin valor en motor")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
