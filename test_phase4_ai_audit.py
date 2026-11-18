@@ -567,7 +567,7 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             self.assertEqual(get_spy.call_count, 0)
 
             todos = resp_pron["todos"]
-            self.assertEqual(len(todos), 10, "Deben estar presentes las 10 competiciones en /obtener-pronostico")
+            self.assertEqual(len(todos), 9, "Deben estar presentes las 9 competiciones activas con UNL deshabilitada")
             total_checked = 0
             for liga_name, matches in todos.items():
                 for m in matches:
@@ -742,13 +742,108 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertEqual(sep_ia["metricas_verificadas"], [])
         self.assertIn("avg_corners", sep_ia["metricas_estimadas_modelo"])
 
-        # Verificar que index.html reemplazó N/D por "Estimación del modelo" y "No estimable"
+        # Verificar que index.html reemplazó N/D por etiquetas limpias y "No estimable"
         html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
         with open(html_path, "r", encoding="utf-8") as f:
             html = f.read()
         self.assertNotIn("N/D", html)
-        self.assertIn("Estimación del modelo", html)
+        self.assertIn("Promedio de córners", html)
         self.assertIn("No estimable", html)
+
+
+    def test_13_comprehensive_integral_requirements(self):
+        # 1. 17/11 y 18/11 con partidos reales, UNL deshabilitada por defecto (DISABLED_COMPETITIONS=UNL),
+        #    cero fechas adelantadas y separación de fechas
+        pred_app.ensure_fixtures_date_index(force=True)
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-17"}
+            resp_17, c17 = pron_handler()
+            self.assertEqual(c17, 200)
+            self.assertEqual(resp_17["fecha_activa_destacados"], "2026-11-17")
+            self.assertIn("UNL", resp_17["competiciones_deshabilitadas"])
+            self.assertGreater(len(resp_17["destacados"]), 0)
+            for d_item in resp_17["destacados"]:
+                self.assertEqual(d_item["fecha"], "2026-11-17")
+                self.assertEqual(d_item["fecha_local_partido"], "2026-11-17")
+                self.assertIn("fecha_programada", d_item)
+                self.assertIn("fecha_publicacion", d_item)
+                self.assertIn("fecha_rotacion", d_item)
+                self.assertNotEqual(d_item["codigo_liga"], "UNL")
+
+            flask_stub.request.args = {"fecha": "2026-11-18"}
+            resp_18, c18 = pron_handler()
+            self.assertEqual(c18, 200)
+            self.assertEqual(resp_18["fecha_activa_destacados"], "2026-11-18")
+            self.assertGreater(len(resp_18["destacados"]), 0)
+            for d_item in resp_18["destacados"]:
+                self.assertEqual(d_item["fecha"], "2026-11-18")
+                self.assertEqual(d_item["fecha_local_partido"], "2026-11-18")
+                self.assertNotEqual(d_item["codigo_liga"], "UNL")
+
+            # Un partido de cada competición activa (9 ligas)
+            active_codes_seen = set()
+            for liga_name, m_list in resp_17["todos"].items():
+                self.assertNotIn("Nations League", liga_name)
+                if m_list:
+                    active_codes_seen.add(m_list[0]["codigo_liga"])
+            self.assertEqual(active_codes_seen, {"BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "UCL", "UEL"})
+
+        # 2. Reactivar UNL cambiando únicamente la variable de entorno DISABLED_COMPETITIONS=""
+        with patch.dict(os.environ, {"DISABLED_COMPETITIONS": ""}):
+            pred_app.ensure_fixtures_date_index(force=True)
+            flask_stub.request.args = {"fecha": "2026-11-17"}
+            resp_unl_on, _ = pron_handler()
+            self.assertTrue(any(m["codigo_liga"] == "UNL" for m in resp_unl_on["destacados"]))
+        pred_app.ensure_fixtures_date_index(force=True)
+
+        # 3. Resultados reales de los días 12, 13, 14, 15, 16 y 17 de noviembre (sin inventar, sin adelantar)
+        for day_i in ("12", "13", "14", "15", "16", "17"):
+            f_day = f"2026-11-{day_i}"
+            mock_hl = {"finished": True, "score_home": 2, "score_away": 1, "corners_total": 9, "cards_total": 4}
+            with patch.object(pred_app.HighlightlyFootballClient, "_get_api_key", return_value="k_test"), \
+                 patch.object(pred_app.HighlightlyFootballClient, "fetch_match_stats", return_value=mock_hl):
+                res_day = pred_app.obtener_resultado_real_verificado(f"EqLoc{day_i}", f"EqVis{day_i}", f_day, liga="Premier League")
+            self.assertTrue(res_day["finished"])
+            self.assertEqual(res_day["score_home"], 2)
+            self.assertEqual(res_day["score_away"], 1)
+
+        # Partido futuro o aplazado debe seguir PENDIENTE
+        fut_res = pred_app.obtener_resultado_real_verificado("Arsenal", "Chelsea", "2026-12-28", liga="Premier League")
+        self.assertFalse(fut_res["finished"])
+        grade_pend = pred_app.SportsResultsAuditor.grade_prediction({"seleccion": "Más de 1.5 goles"}, fut_res)
+        self.assertEqual(grade_pend["estado"], "PENDIENTE")
+
+        # 4. Top 3 con exactamente 3 selecciones para 2026-11-18 (con datos verificados)
+        for t in ("Corinthians", "Botafogo", "Coritiba", "Santos", "Cruzeiro", "Palmeiras"):
+            self._add_verified_team(t, code="BSA", liga="Campeonato Brasileiro Série A", gf=2, ga=1)
+        flask_stub.request.args = {"fecha": "2026-11-18"}
+        top3_18 = self.flask_app.routes["/api/v1/top3/daily"]()
+        self.assertTrue(top3_18["success"])
+        self.assertEqual(len(top3_18["top3"]), 3)
+        for item in top3_18["top3"]:
+            self.assertEqual(item["fecha"], "2026-11-18")
+            self.assertTrue(bool(item.get("logo_local")) or bool(item.get("fallback_logo_local")))
+            self.assertTrue(bool(item.get("logo_visitante")) or bool(item.get("fallback_logo_visitante")))
+
+        # 5. Logos solo en pronósticos y Top 3 en index.html (no en sidebar ni carrusel),
+        #    nombres limpios y una sola fecha en Top 3 + mercados alternativos con logs
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn("Promedio de córners", html)
+        self.assertIn("Promedio de tarjetas", html)
+        self.assertIn("Promedio de remates", html)
+        self.assertIn("Promedio de tiros a puerta", html)
+        self.assertNotIn("Estimación del modelo", html)
+        self.assertIn("[MercadosAlternativos] status=", html)
+        self.assertIn("displayFecha.innerText = data.fecha;", html)
+        # Confirmar que renderizarSidebar y renderizarCarrusel ya no invocan generarEscudoEquipoHtml
+        sidebar_fn = html.split("function renderizarSidebar")[1].split("function toggleLiga")[0]
+        carousel_fn = html.split("function renderizarCarrusel")[1].split("async function ejecutarAnalisisTripleIA")[0]
+        self.assertNotIn("generarEscudoEquipoHtml", sidebar_fn)
+        self.assertNotIn("generarEscudoEquipoHtml", carousel_fn)
 
 
 if __name__ == "__main__":
