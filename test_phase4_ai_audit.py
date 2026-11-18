@@ -845,6 +845,126 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertNotIn("generarEscudoEquipoHtml", sidebar_fn)
         self.assertNotIn("generarEscudoEquipoHtml", carousel_fn)
 
+    def test_14_complete_calendar_10_validation_scenarios(self):
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+        pred_app.invalidate_calendar_caches(rebuild_pool=True)
+
+        # Escenario 1: Fecha afectada (2026-11-18) con exactamente 6 partidos de Serie A brasileña
+        # y verificación estricta del conteo después de cada etapa
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-18"}
+            resp_18, code_18 = pron_handler()
+        self.assertEqual(code_18, 200)
+        aud_18 = resp_18["auditoria_calendario_fecha"]
+        self.assertEqual(aud_18["partidos_oficiales"], 6)
+        self.assertEqual(aud_18["partidos_combinados"], 6)
+        self.assertEqual(aud_18["partidos_deduplicados"], 6)
+        self.assertEqual(aud_18["partidos_filtrados"], 6)
+        self.assertEqual(aud_18["partidos_enviados_al_frontend"], 6)
+        self.assertEqual(len(resp_18["destacados"]), 6)
+
+        equipos_18 = {(m["local"], m["visitante"]) for m in resp_18["destacados"]}
+        self.assertIn(("Flamengo", "Atlético Paranaense"), equipos_18)
+        self.assertIn(("Corinthians", "Botafogo"), equipos_18)
+        self.assertIn(("Coritiba", "Santos"), equipos_18)
+        self.assertIn(("Cruzeiro", "Palmeiras"), equipos_18)
+        self.assertIn(("Remo", "Chapecoense"), equipos_18)
+        self.assertIn(("Gremio", "Bahia"), equipos_18)
+
+        # Escenario 1b: Si el calendario manual tuviera solo 4 partidos y football-data.org aporta los 2 faltantes
+        manual_4 = [f for f in pred_app.ALL_FIXTURES_POOL if f.get("fecha") == "2026-11-18" and f.get("local") not in ("Remo", "Gremio")]
+        self.assertEqual(len(manual_4), 4)
+        fd_missing_2 = [
+            {"id": 99101, "homeTeam": {"name": "Clube do Remo"}, "awayTeam": {"name": "Chapecoense AF"}, "utcDate": "2026-11-18T23:00:00Z", "status": "SCHEDULED", "competition": {"code": "BSA", "name": "Campeonato Brasileiro Série A"}},
+            {"id": 99102, "homeTeam": {"name": "Grêmio FBPA"}, "awayTeam": {"name": "EC Bahia"}, "utcDate": "2026-11-19T00:30:00Z", "status": "SCHEDULED", "competition": {"code": "BSA", "name": "Campeonato Brasileiro Série A"}},
+        ]
+        aud_merged = pred_app.CalendarSyncService.audit_date_pipeline(
+            "2026-11-18",
+            manual_fixtures=manual_4,
+            fd_matches=fd_missing_2,
+        )
+        self.assertEqual(aud_merged["partidos_oficiales"], 6)
+        self.assertEqual(aud_merged["partidos_combinados"], 6)
+        self.assertEqual(aud_merged["partidos_deduplicados"], 6)
+        self.assertEqual(aud_merged["partidos_filtrados"], 6)
+        self.assertEqual(aud_merged["partidos_enviados_al_frontend"], 6)
+
+        # Escenario 2 y 3: Una fecha con más de 10 partidos (2026-11-21 tiene 27 partidos) repartidos entre varias ligas
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-21"}
+            resp_21, code_21 = pron_handler()
+        self.assertEqual(code_21, 200)
+        self.assertGreater(len(resp_21["destacados"]), 12)
+        ligas_21 = {m["codigo_liga"] for m in resp_21["destacados"]}
+        self.assertGreaterEqual(len(ligas_21), 5)
+        self.assertEqual(
+            resp_21["auditoria_calendario_fecha"]["partidos_filtrados"],
+            resp_21["auditoria_calendario_fecha"]["partidos_enviados_al_frontend"],
+        )
+        self.assertEqual(len(resp_21["destacados"]), resp_21["auditoria_calendario_fecha"]["partidos_enviados_al_frontend"])
+
+        # Escenario 4 y 5: Equipos con tildes y nombres alternativos + Partidos duplicados entre fuentes
+        dup_fd = [
+            {"id": 8801, "homeTeam": {"name": "Grêmio FBPA"}, "awayTeam": {"name": "EC Bahía"}, "utcDate": "2026-11-18T19:30:00Z", "status": "SCHEDULED"},
+            {"id": 8802, "homeTeam": {"name": "Clube do Remo"}, "awayTeam": {"name": "Chapecoense AF"}, "utcDate": "2026-11-18T18:00:00Z", "status": "SCHEDULED"},
+            {"id": 8803, "homeTeam": {"name": "CR Flamengo"}, "awayTeam": {"name": "Athletico-PR"}, "utcDate": "2026-11-18T18:30:00Z", "status": "SCHEDULED"},
+        ]
+        aud_dup = pred_app.CalendarSyncService.audit_date_pipeline(
+            "2026-11-18",
+            fd_matches=dup_fd,
+            external_unauthorized_fixtures=[{"local": "FakeA", "visitante": "FakeB", "fecha": "2026-11-18", "codigo_liga": "BSA", "proveedor": "highlightly"}],
+        )
+        self.assertEqual(aud_dup["partidos_combinados"], 9)
+        self.assertEqual(aud_dup["partidos_deduplicados"], 6)
+        self.assertEqual(aud_dup["partidos_filtrados"], 6)
+        self.assertEqual(aud_dup["partidos_enviados_al_frontend"], 6)
+        self.assertEqual(aud_dup["total_por_fuente"]["fuentes_externas_rechazadas"], 1)
+
+        # Escenario 6: Un partido sin estadísticas aparece primero en el calendario y luego se enriquece/modela
+        pred_app.VERIFIED_TEAM_HISTORY.pop("Remo", None)
+        pred_app.VERIFIED_TEAM_HISTORY.pop("Chapecoense", None)
+        pred_app.SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
+        pred_app.invalidate_calendar_caches(rebuild_pool=False)
+        flask_stub.request.args = {"fecha": "2026-11-18"}
+        resp_no_stats, _ = pron_handler()
+        remo_match = [m for m in resp_no_stats["destacados"] if m["local"] == "Remo" and m["visitante"] == "Chapecoense"]
+        self.assertEqual(len(remo_match), 1)
+        self.assertEqual(remo_match[0]["key_probabilities"]["avg_corners"]["tipo_dato"], "ESTIMADO_MODELO")
+
+        # Escenario 7: Cambio de fecha entre UTC (2026-11-19T00:30:00Z) y America/Lima (2026-11-18 19:30 PE)
+        f_prog, f_loc = pred_app.resolve_match_local_date({"fecha_utc": "2026-11-19T00:30:00Z"})
+        self.assertEqual(f_prog, "2026-11-19T00:30:00Z")
+        self.assertEqual(f_loc, "2026-11-18")
+
+        # Escenario 8: Paginación completa de la API (fetch_matches_paginated sin limit=4)
+        page1 = {"matches": [{"id": 1, "homeTeam": {"name": "Coritiba"}, "awayTeam": {"name": "Santos"}, "utcDate": "2026-11-18T22:30:00Z"}], "totalPages": 2}
+        page2 = {"matches": [{"id": 2, "homeTeam": {"name": "Remo"}, "awayTeam": {"name": "Chapecoense"}, "utcDate": "2026-11-18T23:00:00Z"}], "totalPages": 2}
+        with patch.object(pred_app.FootballDataOrgClient, "fetch_json", side_effect=[
+            {"ok": True, "data": page1, "status_code": 200},
+            {"ok": True, "data": page2, "status_code": 200},
+        ]) as mock_fj:
+            pag_res = pred_app.FootballDataOrgClient.fetch_matches_paginated("/competitions/BSA/matches", competition_code="BSA", params={"limit": 4})
+            self.assertTrue(pag_res["ok"])
+            self.assertEqual(pag_res["pages_fetched"], 2)
+            self.assertEqual(len(pag_res["matches"]), 2)
+            # Confirmar que limit=4 fue eliminado de los parámetros
+            first_call_params = mock_fj.call_args_list[0].kwargs.get("params")
+            self.assertIsNone(first_call_params)
+
+        # Escenario 9: Reinicio del servicio y recuperación del calendario + invalidación de caché
+        count_reloaded = pred_app.invalidate_calendar_caches(rebuild_pool=True)
+        self.assertGreaterEqual(count_reloaded, 598)
+        bsa_after_restart = [f for f in pred_app.ALL_FIXTURES_POOL if f.get("codigo_liga") == "BSA" and f.get("fecha") == "2026-11-18"]
+        self.assertEqual(len(bsa_after_restart), 6)
+
+        # Escenario 10: El frontend (index.html) no trunca con .slice(0, 12) ni [:4] y recibe todos los partidos del backend
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        self.assertNotIn("destacados.slice(0, 12)", html_content)
+        self.assertNotIn("pool.slice(0, 12)", html_content)
+        self.assertIn("destacados.forEach((d, idx) => {", html_content)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
