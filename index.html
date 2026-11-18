@@ -2285,11 +2285,11 @@
                     const arr = window.globalTodosPartidos[k] || [];
                     pool.push(...(fTarget ? arr.filter(x => x.fecha === fTarget) : arr));
                 }
-                destacados = pool.slice(0, 12);
+                destacados = pool;
             }
 
             const esVip = verificarEsVip();
-            const listaDestacados = destacados.slice(0, 12);
+            const listaDestacados = destacados;
             const badgeAlt = document.getElementById('badge-total-alternativos');
             if (badgeAlt) {
                 badgeAlt.innerText = esVip
@@ -2694,7 +2694,7 @@
                 `;
             }
             const esVipCarrusel = verificarEsVip();
-            destacados.slice(0, 12).forEach((d, idx) => {
+            destacados.forEach((d, idx) => {
                 const pick = d.pronostico_principal || {};
                 const stks = d.organizacion_stakazos || {};
                 const n1 = stks.nivel_1_base || {};
