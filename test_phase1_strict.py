@@ -385,7 +385,7 @@ class TestPhase1StrictDeliverable(unittest.TestCase):
             mock_worker.assert_not_called()
 
             # El worker solo se ejecuta cuando se invoca explícitamente
-            res = pred_app.MatchEnrichmentCache.enrich_calendar_worker(target_date="2026-11-15", limit=1)
+            res = pred_app.MatchEnrichmentCache.enrich_calendar_worker(target_date="2026-11-17", limit=1)
             self.assertEqual(res["procesados"], 1)
             self.assertEqual(mock_worker.call_count, 1)
 
