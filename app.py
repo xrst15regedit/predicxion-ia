@@ -78,6 +78,49 @@ def get_telegram_publication_date() -> str:
         now_pe = now_pe + timedelta(days=1)
     return now_pe.strftime("%Y-%m-%d")
 
+def get_disabled_competitions() -> set:
+    """Lee las competiciones deshabilitadas desde la variable de entorno DISABLED_COMPETITIONS (por defecto UNL)."""
+    raw = os.getenv("DISABLED_COMPETITIONS", "UNL")
+    return {c.strip().upper() for c in str(raw or "").split(",") if c.strip()}
+
+def is_competition_enabled(code: str = "", liga_name: str = "") -> bool:
+    """Retorna False si la competición está deshabilitada mediante DISABLED_COMPETITIONS."""
+    disabled = get_disabled_competitions()
+    if not disabled:
+        return True
+    c = str(code or "").strip().upper()
+    if c and c in disabled:
+        return False
+    l_low = str(liga_name or "").strip().lower()
+    if "UNL" in disabled and "nations league" in l_low:
+        return False
+    return True
+
+def resolve_match_local_date(fix: dict) -> tuple:
+    """
+    Separa explícitamente:
+      - fecha_programada: fecha/hora ISO programada oficial del fixture
+      - fecha_local_partido: fecha local del encuentro en America/Lima (YYYY-MM-DD)
+    Si el fixture trae una fecha_local_partido explícita, la respeta; si trae fecha_utc con hora,
+    la convierte a America/Lima (UTC-5) para evitar desfases de día por corte UTC.
+    """
+    if not isinstance(fix, dict):
+        return ("", "")
+    f_prog = str(fix.get("fecha_programada") or fix.get("fecha_utc") or fix.get("fecha") or "").strip()
+    if fix.get("fecha_local_partido") and re.match(r"^\d{4}-\d{2}-\d{2}$", str(fix.get("fecha_local_partido"))):
+        return (f_prog, str(fix.get("fecha_local_partido")))
+    if "T" in f_prog and (f_prog.endswith("Z") or "+" in f_prog[10:] or "-" in f_prog[10:]):
+        try:
+            dt_utc = datetime.fromisoformat(f_prog.replace("Z", "+00:00"))
+            if dt_utc.tzinfo is None:
+                dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+            dt_pe = dt_utc.astimezone(timezone(timedelta(hours=-5)))
+            return (f_prog, dt_pe.strftime("%Y-%m-%d"))
+        except Exception:
+            pass
+    f_plain = str(fix.get("fecha") or f_prog)[:10]
+    return (f_prog, f_plain)
+
 def normalizar_nombre_liga(raw_name):
     if not raw_name:
         return "Otras Ligas"
@@ -359,17 +402,20 @@ class Top3RotationManager:
         except Exception:
             dt_base = cls.now_peru()
         next_day = (dt_base + timedelta(days=1)).strftime("%Y-%m-%d")
-        pool = globals().get("ALL_FIXTURES_POOL") or []
+        pool = [
+            f for f in (globals().get("ALL_FIXTURES_POOL") or [])
+            if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+        ]
         if not pool:
             return next_day
-        if any((f.get("fecha_utc") or f.get("fecha") or "")[:10] == next_day for f in pool):
+        if any(resolve_match_local_date(f)[1] == next_day for f in pool):
             return next_day
         fechas_fut = sorted(
             list(
                 set(
-                    (f.get("fecha_utc") or f.get("fecha") or "")[:10]
+                    resolve_match_local_date(f)[1]
                     for f in pool
-                    if (f.get("fecha_utc") or f.get("fecha") or "")[:10] >= next_day
+                    if resolve_match_local_date(f)[1] >= next_day
                 )
             )
         )
@@ -496,8 +542,11 @@ class Top3RotationManager:
         """Cierra la jornada anterior y envía resultados verificados si los 3 partidos han concluido."""
         res_summary = {"fecha_cerrada": fecha_anterior, "picks_auditados": 0, "finalizados": 0, "resultados_enviados": False}
         try:
-            pool = globals().get("ALL_FIXTURES_POOL") or []
-            matches_prev = [f for f in pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == fecha_anterior]
+            pool = [
+                f for f in (globals().get("ALL_FIXTURES_POOL") or [])
+                if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+            ]
+            matches_prev = [f for f in pool if resolve_match_local_date(f)[1] == fecha_anterior]
             if not matches_prev or "_seleccionar_top3_verificado" not in globals():
                 return res_summary
             picks_prev = _seleccionar_top3_verificado(matches_prev, fecha_anterior, limit=3)
@@ -513,7 +562,7 @@ class Top3RotationManager:
                 )
                 if real_stats and real_stats.get("finished") and not real_stats.get("simulado"):
                     cal = SportsResultsAuditor.grade_prediction(p, real_stats)
-                    if cal.get("estado") in ("GANADA", "PERDIDA"):
+                    if cal.get("estado") in ("GANADA", "PERDIDA", "EMPATE"):
                         liquidados.append({
                             "partido": p.get("partido"),
                             "local": p.get("local"),
@@ -618,11 +667,17 @@ class Top3RotationManager:
                 logger.debug("Aviso enriquecimiento previo a rotación Top 3: %s", e_enr)
 
             # 3.3 Seleccionar partidos del día siguiente y recalcular Top 3 con datos actualizados
-            pool = globals().get("ALL_FIXTURES_POOL") or []
-            master_pool = globals().get("_EMBEDDED_MASTER_CALENDAR_CACHE") or pool
-            matches_day = [f for f in pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == fecha_partidos]
+            pool = [
+                f for f in (globals().get("ALL_FIXTURES_POOL") or [])
+                if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+            ]
+            master_pool = [
+                f for f in (globals().get("_EMBEDDED_MASTER_CALENDAR_CACHE") or pool)
+                if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+            ]
+            matches_day = [f for f in pool if resolve_match_local_date(f)[1] == fecha_partidos]
             if not matches_day:
-                matches_day = [dict(f) for f in master_pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == fecha_partidos]
+                matches_day = [dict(f) for f in master_pool if resolve_match_local_date(f)[1] == fecha_partidos]
 
             raw_items = _seleccionar_top3_verificado(matches_day, fecha_partidos, limit=3) if "_seleccionar_top3_verificado" in globals() else []
             clean_items = []
@@ -3462,7 +3517,9 @@ class MatchEnrichmentCache:
         procesados = 0
         con_discrepancia = 0
         for fix in fixtures:
-            f_str = str(fix.get("fecha_utc") or fix.get("fecha") or "")[:10]
+            if not is_competition_enabled(fix.get("codigo_liga", ""), fix.get("liga", "")):
+                continue
+            _, f_str = resolve_match_local_date(fix)
             if target_date and f_str != target_date[:10]:
                 continue
             rec = cls.enrich_match_worker(fix, ttl_seconds=ttl_seconds)
@@ -17549,8 +17606,25 @@ class CalendarSyncService:
                 if not h_fd or not a_fd or not f_fd:
                     continue
 
-                ckey_fd = cls.canonical_fixture_key(h_fd, a_fd, f_fd)
+                # Calcular fecha local en America/Lima para validar fecha, hora y zona horaria
+                _, f_fd_lima = resolve_match_local_date({"fecha_utc": utc_fd})
+                ckey_fd = cls.canonical_fixture_key(h_fd, a_fd, f_fd_lima or f_fd)
                 if ckey_fd in manual_by_key:
+                    m_fix = manual_by_key[ckey_fd]
+                    utc_man = str(m_fix.get("fecha_utc") or "")
+                    hora_man = utc_man[11:16] if len(utc_man) >= 16 else ""
+                    hora_fd = utc_fd[11:16] if len(utc_fd) >= 16 else ""
+                    if hora_man and hora_fd and hora_man != hora_fd:
+                        fechas_discrepantes.append({
+                            "id_partido": m_fix.get("id_partido"),
+                            "partido": f"{m_fix.get('local')} vs {m_fix.get('visitante')}",
+                            "fecha_manual": f_fd_lima or f_fd,
+                            "hora_manual_utc": hora_man,
+                            "fecha_football_data": f_fd,
+                            "hora_football_data_utc": hora_fd,
+                            "zona_horaria": "America/Lima (UTC-5)",
+                            "motivo": "desfase_hora_sin_mover_automaticamente",
+                        })
                     verificados += 1
                     with cls._LOCK:
                         cls._STATUS_OVERLAY[ckey_fd] = {
@@ -18780,24 +18854,118 @@ def _generar_acta_partido_realista(local: str, visitante: str, fecha_str: str, a
 
 def obtener_resultado_real_verificado(local: str, visitante: str, fecha_str: str, liga: str = "", fecha_utc_completa: str = "", an_data: dict = None) -> dict:
     """
-    Obtiene resultados reales verificados exclusivamente desde _VERIFIED_RESULTS_CACHE
-    (alimentado por football-data.org y actas oficiales reales).
-    Nunca ingresa ni devuelve actas simuladas.
+    Obtiene resultados reales verificados para la fecha dada:
+    1) Caché verificado `_VERIFIED_RESULTS_CACHE` (sin actas simuladas).
+    2) Si la fecha ya pasó o es hoy (`fecha_dia <= hoy_pe`) y no está finalizado en caché,
+       consulta en cascada las fuentes reales disponibles: football-data.org, Highlightly, SofaScore y ESPN.
+    Nunca adelanta resultados de fechas futuras ni inventa marcadores.
     """
-    loc_n = _norm_equipo(local) if "_norm_equipo" in globals() else (local or "").lower().strip()
-    vis_n = _norm_equipo(visitante) if "_norm_equipo" in globals() else (visitante or "").lower().strip()
-    cache_key = ((fecha_str or "")[:10], loc_n, vis_n)
+    fecha_dia = str(fecha_str or "")[:10]
+    if not local or not visitante or not fecha_dia:
+        return {"finished": False}
+
+    loc_n = _norm_equipo(local) if "_norm_equipo" in globals() else local.lower().strip()
+    vis_n = _norm_equipo(visitante) if "_norm_equipo" in globals() else visitante.lower().strip()
+    cache_key = (fecha_dia, loc_n, vis_n)
 
     if cache_key in _VERIFIED_RESULTS_CACHE:
         entry = _VERIFIED_RESULTS_CACHE[cache_key]
-        if not entry.get("simulado", False):
+        if not entry.get("simulado", False) and entry.get("finished"):
             return entry
 
-    # Búsqueda flexible por alias dentro de _VERIFIED_RESULTS_CACHE para la fecha dada
     for (f_c, h_c, a_c), entry in _VERIFIED_RESULTS_CACHE.items():
-        if str(f_c)[:10] == (fecha_str or "")[:10] and not entry.get("simulado", False):
+        if str(f_c)[:10] == fecha_dia and not entry.get("simulado", False) and entry.get("finished"):
             if matches_team_alias(local, h_c) and matches_team_alias(visitante, a_c):
                 return entry
+
+    # Nunca consultar resultados finales de partidos futuros respecto a la fecha operativa actual
+    hoy_pe = get_current_operational_date()
+    if fecha_dia > hoy_pe:
+        return {"finished": False}
+
+    # Cascada de fuentes reales disponibles (solo si ya pasó o es hoy)
+    def _save_verified(res_dict: dict, src_name: str):
+        if not res_dict or not res_dict.get("finished"):
+            return None
+        sh = res_dict.get("score_home")
+        sa = res_dict.get("score_away")
+        if sh is None or sa is None:
+            return None
+        payload = {
+            "finished": True,
+            "simulado": False,
+            "competicion": liga or res_dict.get("competicion") or "Competición Oficial",
+            "score_home": int(sh),
+            "score_away": int(sa),
+            "corners_home": res_dict.get("corners_home"),
+            "corners_away": res_dict.get("corners_away"),
+            "corners_total": res_dict.get("corners_total"),
+            "cards_home": res_dict.get("cards_home"),
+            "cards_away": res_dict.get("cards_away"),
+            "cards_total": res_dict.get("cards_total"),
+            "yellow_cards": res_dict.get("yellow_cards"),
+            "red_cards": res_dict.get("red_cards"),
+            "shots_home": res_dict.get("shots_home"),
+            "shots_away": res_dict.get("shots_away"),
+            "shots_on_target_home": res_dict.get("shots_on_target_home"),
+            "shots_on_target_away": res_dict.get("shots_on_target_away"),
+            "source": src_name,
+        }
+        _VERIFIED_RESULTS_CACHE[cache_key] = payload
+        return payload
+
+    # 1. football-data.org (si hay API key configurada)
+    if "FootballDataOrgClient" in globals() and FootballDataOrgClient._get_api_key():
+        try:
+            fd_res = FootballDataOrgClient.fetch_json(
+                "/matches",
+                params={"dateFrom": fecha_dia, "dateTo": fecha_dia},
+                ttl_seconds=900,
+                timeout_sec=8,
+            )
+            if fd_res.get("ok") and fd_res.get("data"):
+                for m in (fd_res["data"].get("matches") or []):
+                    if str(m.get("status") or "").upper() != "FINISHED":
+                        continue
+                    h_fd = (m.get("homeTeam") or {}).get("name", "")
+                    a_fd = (m.get("awayTeam") or {}).get("name", "")
+                    if matches_team_alias(local, h_fd) and matches_team_alias(visitante, a_fd):
+                        ft = (m.get("score") or {}).get("fullTime") or {}
+                        saved = _save_verified({"finished": True, "score_home": ft.get("home"), "score_away": ft.get("away")}, "football-data.org")
+                        if saved:
+                            return saved
+        except Exception as e_fd:
+            logger.debug("Aviso football-data result lookup: %s", e_fd)
+
+    # 2. Highlightly
+    if "HighlightlyFootballClient" in globals() and HighlightlyFootballClient._get_api_key():
+        try:
+            hl_st = HighlightlyFootballClient.fetch_match_stats(local, visitante, fecha_dia, ttl_seconds=900)
+            saved = _save_verified(hl_st, "highlightly")
+            if saved:
+                return saved
+        except Exception as e_hl:
+            logger.debug("Aviso Highlightly result lookup: %s", e_hl)
+
+    # 3. SofaScore
+    if "SofascoreLiveService" in globals():
+        try:
+            sf_st = SofascoreLiveService.fetch_match_stats(local, visitante, fecha_dia)
+            saved = _save_verified(sf_st, "SofaScore")
+            if saved:
+                return saved
+        except Exception as e_sf:
+            logger.debug("Aviso SofaScore result lookup: %s", e_sf)
+
+    # 4. ESPN
+    if "ESPNLiveService" in globals():
+        try:
+            es_st = ESPNLiveService.fetch_match_stats(local, visitante, fecha_dia, liga=liga)
+            saved = _save_verified(es_st, "ESPN")
+            if saved:
+                return saved
+        except Exception as e_es:
+            logger.debug("Aviso ESPN result lookup: %s", e_es)
 
     return {"finished": False}
 
@@ -19011,6 +19179,15 @@ class SportsResultsAuditor:
             win_ok = cls._check_1x2_winner(sel, local_name, away_name, score_home, score_away)
             estado = "GANADA" if win_ok else "PERDIDA"
             resultado_str = f"{score_home} - {score_away} (Final)"
+
+        if estado == "PENDIENTE" and ("sin empate" in sel or "dnb" in sel or "empate no válido" in sel):
+            if score_home == score_away:
+                estado = "EMPATE"
+                resultado_str = f"{score_home} - {score_away} (Empate / Devolución)"
+            else:
+                fav_win = cls._check_1x2_winner(sel, local_name, away_name, score_home, score_away)
+                estado = "GANADA" if fav_win else "PERDIDA"
+                resultado_str = f"{score_home} - {score_away} (Final)"
 
         return {
             "estado": estado,
@@ -20847,6 +21024,21 @@ def get_team_logo(team_name, team_id=None, competition_code=None) -> dict:
         return out
 
 
+def preload_active_team_logos() -> int:
+    """Precarga en team_logos todos los equipos de las competiciones activas sin llamadas HTTP externas."""
+    _ensure_team_logos_loaded()
+    pool = globals().get("ALL_FIXTURES_POOL") or []
+    count = 0
+    for fix in pool:
+        if not is_competition_enabled(fix.get("codigo_liga", ""), fix.get("liga", "")):
+            continue
+        for t_field in ("local", "visitante"):
+            t_name = str(fix.get(t_field) or "").strip()
+            if t_name:
+                get_team_logo(t_name, competition_code=fix.get("codigo_liga"))
+                count += 1
+    return count
+
 def _attach_match_logos(item_dict: dict, local_name: str = None, away_name: str = None, competition_code: str = None) -> dict:
     """Añade logo_local, logo_visitante, fallback_logo_local y fallback_logo_visitante a cualquier respuesta de partido."""
     if not isinstance(item_dict, dict):
@@ -20897,6 +21089,8 @@ def actualizar_ratings_reales(descargar=None):
 
     for cod_interno, fd_code in FootballDataOrgClient.COMPETITION_CODE_MAP.items():
         liga_nombre = FootballDataOrgClient.COMPETITION_NAMES.get(cod_interno, cod_interno)
+        if not is_competition_enabled(cod_interno, liga_nombre):
+            continue
         antes = len(partidos)
         try:
             if descargar is not None:
@@ -21073,19 +21267,23 @@ _FIXTURES_DATES_SORTED = []
 _FIXTURES_INDEX_SIG = None
 
 def ensure_fixtures_date_index(force: bool = False):
-    """Pre-normaliza nombres de equipos y agrupa ALL_FIXTURES_POOL por fecha una sola vez."""
+    """Pre-normaliza nombres de equipos y agrupa ALL_FIXTURES_POOL por fecha local oficial (America/Lima) excluyendo competiciones deshabilitadas."""
     global _FIXTURES_BY_DATE_INDEX, _FIXTURES_DATES_SORTED, _FIXTURES_INDEX_SIG
     pool = globals().get("ALL_FIXTURES_POOL") or []
-    sig = (len(pool), id(pool))
+    disabled_sig = tuple(sorted(get_disabled_competitions()))
+    sig = (len(pool), id(pool), disabled_sig)
     if not force and _FIXTURES_INDEX_SIG == sig:
         return
     by_date = {}
     seen_global = set()
     for fix in pool:
-        f_utc = fix.get("fecha_utc") or fix.get("fecha") or ""
-        fecha_dia = str(f_utc)[:10]
+        if not is_competition_enabled(fix.get("codigo_liga", ""), fix.get("liga", "")):
+            continue
+        f_prog, fecha_dia = resolve_match_local_date(fix)
         if not fecha_dia:
             continue
+        fix["fecha_programada"] = f_prog
+        fix["fecha_local_partido"] = fecha_dia
         loc = (fix.get("local") or "").strip()
         vis = (fix.get("visitante") or "").strip()
         if "_local_norm" not in fix:
@@ -21109,6 +21307,7 @@ def ensure_fixtures_date_index(force: bool = False):
 try:
     ensure_fixtures_date_index(force=True)
     SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
+    preload_active_team_logos()
 except Exception:
     pass
 
@@ -21525,7 +21724,7 @@ def ejecutar_envio_automatico_resultados_top5(target_date: str, picks_liquidados
     if not picks_top3 or esperados == 0:
         return False, "No existen selecciones verificadas del Top 3 para liquidar."
 
-    finalizados = [p for p in picks_top3 if p.get("estado") in ("GANADA", "PERDIDA") and p.get("verificado", True)]
+    finalizados = [p for p in picks_top3 if p.get("estado") in ("GANADA", "PERDIDA", "EMPATE") and p.get("verificado", True)]
     if not force and len(finalizados) < esperados:
         return False, f"Faltan partidos por finalizar ({len(finalizados)}/{esperados} completados)."
     if not finalizados:
@@ -22126,7 +22325,7 @@ def create_app() -> Flask:
             today_str = get_current_operational_date()
             req_fecha = request.args.get("fecha", "").strip()
             target_featured_date = req_fecha if req_fecha else today_str
-            cache_key = f"{target_featured_date}"
+            cache_key = f"{target_featured_date}|{chr(44).join(sorted(get_disabled_competitions()))}"
 
             now_ts = time.time()
             if cache_key in _CARTELERA_MEMO_CACHE and (now_ts - _CARTELERA_MEMO_TS.get(cache_key, 0)) < 300:
@@ -22150,11 +22349,14 @@ def create_app() -> Flask:
                 d for d in _FIXTURES_DATES_SORTED
                 if today_str <= d <= active_end_date
             ]
+            if req_fecha and req_fecha in _FIXTURES_BY_DATE_INDEX and req_fecha not in fechas_activas:
+                fechas_activas = sorted(fechas_activas + [req_fecha])
             matches_hoy = list(_FIXTURES_BY_DATE_INDEX.get(target_featured_date, []))
             hay_partidos_hoy = len(matches_hoy) > 0
+            # Si el usuario pide una fecha explícita (?fecha=YYYY-MM-DD), respetar esa fecha exacta
+            # y nunca rellenar ese día con partidos de días posteriores (ej. 20 o 21 dentro del 17).
             fecha_mostrada_destacados = target_featured_date
-
-            if not hay_partidos_hoy:
+            if not req_fecha and not hay_partidos_hoy:
                 fechas_fut = [d for d in fechas_activas if d >= target_featured_date]
                 if fechas_fut:
                     fecha_mostrada_destacados = fechas_fut[0]
@@ -22176,8 +22378,9 @@ def create_app() -> Flask:
                         partidos_fallidos += 1
                         logger.warning("fixture descartado: equipos incompletos")
                         continue
-                    f_utc = str(fix.get("fecha_utc") or "")
-                    fecha_dia_solo = f_utc[:10] or fecha_mostrada_destacados
+                    f_prog, fecha_dia_solo = resolve_match_local_date(fix)
+                    f_utc = f_prog or str(fix.get("fecha_utc") or "")
+                    fecha_dia_solo = fecha_dia_solo or fecha_mostrada_destacados
                     div_name = fix.get("_liga_norm") or normalizar_nombre_liga(fix.get("liga") or "Otras Ligas")
                     fix["liga"] = div_name
 
@@ -22203,6 +22406,10 @@ def create_app() -> Flask:
                         "liga": div_name,
                         "codigo_liga": fix.get("codigo_liga", "OFL"),
                         "fecha": fecha_dia_solo,
+                        "fecha_programada": f_utc,
+                        "fecha_local_partido": fecha_dia_solo,
+                        "fecha_publicacion": Top3RotationManager._STATE.get("fecha_publicacion") or get_telegram_publication_date(),
+                        "fecha_rotacion": Top3RotationManager._STATE.get("fecha_rotacion"),
                         "hora_utc": (f_utc[11:16] if len(f_utc) >= 16 else "14:00"),
                         "estado": fix.get("estado", "SCHEDULED"),
                         "estado_calendario": CalendarSyncService.get_fixture_overlay(fix),
@@ -22268,10 +22475,14 @@ def create_app() -> Flask:
                 total_partidos, len(todos), fecha_mostrada_destacados, elapsed_ms, consultas_cache, recorridos_hist
             )
 
+            rot_st = Top3RotationManager.get_status_report()
             res_cartelera = {
                 "success": True,
                 "total_partidos": total_partidos,
                 "fecha_actual": today_str,
+                "fecha_publicacion": rot_st.get("fecha_publicacion") or get_telegram_publication_date(),
+                "fecha_rotacion": rot_st.get("fecha_rotacion"),
+                "competiciones_deshabilitadas": sorted(list(get_disabled_competitions())),
                 "hay_partidos_hoy": hay_partidos_hoy,
                 "fecha_activa_destacados": fecha_mostrada_destacados,
                 "mensaje_jornada": mensaje_jornada,
@@ -22652,10 +22863,17 @@ def create_app() -> Flask:
             else:
                 target_date = pub_match_date
 
-            master_pool = _EMBEDDED_MASTER_CALENDAR_CACHE or ALL_FIXTURES_POOL
-            matches_day = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
+            active_pool = [
+                f for f in ALL_FIXTURES_POOL
+                if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+            ]
+            master_pool = [
+                f for f in (_EMBEDDED_MASTER_CALENDAR_CACHE or active_pool)
+                if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+            ]
+            matches_day = [f for f in active_pool if resolve_match_local_date(f)[1] == target_date]
             if not matches_day:
-                matches_day = [dict(f) for f in master_pool if (f.get("fecha_utc") or f.get("fecha") or "")[:10] == target_date]
+                matches_day = [dict(f) for f in master_pool if resolve_match_local_date(f)[1] == target_date]
 
             limite_top = min(3, max(1, int(request.args.get("limit", 3))))
             top3_list = _seleccionar_top3_verificado(matches_day, target_date, limit=limite_top)
@@ -22665,7 +22883,7 @@ def create_app() -> Flask:
 
             rot_status = Top3RotationManager.get_status_report()
             _, active_end_win = get_active_calendar_window()
-            all_cal_dates = sorted(list(set((f.get("fecha_utc") or "")[:10] for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] >= "2026-10-12")))
+            all_cal_dates = sorted(list(set(resolve_match_local_date(f)[1] for f in active_pool if resolve_match_local_date(f)[1] >= "2026-10-12")))
             avail_dates = [d for d in all_cal_dates if "2026-10-12" <= d <= active_end_win]
             if target_date not in avail_dates and target_date >= "2026-10-12":
                 avail_dates = sorted(avail_dates + [target_date])
@@ -22673,8 +22891,12 @@ def create_app() -> Flask:
             return jsonify({
                 "success": True,
                 "fecha": target_date,
+                "fecha_local_partido": target_date,
+                "fecha_programada": target_date,
                 "fecha_partidos_publicada": pub_match_date,
                 "fecha_actual_peru": today_str,
+                "fecha_publicacion": Top3RotationManager._STATE.get("fecha_publicacion") or get_telegram_publication_date(),
+                "fecha_rotacion": Top3RotationManager._STATE.get("fecha_rotacion"),
                 "fecha_publicacion_22pe": get_telegram_publication_date(),
                 "idempotency_key": rot_status.get("idempotency_key"),
                 "ultima_rotacion": rot_status.get("ultima_rotacion"),
@@ -22868,7 +23090,11 @@ def create_app() -> Flask:
 
     def _construir_top5_de_fecha(target_date: str) -> list:
         """Obtiene hasta 3 selecciones verificadas para `target_date` (nunca usa históricos hardcodeados)."""
-        matches_fecha = [f for f in ALL_FIXTURES_POOL if (f.get("fecha_utc") or "")[:10] == target_date]
+        matches_fecha = [
+            f for f in ALL_FIXTURES_POOL
+            if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+            and resolve_match_local_date(f)[1] == target_date
+        ]
         if not matches_fecha:
             return []
         return _seleccionar_top3_verificado(matches_fecha, target_date, limit=3)
@@ -22901,7 +23127,7 @@ def create_app() -> Flask:
                 sel_check = str(saved_d.get("seleccion") or item.get("seleccion") or "").lower()
                 res_check = str(saved_d.get("resultado") or "")
                 es_prop_mal_guardado = ("tiros" in sel_check or "disparos" in sel_check) and ("(Final)" in res_check or " - " in res_check)
-                if not es_prop_mal_guardado and saved_d.get("estado") in ("GANADA", "PERDIDA") and str(saved_d.get("fuente_resultado") or "").startswith(("SofaScore", "ESPN", "Serie A", "LaLiga", "Bundesliga", "Premier", "UEFA")):
+                if not es_prop_mal_guardado and saved_d.get("estado") in ("GANADA", "PERDIDA", "EMPATE") and str(saved_d.get("fuente_resultado") or "").startswith(("SofaScore", "ESPN", "Serie A", "LaLiga", "Bundesliga", "Premier", "UEFA")):
                     resultados_auditados.append({
                         "id": saved_id,
                         "fecha": fecha_str,
@@ -22939,8 +23165,8 @@ def create_app() -> Flask:
                 "cuota": item["cuota"],
                 "resultado": resultado_texto,
                 "estado": estado_final,
-                "verificado": (estado_final in ("GANADA", "PERDIDA")),
-                "fuente_resultado": ((real_stats or {}).get("source") if estado_final in ("GANADA", "PERDIDA") else None)
+                "verificado": (estado_final in ("GANADA", "PERDIDA", "EMPATE")),
+                "fuente_resultado": ((real_stats or {}).get("source") if estado_final in ("GANADA", "PERDIDA", "EMPATE") else None)
             }
             resultados_auditados.append(registro)
 
@@ -22951,7 +23177,7 @@ def create_app() -> Flask:
                     pass
 
             # Guardar automáticamente en Firestore cuando ya tiene calificación definitiva
-            if db and estado_final in ("GANADA", "PERDIDA"):
+            if db and estado_final in ("GANADA", "PERDIDA", "EMPATE"):
                 try:
                     db.collection("auditoria_picks").document(doc_id).set({
                         **registro,
@@ -22971,11 +23197,11 @@ def create_app() -> Flask:
                 hoy = get_current_operational_date()
                 ayer = (datetime.strptime(hoy, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
                 res_ayer = _auditar_y_liquidar_fecha(ayer)
-                if len(res_ayer) >= 1 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_ayer):
+                if len(res_ayer) >= 1 and all(r.get("estado") in ("GANADA", "PERDIDA", "EMPATE") for r in res_ayer):
                     ejecutar_envio_automatico_resultados_top5(ayer, res_ayer, force=False, motivo="AUTO_CIERRE_JORNADA")
 
                 res_hoy = _auditar_y_liquidar_fecha(hoy)
-                if len(res_hoy) >= 1 and all(r.get("estado") in ("GANADA", "PERDIDA") for r in res_hoy):
+                if len(res_hoy) >= 1 and all(r.get("estado") in ("GANADA", "PERDIDA", "EMPATE") for r in res_hoy):
                     ejecutar_envio_automatico_resultados_top5(hoy, res_hoy, force=False, motivo="AUTO_3_PARTIDOS_FINALIZADOS")
             except Exception as ex_aud:
                 logger.debug("Ciclo auto-auditoría: %s", ex_aud)
@@ -23006,7 +23232,7 @@ def create_app() -> Flask:
         else:
             # Verificar primero si el Top 3 de HOY ya concluyó
             picks_hoy = _auditar_y_liquidar_fecha(op_date)
-            liquidados_hoy = [p for p in picks_hoy if p["estado"] in ("GANADA", "PERDIDA")]
+            liquidados_hoy = [p for p in picks_hoy if p["estado"] in ("GANADA", "PERDIDA", "EMPATE")]
 
             # Si al menos 4 de los 3 partidos del Top 3 de hoy ya finalizaron, rotar automáticamente al historial de HOY
             if len(picks_hoy) > 0 and len(liquidados_hoy) >= 4:
@@ -23029,7 +23255,7 @@ def create_app() -> Flask:
                             break
 
         historial = historial[:5]
-        liquidados = [h for h in historial if h["estado"] in ("GANADA", "PERDIDA")]
+        liquidados = [h for h in historial if h["estado"] in ("GANADA", "PERDIDA", "EMPATE")]
         total_liq = len(liquidados)
         ganadas = sum(1 for h in liquidados if h["estado"] == "GANADA")
         perdidas = sum(1 for h in liquidados if h["estado"] == "PERDIDA")
@@ -24162,7 +24388,7 @@ def create_app() -> Flask:
             body = request.get_json(silent=True) or {}
             target_date = body.get("fecha") or get_current_operational_date()
             resultados = _auditar_y_liquidar_fecha(target_date)
-            liquidados = sum(1 for r in resultados if r["estado"] in ("GANADA", "PERDIDA"))
+            liquidados = sum(1 for r in resultados if r["estado"] in ("GANADA", "PERDIDA", "EMPATE"))
             return jsonify({
                 "success": True,
                 "fecha": target_date,
