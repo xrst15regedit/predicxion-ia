@@ -1892,18 +1892,18 @@
                     avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1)
                 },
                 avg_corners: {
-                    val: (!cornersInsuf && avgCornersVal != null) ? avgCornersVal.toFixed(1) : (kp.avg_corners?.valor != null ? `${parseFloat(kp.avg_corners.valor).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    val: (!cornersInsuf && avgCornersVal != null) ? avgCornersVal.toFixed(1) : (kp.avg_corners?.valor != null ? `${parseFloat(kp.avg_corners.valor).toFixed(1)}` : 'No estimable'),
                     num: (!cornersInsuf && avgCornersVal != null) ? avgCornersVal : (kp.avg_corners?.valor != null ? parseFloat(kp.avg_corners.valor) : 0),
-                    home: (!cornersInsuf && cornersH != null) ? cornersH.toFixed(1) : (kp.avg_corners?.home_modelado != null ? `${parseFloat(kp.avg_corners.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
-                    away: (!cornersInsuf && cornersA != null) ? cornersA.toFixed(1) : (kp.avg_corners?.away_modelado != null ? `${parseFloat(kp.avg_corners.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    home: (!cornersInsuf && cornersH != null) ? cornersH.toFixed(1) : (kp.avg_corners?.home_modelado != null ? `${parseFloat(kp.avg_corners.home_modelado).toFixed(1)}` : 'No estimable'),
+                    away: (!cornersInsuf && cornersA != null) ? cornersA.toFixed(1) : (kp.avg_corners?.away_modelado != null ? `${parseFloat(kp.avg_corners.away_modelado).toFixed(1)}` : 'No estimable'),
                     tipo_dato: kp.avg_corners?.tipo_dato || (!cornersInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     avg: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners).toFixed(1),
                     avgNum: parseFloat(kp.avg_corners?.league_avg ?? lAvg.corners),
-                    rec: !cornersInsuf ? recCorners : (kp.avg_corners?.valor != null ? `${kp.avg_corners.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    rec: !cornersInsuf ? recCorners : (kp.avg_corners?.valor != null ? `${kp.avg_corners.recommended_modelado || 'Proyección'}` : 'Sin base suficiente para estimar'),
                     prob: !cornersInsuf ? probCorners : (kp.avg_corners?.prob_pct_modelado || 0)
                 },
                 cards_totals: {
-                    rec: !cardsInsuf ? recCards : (kp.avg_cards?.valor != null ? `${kp.avg_cards.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    rec: !cardsInsuf ? recCards : (kp.avg_cards?.valor != null ? `${kp.avg_cards.recommended_modelado || 'Proyección'}` : 'Sin base suficiente para estimar'),
                     prob: !cardsInsuf ? probCards : (kp.avg_cards?.prob_pct_modelado || 0),
                     over_35: over35Cards, under_45: under45Cards,
                     avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
@@ -1912,10 +1912,10 @@
                     refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO"
                 },
                 avg_cards: {
-                    val: (!cardsInsuf && avgCardsVal != null) ? avgCardsVal.toFixed(2) : (kp.avg_cards?.valor != null ? `${parseFloat(kp.avg_cards.valor).toFixed(2)} (Estimación del modelo)` : 'No estimable'),
+                    val: (!cardsInsuf && avgCardsVal != null) ? avgCardsVal.toFixed(2) : (kp.avg_cards?.valor != null ? `${parseFloat(kp.avg_cards.valor).toFixed(2)}` : 'No estimable'),
                     num: (!cardsInsuf && avgCardsVal != null) ? avgCardsVal : (kp.avg_cards?.valor != null ? parseFloat(kp.avg_cards.valor) : 0),
-                    home: (!cardsInsuf && cardsH != null) ? cardsH.toFixed(1) : (kp.avg_cards?.home_modelado != null ? `${parseFloat(kp.avg_cards.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
-                    away: (!cardsInsuf && cardsA != null) ? cardsA.toFixed(1) : (kp.avg_cards?.away_modelado != null ? `${parseFloat(kp.avg_cards.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    home: (!cardsInsuf && cardsH != null) ? cardsH.toFixed(1) : (kp.avg_cards?.home_modelado != null ? `${parseFloat(kp.avg_cards.home_modelado).toFixed(1)}` : 'No estimable'),
+                    away: (!cardsInsuf && cardsA != null) ? cardsA.toFixed(1) : (kp.avg_cards?.away_modelado != null ? `${parseFloat(kp.avg_cards.away_modelado).toFixed(1)}` : 'No estimable'),
                     tipo_dato: kp.avg_cards?.tipo_dato || (!cardsInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     provH: parseFloat(kp.avg_cards?.provoked_home ?? cardsA ?? 0).toFixed(1),
                     provA: parseFloat(kp.avg_cards?.provoked_away ?? cardsH ?? 0).toFixed(1),
@@ -1924,30 +1924,30 @@
                     refProfile: kp.avg_cards?.referee_profile || item.arbitro_designado?.perfil || item.parametros_xg?.referee_profile || "EQUILIBRADO",
                     avg: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards).toFixed(1),
                     avgNum: parseFloat(kp.avg_cards?.league_avg ?? lAvg.cards),
-                    rec: !cardsInsuf ? recCards : (kp.avg_cards?.valor != null ? `${kp.avg_cards.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    rec: !cardsInsuf ? recCards : (kp.avg_cards?.valor != null ? `${kp.avg_cards.recommended_modelado || 'Proyección'}` : 'Sin base suficiente para estimar'),
                     prob: !cardsInsuf ? probCards : (kp.avg_cards?.prob_pct_modelado || 0)
                 },
                 avg_shots: {
-                    val: !shotsInsuf ? avgShotsVal.toFixed(1) : (kp.avg_shots?.valor != null ? `${parseFloat(kp.avg_shots.valor).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    val: !shotsInsuf ? avgShotsVal.toFixed(1) : (kp.avg_shots?.valor != null ? `${parseFloat(kp.avg_shots.valor).toFixed(1)}` : 'No estimable'),
                     num: !shotsInsuf ? avgShotsVal : (kp.avg_shots?.valor != null ? parseFloat(kp.avg_shots.valor) : 0),
-                    home: !shotsInsuf ? shotsH.toFixed(1) : (kp.avg_shots?.home_modelado != null ? `${parseFloat(kp.avg_shots.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
-                    away: !shotsInsuf ? shotsA.toFixed(1) : (kp.avg_shots?.away_modelado != null ? `${parseFloat(kp.avg_shots.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    home: !shotsInsuf ? shotsH.toFixed(1) : (kp.avg_shots?.home_modelado != null ? `${parseFloat(kp.avg_shots.home_modelado).toFixed(1)}` : 'No estimable'),
+                    away: !shotsInsuf ? shotsA.toFixed(1) : (kp.avg_shots?.away_modelado != null ? `${parseFloat(kp.avg_shots.away_modelado).toFixed(1)}` : 'No estimable'),
                     tipo_dato: kp.avg_shots?.tipo_dato || (!shotsInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     avg: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots).toFixed(1),
                     avgNum: parseFloat(kp.avg_shots?.league_avg ?? lAvg.shots),
-                    rec: !shotsInsuf ? recShots : (kp.avg_shots?.valor != null ? `${kp.avg_shots.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    rec: !shotsInsuf ? recShots : (kp.avg_shots?.valor != null ? `${kp.avg_shots.recommended_modelado || 'Proyección'}` : 'Sin base suficiente para estimar'),
                     prob: !shotsInsuf ? probShots : (kp.avg_shots?.prob_pct_modelado || 0),
                     insuficiente: shotsInsuf
                 },
                 avg_shots_ot: {
-                    val: !shotsOTInsuf ? avgShotsOTVal.toFixed(1) : (kp.avg_shots_on_target?.valor != null ? `${parseFloat(kp.avg_shots_on_target.valor).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    val: !shotsOTInsuf ? avgShotsOTVal.toFixed(1) : (kp.avg_shots_on_target?.valor != null ? `${parseFloat(kp.avg_shots_on_target.valor).toFixed(1)}` : 'No estimable'),
                     num: !shotsOTInsuf ? avgShotsOTVal : (kp.avg_shots_on_target?.valor != null ? parseFloat(kp.avg_shots_on_target.valor) : 0),
-                    home: !shotsOTInsuf ? shotsOTH.toFixed(1) : (kp.avg_shots_on_target?.home_modelado != null ? `${parseFloat(kp.avg_shots_on_target.home_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
-                    away: !shotsOTInsuf ? shotsOTA.toFixed(1) : (kp.avg_shots_on_target?.away_modelado != null ? `${parseFloat(kp.avg_shots_on_target.away_modelado).toFixed(1)} (Estimación del modelo)` : 'No estimable'),
+                    home: !shotsOTInsuf ? shotsOTH.toFixed(1) : (kp.avg_shots_on_target?.home_modelado != null ? `${parseFloat(kp.avg_shots_on_target.home_modelado).toFixed(1)}` : 'No estimable'),
+                    away: !shotsOTInsuf ? shotsOTA.toFixed(1) : (kp.avg_shots_on_target?.away_modelado != null ? `${parseFloat(kp.avg_shots_on_target.away_modelado).toFixed(1)}` : 'No estimable'),
                     tipo_dato: kp.avg_shots_on_target?.tipo_dato || (!shotsOTInsuf ? 'VERIFICADO' : 'ESTIMADO_MODELO'),
                     avg: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target).toFixed(1),
                     avgNum: parseFloat(kp.avg_shots_on_target?.league_avg ?? lAvg.shots_on_target),
-                    rec: !shotsOTInsuf ? recShotsOT : (kp.avg_shots_on_target?.valor != null ? `${kp.avg_shots_on_target.recommended_modelado || 'Estimación del modelo'} (Estimación del modelo)` : 'Sin base suficiente para estimar'),
+                    rec: !shotsOTInsuf ? recShotsOT : (kp.avg_shots_on_target?.valor != null ? `${kp.avg_shots_on_target.recommended_modelado || 'Proyección'}` : 'Sin base suficiente para estimar'),
                     prob: !shotsOTInsuf ? probShotsOT : (kp.avg_shots_on_target?.prob_pct_modelado || 0),
                     insuficiente: shotsOTInsuf
                 }
@@ -2049,7 +2049,7 @@
                 },
                 {
                     cat: 'corners',
-                    title: 'Promedio de Córners',
+                    title: 'Promedio de córners',
                     badge: `PROYECCIÓN: ${m.avg_corners.val} CÓRNERS`,
                     badgeColor: 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
                     icon: `<i class="fa-solid fa-flag text-cyan-400 text-lg"></i>`,
@@ -2081,7 +2081,7 @@
                 },
                 {
                     cat: 'cards',
-                    title: 'Promedio de Tarjetas',
+                    title: 'Promedio de tarjetas',
                     badge: `ÁRBITRO ${m.avg_cards.refProfile}: ${m.avg_cards.refAvg}/P`,
                     badgeColor: m.avg_cards.refProfile === 'ESTRICTO' ? 'bg-rose-500/15 text-rose-300 border-rose-500/40' : (m.avg_cards.refProfile === 'LIBERAL' ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40'),
                     icon: `<i class="fa-solid fa-clone text-amber-400 text-lg"></i>`,
@@ -2098,7 +2098,7 @@
                 // 4. REMATES (2 Tarjetas Separadas)
                 {
                     cat: 'shots',
-                    title: 'Promedio de Remates Totales',
+                    title: 'Promedio de remates',
                     badge: `${m.avg_shots.rec.toUpperCase()} (${m.avg_shots.prob}%)`,
                     badgeColor: 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
                     icon: `<i class="fa-solid fa-crosshairs text-slate-300 text-lg"></i>`,
@@ -2113,7 +2113,7 @@
                 },
                 {
                     cat: 'shots',
-                    title: 'Promedio de Tiros a Puerta',
+                    title: 'Promedio de tiros a puerta',
                     badge: `${m.avg_shots_ot.rec.toUpperCase()} (${m.avg_shots_ot.prob}%)`,
                     badgeColor: 'bg-emerald-500/15 text-[#00e676] border-emerald-500/40',
                     icon: `<i class="fa-solid fa-bullseye text-[#00e676] text-lg"></i>`,
@@ -2258,13 +2258,23 @@
 
             let destacados = window.globalDestacadosMemoria || [];
             if (!destacados.length) {
+                const t0Alt = performance.now();
                 try {
                     const res = await fetch(`${API_BASE}/obtener-pronostico`, { headers: await authHeaders() });
+                    const durAlt = Math.round(performance.now() - t0Alt);
+                    console.info(`[MercadosAlternativos] status=${res.status} duracion_ms=${durAlt}`);
+                    if (!res.ok) {
+                        cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error cargando mercados alternativos (HTTP ${res.status}).</div>`;
+                        return;
+                    }
                     const data = await res.json();
                     destacados = data.pronosticos_destacados || data.destacados || [];
                     window.globalDestacadosMemoria = destacados;
                 } catch (e) {
-                    console.error("Error al cargar destacados para alternativos:", e);
+                    const durAlt = Math.round(performance.now() - t0Alt);
+                    console.error(`[MercadosAlternativos] error duracion_ms=${durAlt}:`, e);
+                    cont.innerHTML = `<div class="text-xs text-rose-400 text-center py-6">Error de red al consultar mercados alternativos (${esc(e?.message || 'desconocido')}).</div>`;
+                    return;
                 }
             }
 
@@ -2607,15 +2617,9 @@
                     html += `
                         <div onclick="mostrarDetalle('${p.id_partido}')" class="p-2.5 px-3 hover:bg-cardDark/80 cursor-pointer transition">
                             <div class="flex items-center justify-between">
-                                <div class="space-y-1 w-[75%] text-left">
-                                    <div class="flex items-center gap-1.5 font-bold text-slate-200 truncate text-[11px]">
-                                        ${generarEscudoEquipoHtml(p.local, true, p.logo_local, p.fallback_logo_local, "w-4 h-4", "text-[7px]")}
-                                        <span class="truncate">${esc(p.local)}</span>
-                                    </div>
-                                    <div class="flex items-center gap-1.5 text-slate-400 font-medium truncate text-[11px]">
-                                        ${generarEscudoEquipoHtml(p.visitante, false, p.logo_visitante, p.fallback_logo_visitante, "w-4 h-4", "text-[7px]")}
-                                        <span class="truncate">${esc(p.visitante)}</span>
-                                    </div>
+                                <div class="space-y-0.5 w-[75%] text-left">
+                                    <div class="font-bold text-slate-200 truncate text-[11px]">${esc(p.local)}</div>
+                                    <div class="text-slate-400 font-medium truncate text-[11px]">${esc(p.visitante)}</div>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-[9px] text-accentGreen font-bold font-mono">${p.fecha ? p.fecha.slice(5) : ''}</div>
@@ -2706,14 +2710,8 @@
                                 }
                                 <span class="text-[9px] text-slate-500 font-mono">${(d.fecha || '').split(' ')[0]}</span>
                             </div>
-                            <div class="flex items-center gap-2 font-black text-white text-xs truncate">
-                                ${generarEscudoEquipoHtml(d.local, true, d.logo_local, d.fallback_logo_local, "w-5 h-5", "text-[8px]")}
-                                <span class="truncate">${esc(d.local)}</span>
-                            </div>
-                            <div class="flex items-center gap-2 font-bold text-slate-400 text-xs truncate mt-1">
-                                ${generarEscudoEquipoHtml(d.visitante, false, d.logo_visitante, d.fallback_logo_visitante, "w-5 h-5", "text-[8px]")}
-                                <span class="truncate">${esc(d.visitante)}</span>
-                            </div>
+                            <div class="font-black text-white text-xs truncate">${esc(d.local)}</div>
+                            <div class="font-bold text-slate-400 text-xs truncate mt-0.5">${esc(d.visitante)}</div>
                             ${bloqueadoDestacado
                                 ? `<div class="mt-2 text-[10px] text-amber-300/90 bg-baseDark/80 p-1.5 rounded border border-amber-500/30 truncate font-mono">🔒 Desbloquea todos los destacados con Pase Pro</div>`
                                 : `<div class="mt-2 text-[10px] text-cyan-300 bg-baseDark/80 p-1.5 rounded border border-cardBorder truncate font-mono">${n1.etiqueta ? n1.etiqueta.split(" ")[0] : "🛡️"} ${n1.mercado || 'Mercado Base'}</div>`
@@ -3396,8 +3394,9 @@
         }
 
         function irAHoyTop3() {
-            fechaTop3Activa = "";
-            cargarTop3("");
+            const hoyIso = obtenerFechaActualPeruIso();
+            fechaTop3Activa = hoyIso;
+            cargarTop3(hoyIso);
         }
 
         async function dispararParlayTelegram() {
@@ -3439,10 +3438,7 @@
                 if (data.fecha) {
                     fechaTop3Activa = data.fecha;
                     if (displayFecha) {
-                        const partes = data.fecha.split('-');
-                        if (partes.length === 3) {
-                            displayFecha.innerText = `${data.fecha} (${partes[2]}/${partes[1]}/${partes[0]})`;
-                        }
+                        displayFecha.innerText = data.fecha;
                     }
                 }
                 if (data.fechas_disponibles && Array.isArray(data.fechas_disponibles) && data.fechas_disponibles.length > 0) {
@@ -4249,13 +4245,13 @@
             const gcLoc = locAnt.gc_ultimos3 != null ? locAnt.gc_ultimos3 : "—";
             const tpLoc = locAnt.tiros_puerta_prom != null
                 ? `${locAnt.tiros_puerta_prom}/p`
-                : (locAnt.tiros_puerta_estimado != null ? `${locAnt.tiros_puerta_estimado}/p (Estimación del modelo)` : "No estimable");
+                : (locAnt.tiros_puerta_estimado != null ? `${locAnt.tiros_puerta_estimado}/p` : "No estimable");
 
             const gfVis = visAnt.gf_ultimos3 != null ? visAnt.gf_ultimos3 : "—";
             const gcVis = visAnt.gc_ultimos3 != null ? visAnt.gc_ultimos3 : "—";
             const tpVis = visAnt.tiros_puerta_prom != null
                 ? `${visAnt.tiros_puerta_prom}/p`
-                : (visAnt.tiros_puerta_estimado != null ? `${visAnt.tiros_puerta_estimado}/p (Estimación del modelo)` : "No estimable");
+                : (visAnt.tiros_puerta_estimado != null ? `${visAnt.tiros_puerta_estimado}/p` : "No estimable");
 
             return `
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
