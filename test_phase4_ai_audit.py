@@ -763,7 +763,8 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             self.assertEqual(c17, 200)
             self.assertEqual(resp_17["fecha_activa_destacados"], "2026-11-17")
             self.assertIn("UNL", resp_17["competiciones_deshabilitadas"])
-            self.assertGreater(len(resp_17["destacados"]), 0)
+            # Con UNL deshabilitada, 2026-11-17 no tiene partidos activos y NO debe rellenarse con días 18/19/20/21
+            self.assertEqual(len(resp_17["destacados"]), 0)
             for d_item in resp_17["destacados"]:
                 self.assertEqual(d_item["fecha"], "2026-11-17")
                 self.assertEqual(d_item["fecha_local_partido"], "2026-11-17")
@@ -964,6 +965,121 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertNotIn("destacados.slice(0, 12)", html_content)
         self.assertNotIn("pool.slice(0, 12)", html_content)
         self.assertIn("destacados.forEach((d, idx) => {", html_content)
+
+    def test_15_nov19_official_authority_conflict_rejection_and_consecutive_dates(self):
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+        pred_app.invalidate_calendar_caches(rebuild_pool=True)
+
+        # 1. Resultado exacto para 2026-11-19: exactamente 3 partidos de BSA y NUNCA Mirassol vs Atlético Mineiro
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-19"}
+            resp_19, code_19 = pron_handler()
+        self.assertEqual(code_19, 200)
+        self.assertEqual(resp_19["fecha_activa_destacados"], "2026-11-19")
+        self.assertEqual(len(resp_19["destacados"]), 3)
+        pares_19 = {
+            (pred_app.canonical_team_name(m["local"]), pred_app.canonical_team_name(m["visitante"]))
+            for m in resp_19["destacados"]
+        }
+        self.assertEqual(pares_19, {
+            ("vasco", "internacional"),
+            ("vitoria ba", "red bull bragantino"),
+            ("sao paulo", "fluminense"),
+        })
+        self.assertNotIn(("mirassol", "atletico mineiro"), pares_19)
+
+        # Verificar que São Paulo vs Fluminense (2026-11-20T00:30:00Z) conserva fecha_local_partido 2026-11-19 (America/Lima)
+        sp_flu = [m for m in resp_19["destacados"] if pred_app.canonical_team_name(m["local"]) == "sao paulo"][0]
+        self.assertEqual(sp_flu["fecha_programada"], "2026-11-20T00:30:00Z")
+        self.assertEqual(sp_flu["fecha_local_partido"], "2026-11-19")
+
+        # 2. Verificar los 10 puntos de diagnóstico obligatorio en auditoria_calendario_fecha
+        aud_19 = resp_19["auditoria_calendario_fecha"]
+        self.assertIn("fuentes_utilizadas", aud_19)
+        self.assertIn("prioridad_en_conflicto", aud_19)
+        self.assertIn("partidos_eliminados_combinacion_dedup", aud_19)
+        self.assertIn("partidos_descartados_filtro_fecha", aud_19)
+        self.assertIn("estado_caches_calendario", aud_19)
+        self.assertEqual(aud_19["partidos_oficiales"], 3)
+        self.assertEqual(aud_19["partidos_enviados_al_frontend"], 3)
+        for p_diag in aud_19["competiciones_partidos"]:
+            self.assertTrue(p_diag.get("id_partido"))
+            self.assertTrue(p_diag.get("fecha_hora_utc"))
+            self.assertTrue(p_diag.get("fecha_hora_america_lima"))
+            self.assertEqual(p_diag.get("codigo_liga"), "BSA")
+            self.assertEqual(p_diag.get("fecha_en_all_fixtures_pool"), "2026-11-19")
+
+        # 3. Causa general: si un calendario estático/manual tiene fechas obsoletas (Mirassol el 19/11, Vasco/Vitória el 17/11)
+        #    y football-data.org provee las fechas oficiales verificadas, se rechaza el obsoleto y prevalece la fuente oficial
+        stale_manual = [
+            {"id_partido": "stale-mir", "local": "Mirassol", "visitante": "Atlético Mineiro", "fecha_utc": "2026-11-19T14:00:00Z", "codigo_liga": "BSA", "liga": "Campeonato Brasileiro Série A"},
+            {"id_partido": "stale-sp", "local": "São Paulo", "visitante": "Fluminense", "fecha_utc": "2026-11-19T15:00:00Z", "codigo_liga": "BSA", "liga": "Campeonato Brasileiro Série A"},
+            {"id_partido": "stale-vas", "local": "Vasco", "visitante": "Internacional", "fecha_utc": "2026-11-17T14:00:00Z", "codigo_liga": "BSA", "liga": "Campeonato Brasileiro Série A"},
+            {"id_partido": "stale-vit", "local": "Vitória BA", "visitante": "Red Bull Bragantino", "fecha_utc": "2026-11-17T15:00:00Z", "codigo_liga": "BSA", "liga": "Campeonato Brasileiro Série A"},
+        ]
+        official_fd = [
+            {"id": 5001, "homeTeam": {"name": "Mirassol FC"}, "awayTeam": {"name": "Clube Atlético Mineiro"}, "utcDate": "2026-11-14T21:30:00Z", "status": "FINISHED", "competition": {"code": "BSA"}},
+            {"id": 5002, "homeTeam": {"name": "CR Vasco da Gama"}, "awayTeam": {"name": "SC Internacional"}, "utcDate": "2026-11-19T22:30:00Z", "status": "SCHEDULED", "competition": {"code": "BSA"}},
+            {"id": 5003, "homeTeam": {"name": "EC Vitória"}, "awayTeam": {"name": "RB Bragantino"}, "utcDate": "2026-11-19T22:30:00Z", "status": "SCHEDULED", "competition": {"code": "BSA"}},
+            {"id": 5004, "homeTeam": {"name": "São Paulo FC"}, "awayTeam": {"name": "Fluminense FC"}, "utcDate": "2026-11-20T00:30:00Z", "status": "SCHEDULED", "competition": {"code": "BSA"}},
+        ]
+        aud_conflict = pred_app.CalendarSyncService.audit_date_pipeline(
+            "2026-11-19",
+            manual_fixtures=stale_manual,
+            fd_matches=official_fd,
+        )
+        self.assertEqual(aud_conflict["partidos_oficiales"], 3)
+        self.assertEqual(aud_conflict["partidos_filtrados"], 3)
+        self.assertEqual(aud_conflict["partidos_enviados_al_frontend"], 3)
+        conflict_pairs = {
+            (pred_app.canonical_team_name(p["local"]), pred_app.canonical_team_name(p["visitante"]))
+            for p in aud_conflict["competiciones_partidos"]
+        }
+        self.assertEqual(conflict_pairs, {
+            ("vasco", "internacional"),
+            ("vitoria ba", "red bull bragantino"),
+            ("sao paulo", "fluminense"),
+        })
+        self.assertTrue(any("fecha_no_coincide_con_fuente_verificada" in d.get("motivo", "") for d in aud_conflict["partidos_eliminados_combinacion_dedup"]))
+
+        # 4. Reconciliación global con reconcile_official_calendar conserva las 9 ligas activas e invalida caché
+        rec_res = pred_app.CalendarSyncService.reconcile_official_calendar(official_fd, competition_code="BSA")
+        self.assertTrue(rec_res["cache_invalidada"])
+        ligas_activas_post = {
+            f.get("codigo_liga") for f in pred_app.ALL_FIXTURES_POOL
+            if pred_app.is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
+        }
+        self.assertEqual(ligas_activas_post, {"BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "UCL", "UEL"})
+        pred_app._SYNCED_EXTERNAL_FD_FIXTURES = []
+        pred_app.invalidate_calendar_caches(rebuild_pool=True)
+
+        # 5. Validación futura: fechas consecutivas y varias competiciones sin faltantes, extras ni desplazamientos
+        consec = pred_app.CalendarSyncService.audit_consecutive_dates(
+            ["2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"],
+            expected_by_date={
+                "2026-11-18": [
+                    ("Corinthians", "Botafogo"),
+                    ("Coritiba", "Santos"),
+                    ("Cruzeiro", "Palmeiras"),
+                    ("Flamengo", "Atlético Paranaense"),
+                    ("Remo", "Chapecoense"),
+                    ("Gremio", "Bahia"),
+                ],
+                "2026-11-19": [
+                    ("Vasco", "Internacional"),
+                    ("Vitória BA", "Red Bull Bragantino"),
+                    ("São Paulo", "Fluminense"),
+                ],
+            },
+        )
+        for d_key, info in consec.items():
+            self.assertTrue(info["ok"], f"Fallo en fecha consecutiva {d_key}: {info}")
+            self.assertEqual(info["desplazamientos_fecha"], [])
+            self.assertEqual(info["partidos_faltantes"], [])
+            self.assertEqual(info["partidos_extra"], [])
+        self.assertEqual(consec["2026-11-18"]["total_mostrado"], 6)
+        self.assertEqual(consec["2026-11-19"]["total_mostrado"], 3)
+        self.assertGreaterEqual(len(consec["2026-11-21"]["competiciones"]), 5)
 
 
 if __name__ == "__main__":
