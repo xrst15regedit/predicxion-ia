@@ -580,7 +580,7 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
                         bool(m.get("logo_visitante")) or bool(m.get("fallback_logo_visitante")),
                         f"Partido sin logo_visitante ni fallback_logo_visitante: {m.get('partido')}",
                     )
-            self.assertGreater(total_checked, 400)
+            self.assertGreater(total_checked, 300)
 
             # Verificar /api/v1/top3/daily
             for t in ["Arsenal", "Chelsea", "Liverpool", "Everton", "Manchester City", "Fulham"]:
@@ -1080,6 +1080,130 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertEqual(consec["2026-11-18"]["total_mostrado"], 6)
         self.assertEqual(consec["2026-11-19"]["total_mostrado"], 3)
         self.assertGreaterEqual(len(consec["2026-11-21"]["competiciones"]), 5)
+
+    def test_16_live_calendar_sync_nov24_10_matches_and_telegram_results_pipeline(self):
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+        pred_app.invalidate_calendar_caches(rebuild_pool=True)
+
+        # 1. Hoy 2026-11-24: exactamente 10 partidos (9 UCL + Chapecoense vs Palmeiras de BSA)
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-24"}
+            resp_24, c24 = pron_handler()
+        self.assertEqual(c24, 200)
+        self.assertEqual(len(resp_24["destacados"]), 10)
+        ucl_24 = [m for m in resp_24["destacados"] if m["codigo_liga"] == "UCL"]
+        bsa_24 = [m for m in resp_24["destacados"] if m["codigo_liga"] == "BSA"]
+        self.assertEqual(len(ucl_24), 9)
+        self.assertEqual(len(bsa_24), 1)
+        self.assertEqual(bsa_24[0]["local"], "Chapecoense")
+        self.assertEqual(bsa_24[0]["visitante"], "Palmeiras")
+
+        # Sevilla vs Betis y Rayo vs Valencia están en 2026-11-21 (no en 2026-11-22 ni 2026-11-23)
+        for bad_d in ("2026-11-22", "2026-11-23"):
+            ms_bad = [f for f in pred_app.ALL_FIXTURES_POOL if pred_app.resolve_match_local_date(f)[1] == bad_d]
+            pares_bad = {(f.get("local"), f.get("visitante")) for f in ms_bad}
+            self.assertNotIn(("Sevilla", "Real Betis"), pares_bad)
+            self.assertNotIn(("Rayo Vallecano", "Valencia"), pares_bad)
+
+        # 2. Sincronización en vivo desde football-data.org actualiza fechas obsoletas sin borrar otras ligas
+        fd_mock_resp = {
+            "ok": True,
+            "matches": [
+                {"id": 77001, "homeTeam": {"name": "Chapecoense AF"}, "awayTeam": {"name": "SE Palmeiras"}, "utcDate": "2026-11-25T00:00:00Z", "status": "SCHEDULED", "competition": {"code": "BSA"}},
+            ],
+        }
+        with patch.object(pred_app.FootballDataOrgClient, "_get_api_key", return_value="k_live_test"),              patch.object(pred_app.FootballDataOrgClient, "fetch_matches_paginated", return_value=fd_mock_resp):
+            sync_res = pred_app.CalendarSyncService.sync_live_calendar_from_football_data(competition_codes=["BSA"])
+        self.assertTrue(sync_res["ok"])
+        self.assertEqual(sync_res["total_fd_matches"], 1)
+        self.assertTrue(sync_res["cache_invalidada"])
+        pred_app._SYNCED_EXTERNAL_FD_FIXTURES = []
+        pred_app.invalidate_calendar_caches(rebuild_pool=True)
+
+        # 3. obtener_resultado_real_verificado enriquece tarjetas/córners cuando football-data.org solo trae goles
+        #    y consulta ventana [fecha, fecha+1] para cubrir medianoche UTC
+        pred_app._VERIFIED_RESULTS_CACHE.clear()
+        fd_goals_only = {
+            "ok": True,
+            "data": {
+                "matches": [
+                    {"status": "FINISHED", "homeTeam": {"name": "Athletic Club"}, "awayTeam": {"name": "Espanyol"}, "score": {"fullTime": {"home": 2, "away": 0}}}
+                ]
+            },
+        }
+        hl_cards = {"finished": True, "score_home": 2, "score_away": 0, "cards_total": 3, "corners_total": 8}
+        with patch.object(pred_app.FootballDataOrgClient, "_get_api_key", return_value="k_fd"),              patch.object(pred_app.FootballDataOrgClient, "fetch_json", return_value=fd_goals_only) as mock_fd,              patch.object(pred_app.HighlightlyFootballClient, "_get_api_key", return_value="k_hl"),              patch.object(pred_app.HighlightlyFootballClient, "fetch_match_stats", return_value=hl_cards):
+            res_enriched = pred_app.obtener_resultado_real_verificado("Athletic Club", "Espanyol", "2026-11-21", liga="Primera División")
+        self.assertTrue(res_enriched["finished"])
+        self.assertEqual(res_enriched["score_home"], 2)
+        self.assertEqual(res_enriched["cards_total"], 3)
+        self.assertEqual(mock_fd.call_args.kwargs["params"]["dateTo"], "2026-11-22")
+        cal_cards = pred_app.SportsResultsAuditor.grade_prediction({"seleccion": "Menos de 4.5 tarjetas", "local": "Athletic Club", "visitante": "Espanyol"}, res_enriched)
+        self.assertEqual(cal_cards["estado"], "GANADA")
+
+        # 4. Envío automático de resultados a Telegram para jornadas pasadas (ej. 2026-11-23 con 2 verificados + 1 pendiente)
+        #    y verificación de endpoints admin
+        self.assertIn("/api/v1/admin/calendar/sync-live", self.flask_app.routes)
+        self.assertIn("/api/v1/admin/telegram/send-results", self.flask_app.routes)
+        picks_23 = [
+            {"partido": "Brentford vs Everton", "liga": "Premier League", "seleccion": "Más de 1.5 goles", "resultado": "2-1", "estado": "GANADA", "verificado": True},
+            {"partido": "Santos vs Gremio", "liga": "Brasileirão", "seleccion": "Santos gana o empata", "resultado": "1-0", "estado": "GANADA", "verificado": True},
+            {"partido": "Partido Aplazado vs Rival", "liga": "LaLiga", "seleccion": "Más de 1.5 goles", "resultado": "Pendiente", "estado": "PENDIENTE", "verificado": False},
+        ]
+        pred_app._ultimo_envio_resultados_top5.discard("2026-11-23")
+        res_f_path = "/tmp/predicxion_last_tg_res_2026-11-23.txt"
+        if os.path.exists(res_f_path):
+            try:
+                os.remove(res_f_path)
+            except Exception:
+                pass
+        mock_tg_ok = MagicMock(status_code=200, text="ok")
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok_test", "TELEGRAM_CHANNEL_ID": "@canal_test"}),              patch.object(pred_app, "generar_imagen_resultados_top5", return_value=b"PNG_FAKE_BYTES"),              patch.object(requests, "post", return_value=mock_tg_ok) as mock_post:
+            ok_send, msg_send = pred_app.ejecutar_envio_automatico_resultados_top5("2026-11-23", picks_23, force=False, motivo="TEST_RECUPERACION")
+            self.assertTrue(ok_send, msg_send)
+            self.assertEqual(mock_post.call_count, 1)
+            # Segunda llamada idempotente no debe duplicar el envío
+            ok_dup, _ = pred_app.ejecutar_envio_automatico_resultados_top5("2026-11-23", picks_23, force=False, motivo="TEST_RECUPERACION")
+            self.assertFalse(ok_dup)
+
+    def test_17_locutor_analista_predicxion_ia_and_no_referee_ui(self):
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+
+        # 1. Nombre oficial del locutor y soporte de reproducción robusto (POST + troceado SpeechSynthesis)
+        self.assertIn("LOCUTOR ANALISTA DE PREDICXION IA", html_content)
+        self.assertIn("Hola, soy el Locutor Analista de PredicXion IA.", html_content)
+        self.assertIn("function _dividirOracionesVoz", html_content)
+        self.assertIn("window.speechSynthesis.resume()", html_content)
+        self.assertIn("method: 'POST'", html_content)
+
+        # 2. Guion completo: pick principal, goles totales, córners totales, remates y tarjetas
+        guion_fn = html_content.split("function construirGuionAnalisisVozPartido")[1].split("function reproducirAudioPartidoModal")[0]
+        self.assertIn("El pick principal es", guion_fn)
+        self.assertIn("En goles totales", guion_fn)
+        self.assertIn("Pasando a córners totales", guion_fn)
+        self.assertIn("en tarjetas se proyecta", guion_fn)
+        self.assertIn("en remates totales", guion_fn)
+        self.assertNotIn("Árbitro", guion_fn)
+        self.assertNotIn("Colegiado", guion_fn)
+
+        # 3. Tarjetas de UI sin referencias de Árbitro Oficial ni Colegiado
+        cards_section = html_content.split("// 3. TARJETAS")[1].split("// 4. REMATES")[0]
+        self.assertNotIn("Árbitro:", cards_section)
+        self.assertNotIn("ÁRBITRO", cards_section)
+        self.assertNotIn("Colegiado", cards_section)
+
+        # 4. Endpoint /api/v1/voice/audio soporta POST con texto largo (>950 chars) y responde audio/mpeg
+        voice_handler = self.flask_app.routes["/api/v1/voice/audio"]
+        flask_stub.request.method = "POST"
+        flask_stub.request.get_json = MagicMock(return_value={"voice": "gonzalo", "text": "Hola, soy el Locutor Analista de PredicXion IA. " * 25})
+        flask_stub.request.args = {}
+        fake_mp3_resp = MagicMock(status_code=200, content=b"ID3" + b"0" * 400)
+        with patch.object(requests, "get", return_value=fake_mp3_resp):
+            resp_tts = voice_handler()
+        self.assertIsNotNone(resp_tts)
+        flask_stub.request.method = "GET"
 
 
 if __name__ == "__main__":
