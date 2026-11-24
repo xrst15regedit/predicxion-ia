@@ -2063,7 +2063,7 @@
                     diffText: `Media de liga: ${m.avg_corners.avg}`
                 },
 
-                // 3. TARJETAS (2 Tarjetas Separadas con Modelo Cruzado + Árbitro Asignado)
+                // 3. TARJETAS (2 Tarjetas Separadas basadas en datos de equipos y media de liga)
                 {
                     cat: 'cards',
                     title: 'Tarjetas Totales',
@@ -2077,22 +2077,22 @@
                     barWidth: Math.min(96, Math.max(45, m.cards_totals?.prob || m.avg_cards.prob)),
                     barColor: (m.cards_totals?.rec || m.avg_cards.rec).includes('Menos') ? 'bg-[#38bdf8]' : 'bg-[#eab308]',
                     avgLabel: `${m.avg_cards.avg} tarj.`,
-                    diffText: `Árbitro: ${m.avg_cards.refName} (${m.avg_cards.refAvg}/p • ${m.avg_cards.refProfile})`
+                    diffText: `Media de liga: ${m.avg_cards.avg} tarj.`
                 },
                 {
                     cat: 'cards',
                     title: 'Promedio de tarjetas',
-                    badge: `ÁRBITRO ${m.avg_cards.refProfile}: ${m.avg_cards.refAvg}/P`,
-                    badgeColor: m.avg_cards.refProfile === 'ESTRICTO' ? 'bg-rose-500/15 text-rose-300 border-rose-500/40' : (m.avg_cards.refProfile === 'LIBERAL' ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40'),
+                    badge: `${m.avg_cards.rec.toUpperCase()} (${m.avg_cards.prob}%)`,
+                    badgeColor: m.avg_cards.rec.includes('Menos') ? 'bg-sky-500/15 text-sky-300 border-sky-500/40' : 'bg-amber-500/15 text-amber-300 border-amber-500/40',
                     icon: `<i class="fa-solid fa-clone text-amber-400 text-lg"></i>`,
                     displayVal: `${m.avg_cards.val}`,
-                    displayLabel: `λ Cruzado + Colegiado: ${m.avg_cards.refName}`,
+                    displayLabel: `Proyección combinada del partido`,
                     splitLeft: `λ ${locName}: <strong>${m.avg_cards.home} tarj.</strong>`,
                     splitRight: `λ ${visName}: <strong>${m.avg_cards.away} tarj.</strong>`,
                     barWidth: Math.min(96, Math.max(45, Math.round((m.avg_cards.num / 6.5) * 100))),
                     barColor: 'bg-[#eab308]',
                     avgLabel: `${m.avg_cards.avg} tarj.`,
-                    diffText: `Colegiado: ${m.avg_cards.refName} (${m.avg_cards.refProfile})`
+                    diffText: `Media de liga: ${m.avg_cards.avg} tarj.`
                 },
 
                 // 4. REMATES (2 Tarjetas Separadas)
@@ -2945,8 +2945,8 @@
                                 <i class="fa-solid fa-microphone-lines"></i>
                             </div>
                             <div>
-                                <span class="text-[9px] font-black uppercase text-accentGreen block tracking-wider">LOCUCIÓN DE ANALISTA EN VIVO • RESPUESTA INSTANTÁNEA</span>
-                                <span class="text-xs font-bold text-white">Análisis directo del partido</span>
+                                <span class="text-[9px] font-black uppercase text-accentGreen block tracking-wider">LOCUTOR ANALISTA DE PREDICXION IA</span>
+                                <span class="text-xs font-bold text-white">Explicación completa de jugadas, goles y córners</span>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 flex-wrap">
@@ -3933,8 +3933,15 @@
                 const cacheKey = `${voz}::${textoLimpio}`;
                 if (window._audioBlobCache[cacheKey]) return window._audioBlobCache[cacheKey];
 
-                const url = `${API_BASE}/api/v1/voice/audio?voice=${encodeURIComponent(voz)}&text=${encodeURIComponent(textoLimpio)}`;
-                const resp = await fetch(url);
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 7000);
+                const resp = await fetch(`${API_BASE}/api/v1/voice/audio`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ voice: voz, text: textoLimpio }),
+                    signal: ctrl.signal
+                });
+                clearTimeout(timer);
                 if (resp.ok && (resp.headers.get("content-type") || "").includes("audio")) {
                     const blob = await resp.blob();
                     if (blob.size > 200) {
@@ -3955,18 +3962,23 @@
         window.precargarAudioPartidoActual = precargarAudioPartidoActual;
 
         let elementoAudioActivo = null;
+        let _speechQueueActive = false;
 
         async function hablarTextoIA(texto, onEndCallback = null, botonId = null) {
+            const estabaSonandoEste = (audioEnReproduccion === botonId);
             if (elementoAudioActivo) {
-                elementoAudioActivo.pause();
-                elementoAudioActivo.currentTime = 0;
+                try {
+                    elementoAudioActivo.pause();
+                    elementoAudioActivo.currentTime = 0;
+                } catch (e) {}
                 elementoAudioActivo = null;
             }
-            if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
+            _speechQueueActive = false;
+            if ('speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch (e) {}
             }
 
-            if (audioEnReproduccion === botonId) {
+            if (estabaSonandoEste) {
                 audioEnReproduccion = null;
                 restaurarBotonesAudio();
                 return;
@@ -3976,67 +3988,132 @@
             audioEnReproduccion = botonId;
 
             const textoLimpio = limpiarTextoParaVoz(texto);
+            if (!textoLimpio) {
+                audioEnReproduccion = null;
+                restaurarBotonesAudio();
+                return;
+            }
             const voz = window.vozPreferidaActual || 'gonzalo';
             const cacheKey = `${voz}::${textoLimpio}`;
 
             if (botonId) {
                 const btn = document.getElementById(botonId);
                 if (btn) {
-                    btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-400 animate-pulse"></i> <span>Detener Audio</span>`;
+                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-slate-900"></i> <span>Cargando voz...</span>`;
                 }
             }
 
             try {
-                // Si ya está pre-cargado en memoria RAM del navegador, reproduce en 0.02 segundos
                 let playUrl = window._audioBlobCache[cacheKey];
                 if (!playUrl) {
-                    playUrl = `${API_BASE}/api/v1/voice/audio?voice=${encodeURIComponent(voz)}&text=${encodeURIComponent(textoLimpio)}`;
+                    playUrl = await precargarAudioTexto(textoLimpio);
                 }
 
-                const aud = new Audio(playUrl);
-                aud.preload = "auto";
-                elementoAudioActivo = aud;
+                // Si el usuario detuvo mientras cargaba, abortar limpiamente
+                if (audioEnReproduccion !== botonId) return;
 
-                aud.onended = () => {
-                    audioEnReproduccion = null;
-                    elementoAudioActivo = null;
-                    restaurarBotonesAudio();
-                    if (onEndCallback) onEndCallback();
-                };
+                if (playUrl) {
+                    const aud = new Audio(playUrl);
+                    aud.preload = "auto";
+                    elementoAudioActivo = aud;
 
-                aud.onerror = () => {
-                    reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
-                };
+                    if (botonId) {
+                        const btn = document.getElementById(botonId);
+                        if (btn) btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-500 animate-pulse"></i> <span>Detener Audio</span>`;
+                    }
 
-                await aud.play();
-                return;
+                    aud.onended = () => {
+                        audioEnReproduccion = null;
+                        elementoAudioActivo = null;
+                        restaurarBotonesAudio();
+                        if (onEndCallback) onEndCallback();
+                    };
+
+                    aud.onerror = () => {
+                        elementoAudioActivo = null;
+                        reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
+                    };
+
+                    await aud.play();
+                    return;
+                }
             } catch (errAudio) {
-                reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
+                console.warn("[LocutorPredicXionIA] Fallback a voz local:", errAudio);
             }
+
+            reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
+        }
+
+        function _dividirOracionesVoz(texto, maxLen = 175) {
+            const frases = texto.split(/(?<=[.!?])\s+/).filter(Boolean);
+            const chunks = [];
+            let actual = "";
+            for (const f of frases) {
+                if ((actual + " " + f).trim().length <= maxLen) {
+                    actual = (actual + " " + f).trim();
+                } else {
+                    if (actual) chunks.push(actual);
+                    if (f.length <= maxLen) {
+                        actual = f;
+                    } else {
+                        const pals = f.split(/\s+/);
+                        let sub = "";
+                        for (const p of pals) {
+                            if ((sub + " " + p).trim().length <= maxLen) sub = (sub + " " + p).trim();
+                            else { if (sub) chunks.push(sub); sub = p; }
+                        }
+                        actual = sub;
+                    }
+                }
+            }
+            if (actual) chunks.push(actual);
+            return chunks.length ? chunks : [texto];
         }
 
         function reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback = null, botonId = null) {
-            if (!('speechSynthesis' in window)) return;
-            const utter = new SpeechSynthesisUtterance(textoLimpio);
-            utter.lang = 'es-MX';
-            // Velocidad y tono naturales de locutor deportivo (sin ralentizar artificialmente)
-            utter.rate = 1.03;
-            utter.pitch = 0.98;
+            if (!('speechSynthesis' in window)) {
+                audioEnReproduccion = null;
+                restaurarBotonesAudio();
+                if (typeof notificar === 'function') notificar("Tu navegador no permite reproducción de voz automática.");
+                return;
+            }
+            try {
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.resume();
+            } catch (e) {}
 
+            if (botonId) {
+                const btn = document.getElementById(botonId);
+                if (btn) btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-500 animate-pulse"></i> <span>Detener Audio</span>`;
+            }
+
+            const bloques = _dividirOracionesVoz(textoLimpio, 175);
             const vozSeleccionada = seleccionarVozLatinaMasculina();
-            if (vozSeleccionada) utter.voice = vozSeleccionada;
+            _speechQueueActive = true;
 
-            utter.onend = () => {
-                audioEnReproduccion = null;
-                restaurarBotonesAudio();
-                if (onEndCallback) onEndCallback();
+            const hablarBloque = (idx) => {
+                if (!_speechQueueActive || audioEnReproduccion !== botonId) return;
+                if (idx >= bloques.length) {
+                    _speechQueueActive = false;
+                    audioEnReproduccion = null;
+                    restaurarBotonesAudio();
+                    if (onEndCallback) onEndCallback();
+                    return;
+                }
+                const utter = new SpeechSynthesisUtterance(bloques[idx]);
+                utter.lang = 'es-MX';
+                utter.rate = 1.03;
+                utter.pitch = 0.98;
+                if (vozSeleccionada) utter.voice = vozSeleccionada;
+                utter.onend = () => hablarBloque(idx + 1);
+                utter.onerror = () => {
+                    _speechQueueActive = false;
+                    audioEnReproduccion = null;
+                    restaurarBotonesAudio();
+                };
+                window.speechSynthesis.speak(utter);
             };
-            utter.onerror = () => {
-                audioEnReproduccion = null;
-                restaurarBotonesAudio();
-            };
-
-            window.speechSynthesis.speak(utter);
+            hablarBloque(0);
         }
 
         function restaurarBotonesAudio() {
@@ -4105,30 +4182,64 @@
             const liga = p.liga || "su competición oficial";
             const seleccionCruda = (p.pronostico_principal && p.pronostico_principal.seleccion) || "Doble Oportunidad";
             const seleccion = limpiarTextoParaVoz(seleccionCruda);
-            const prob = limpiarTextoParaVoz((p.pronostico_principal && p.pronostico_principal.probabilidad) || "82%");
+            const prob = limpiarTextoParaVoz((p.pronostico_principal && p.pronostico_principal.probabilidad) || "80%");
 
             const pil = p.pilares_cuantitativos || {};
-            const xgLoc = pil.pilar_1_volumen_ofensivo?.xg_proyectado_local || "1.6";
-            const xgVis = pil.pilar_1_volumen_ofensivo?.xg_proyectado_visitante || "1.1";
+            const stks = p.organizacion_stakazos || {};
+            const xgLoc = parseFloat(pil.pilar_1_volumen_ofensivo?.xg_proyectado_local ?? p.parametros_xg?.lambda_local ?? 1.4).toFixed(2);
+            const xgVis = parseFloat(pil.pilar_1_volumen_ofensivo?.xg_proyectado_visitante ?? p.parametros_xg?.lambda_visitante ?? 1.1).toFixed(2);
+            const xgTotal = (parseFloat(xgLoc) + parseFloat(xgVis)).toFixed(2);
 
             const mOdd = (typeof extraerMetricasOddsterPartido === 'function') ? extraerMetricasOddsterPartido(p) : null;
-            let figurasTexto = "";
+            let bloqueGoles = `En proyección de goles, ${local} llega con ${xgLoc} goles esperados por localía y volumen ofensivo, frente a ${xgVis} de ${vis}, para un total estimado de ${xgTotal} goles.`;
+            let bloqueCorners = "";
+            let bloqueExtras = "";
+            let bloqueJugadas = "";
+
             if (mOdd) {
-                figurasTexto = `En las probabilidades clave del partido, el Más de 1.5 goles alcanza un ${mOdd.over_1_5.val} por ciento, el Más de 2.5 goles marca un ${mOdd.over_2_5.val} por ciento y el promedio proyectado es de ${mOdd.avg_goals.val} goles.`;
+                bloqueGoles = `En goles totales, el partido proyecta ${mOdd.avg_goals.val} goles frente a la media de liga de ${mOdd.avg_goals.avg}. ${local} aporta ${mOdd.avg_goals.home} goles esperados jugando en casa y ${vis} suma ${mOdd.avg_goals.away}. Por eso, el Más de 1.5 goles tiene un ${mOdd.over_1_5.val} por ciento de probabilidad, el Más de 2.5 goles marca un ${mOdd.over_2_5.val} por ciento y el mercado de ambos anotan está en ${mOdd.btts.val} por ciento.`;
+
+                if (mOdd.avg_corners && mOdd.avg_corners.val && mOdd.avg_corners.val !== 'No estimable') {
+                    const cRec = limpiarTextoParaVoz(mOdd.avg_corners.rec || 'córners totales');
+                    bloqueCorners = `Pasando a córners totales, el promedio proyectado es de ${mOdd.avg_corners.val} tiros de esquina frente a una media de liga de ${mOdd.avg_corners.avg}, con ${mOdd.avg_corners.home} proyectados para ${local} y ${mOdd.avg_corners.away} para ${vis}. La línea destacada aquí es ${cRec}.`;
+                }
+
+                const extrasParts = [];
+                if (mOdd.avg_cards && mOdd.avg_cards.val && mOdd.avg_cards.val !== 'No estimable') {
+                    extrasParts.push(`en tarjetas se proyecta un promedio de ${mOdd.avg_cards.val} amonestaciones`);
+                }
+                if (mOdd.avg_shots && mOdd.avg_shots.val && mOdd.avg_shots.val !== 'No estimable') {
+                    extrasParts.push(`en remates totales se estiman ${mOdd.avg_shots.val} disparos`);
+                }
+                if (mOdd.avg_shots_ot && mOdd.avg_shots_ot.val && mOdd.avg_shots_ot.val !== 'No estimable') {
+                    extrasParts.push(`con ${mOdd.avg_shots_ot.val} tiros a puerta`);
+                }
+                if (extrasParts.length > 0) {
+                    bloqueExtras = `Además, ${extrasParts.join(', ')}.`;
+                }
+            }
+
+            const jugadasExtra = [];
+            if (stks.nivel_1_base?.mercado) jugadasExtra.push(`como jugada base ${limpiarTextoParaVoz(stks.nivel_1_base.mercado)}`);
+            if (stks.micromercado_oro?.mercado) jugadasExtra.push(`y en mercados alternativos ${limpiarTextoParaVoz(stks.micromercado_oro.mercado)}`);
+            if (jugadasExtra.length > 0) {
+                bloqueJugadas = `Como complemento a las jugadas, tenemos ${jugadasExtra.join(' ')}.`;
             }
 
             let cierreTactico = "";
             if (p.alerta_trampa && p.alerta_trampa.activa) {
                 const recLim = limpiarTextoParaVoz(p.alerta_trampa.recomendacion_cobertura || 'Doble Oportunidad');
-                cierreTactico = `Ojo con confiarse en la cuota simple de ${p.alerta_trampa.favorito || 'favorito'}: ${recLim}`;
+                cierreTactico = `Ojo con confiarse en la cuota simple de ${p.alerta_trampa.favorito || 'el favorito'}: conviene cubrir con ${recLim}.`;
             } else {
-                cierreTactico = `Por todo esto, nos quedamos con ${seleccion} como la entrada más firme para este partido.`;
+                cierreTactico = `En resumen, ${seleccion} es la lectura más sólida del modelo para este cruce.`;
             }
 
-            let guion = `Vamos directo con el análisis del ${local} contra ${vis} por ${liga}. `;
-            guion += `En este encuentro la jugada principal es ${seleccion}, con un ${prob} de probabilidad. `;
-            guion += `¿Por qué entramos a esta línea? Porque ${local} genera ${xgLoc} goles esperados frente a ${xgVis} de ${vis}. `;
-            if (figurasTexto) guion += `${figurasTexto} `;
+            let guion = `Hola, soy el Locutor Analista de PredicXion IA. Vamos con el análisis completo del ${local} contra ${vis} por ${liga}. `;
+            guion += `El pick principal es ${seleccion}, con un ${prob} de probabilidad. `;
+            guion += `${bloqueGoles} `;
+            if (bloqueCorners) guion += `${bloqueCorners} `;
+            if (bloqueExtras) guion += `${bloqueExtras} `;
+            if (bloqueJugadas) guion += `${bloqueJugadas} `;
             guion += cierreTactico;
             return guion;
         }
@@ -4349,12 +4460,12 @@
                 },
                 {
                     nombre: "Mercado de Fricción & Tarjetas",
-                    categoria: "Tensión Arbitral",
+                    categoria: "Disciplina y Tarjetas",
                     mercado: "Más de 2.5 Tarjetas Totales",
                     cuota: "1.35",
                     prob: "84.0%",
                     icono: "🟨",
-                    razon: "Duelo disputado en zona media con promedio arbitral superior a 3.8 amonestaciones."
+                    razon: "Duelo disputado en zona media con proyección combinada superior a 3.8 amonestaciones."
                 },
                 {
                     nombre: "Techo Estadístico de Goles",
@@ -4367,12 +4478,12 @@
                 },
                 {
                     nombre: "Control de Tarjetas",
-                    categoria: "Línea Arbitral",
+                    categoria: "Línea de Tarjetas",
                     mercado: "Menos de 5.5 Tarjetas Totales",
                     cuota: "1.38",
                     prob: "84.5%",
                     icono: "🟨",
-                    razon: "Promedio combinado de amonestaciones por debajo del techo arbitral de la liga."
+                    razon: "Promedio combinado de amonestaciones por debajo de la media de la liga."
                 },
                 {
                     nombre: "Ambos Equipos Anotan (BTTS)",
