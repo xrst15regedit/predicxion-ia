@@ -3,11 +3,8 @@ services:
     name: predicxion-ia
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --worker-class gthread --timeout 120 --access-logfile - --error-logfile -
-    healthCheckPath: /api/v1/health
+    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 120
     envVars:
-      # Vacío mantiene activas todas las competiciones configuradas.
-      # Para desactivar temporalmente Nations League usa: UNL
       - key: DISABLED_COMPETITIONS
         value: ""
       - key: ALLOW_SIMULATED_ACTA
@@ -21,4 +18,19 @@ services:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHANNEL_ID
+        sync: false
+
+  # Cron Job diario en Render a las 22:00 America/Lima (03:00 UTC del día siguiente)
+  - type: cron
+    name: predicxion-ia-daily-22h-lima
+    env: python
+    schedule: "0 3 * * *"
+    buildCommand: "echo 'Cron job ready'"
+    startCommand: >-
+      curl -fsS -X POST https://predicxion-ia.onrender.com/api/v1/cron/daily-sync
+      -H "X-Cron-Token: ${CRON_SECRET_TOKEN}"
+      -H "Content-Type: application/json"
+      -d '{"motivo":"RENDER_CRON_22_00_PE"}'
+    envVars:
+      - key: CRON_SECRET_TOKEN
         sync: false
