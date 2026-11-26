@@ -1,60 +1,30 @@
-name: PredicXion IA - sincronización automática
+name: PredicXion IA - Actualización Automática 22:00 PE
 
 on:
   schedule:
-    # 03:00 UTC = 22:00 del día anterior en America/Lima (UTC-5).
+    # 03:00 UTC = 22:00 America/Lima (UTC-5) todos los días
     - cron: "0 3 * * *"
-    # Revisión periódica de resultados y calendario.
+    # Respaldo cada 4 horas para liquidar resultados de partidos terminados y mantener calendario sincronizado
     - cron: "15 */4 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "Forzar la ejecución aunque ya exista una publicación"
+        description: "Forzar ejecución aunque ya se haya publicado hoy"
         required: false
-        default: false
-        type: boolean
-
-permissions:
-  contents: read
-
-concurrency:
-  group: predicxion-daily-sync
-  cancel-in-progress: false
+        default: "false"
 
 jobs:
   daily-sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Despertar Render y comprobar salud
-        env:
-          BASE_URL: ${{ secrets.PREDICXION_BASE_URL }}
+      - name: Despertar servidor Render y verificar salud
         run: |
-          set -euo pipefail
-          test -n "$BASE_URL"
-          curl --fail-with-body --silent --show-error \
-            --retry 5 --retry-delay 10 --retry-all-errors \
-            "$BASE_URL/api/v1/health"
+          curl -fsS --retry 3 --retry-delay 10 "${{ secrets.PREDICXION_BASE_URL }}/api/v1/health"
 
-      - name: Ejecutar pipeline diario
-        env:
-          BASE_URL: ${{ secrets.PREDICXION_BASE_URL }}
-          CRON_TOKEN: ${{ secrets.CRON_SECRET_TOKEN }}
-          FORCE_FLAG: ${{ inputs.force || false }}
+      - name: Ejecutar pipeline diario de 10 pasos (America/Lima)
         run: |
-          set -euo pipefail
-          test -n "$BASE_URL"
-          test -n "$CRON_TOKEN"
-
-          if [ "$FORCE_FLAG" = "true" ]; then
-            BODY='{"force":true,"motivo":"GITHUB_ACTIONS_MANUAL_PE"}'
-          else
-            BODY='{"force":false,"motivo":"GITHUB_ACTIONS_CRON_PE"}'
-          fi
-
-          curl --fail-with-body --silent --show-error \
-            --retry 3 --retry-delay 10 --retry-all-errors \
-            -X POST "$BASE_URL/api/v1/cron/daily-sync" \
-            -H "X-Cron-Token: $CRON_TOKEN" \
+          FORCE_FLAG="${{ github.event.inputs.force || 'false' }}"
+          curl -fsS -X POST "${{ secrets.PREDICXION_BASE_URL }}/api/v1/cron/daily-sync" \
+            -H "X-Cron-Token: ${{ secrets.CRON_SECRET_TOKEN }}" \
             -H "Content-Type: application/json" \
-            --data "$BODY"
+            -d "{\"force\": ${FORCE_FLAG}, \"motivo\": \"GITHUB_ACTIONS_CRON_PE\"}"
