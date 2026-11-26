@@ -964,7 +964,7 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             html_content = f.read()
         self.assertNotIn("destacados.slice(0, 12)", html_content)
         self.assertNotIn("pool.slice(0, 12)", html_content)
-        self.assertIn("destacados.forEach((d, idx) => {", html_content)
+        self.assertIn("deduplicarPartidosUI(destacados).forEach((d, idx) => {", html_content)
 
     def test_15_nov19_official_authority_conflict_rejection_and_consecutive_dates(self):
         pron_handler = self.flask_app.routes["/obtener-pronostico"]
@@ -1204,6 +1204,97 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             resp_tts = voice_handler()
         self.assertIsNotNone(resp_tts)
         flask_stub.request.method = "GET"
+
+    def test_18_audit_integral_dedup_ucl_22h_pipeline_sync_status_and_audio(self):
+        # 1. Champions League (CL vs UCL) con nombres oficiales en inglés de football-data.org vs español del calendario embebido
+        #    Debe producir 0 duplicados en los 3 niveles, conservar el registro más completo y registrar discrepancias de hora/estado
+        ucl_nov24_manual = [
+            f for f in pred_app.ALL_FIXTURES_POOL
+            if f.get("codigo_liga") == "UCL" and pred_app.CalendarDateService.to_lima_date(f) == "2026-11-24"
+        ]
+        self.assertEqual(len(ucl_nov24_manual), 9)
+
+        ucl_fd_english = [
+            {"id": 9101, "homeTeam": {"name": "FK Bodø/Glimt"}, "awayTeam": {"name": "LASK Linz"}, "utcDate": "2026-11-24T17:45:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9102, "homeTeam": {"name": "Galatasaray SK"}, "awayTeam": {"name": "Aston Villa FC"}, "utcDate": "2026-11-24T17:45:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9103, "homeTeam": {"name": "Arsenal FC"}, "awayTeam": {"name": "BV Borussia 09 Dortmund"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9104, "homeTeam": {"name": "Como 1907"}, "awayTeam": {"name": "AEK Athens FC"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9105, "homeTeam": {"name": "Feyenoord Rotterdam"}, "awayTeam": {"name": "FC Porto"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9106, "homeTeam": {"name": "Manchester City FC"}, "awayTeam": {"name": "SSC Napoli"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9107, "homeTeam": {"name": "RB Leipzig"}, "awayTeam": {"name": "RC Lens"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9108, "homeTeam": {"name": "Real Madrid CF"}, "awayTeam": {"name": "PSV Eindhoven"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+            {"id": 9109, "homeTeam": {"name": "ŠK Slovan Bratislava"}, "awayTeam": {"name": "Real Betis Balompié"}, "utcDate": "2026-11-24T20:00:00Z", "status": "TIMED", "competition": {"code": "CL", "name": "UEFA Champions League"}},
+        ]
+        fd_converted = [pred_app.CalendarSyncService.convert_fd_match_to_fixture(m, "CL") for m in ucl_fd_english]
+        dedup_l1, dups_l1, disc_l1 = pred_app.CalendarSyncService.deduplicate_fixtures(ucl_nov24_manual + fd_converted, level="IMPORT")
+        self.assertEqual(len(dedup_l1), 9, f"Esperado 9 partidos UCL sin duplicados, obtenido {len(dedup_l1)}")
+        self.assertEqual(len(dups_l1), 9)
+        self.assertEqual(len(disc_l1), 9)
+        # Conserva el registro más completo (football-data.org con estado TIMED)
+        for f_kept in dedup_l1:
+            self.assertEqual(f_kept["codigo_liga"], "UCL")
+            self.assertEqual(f_kept["estado"], "TIMED")
+            self.assertEqual(f_kept["origen_fuente"], "football-data.org")
+
+        # Verificar Club Brujas vs Club Brugge KV y Slavia Praga vs SK Slavia Praha
+        self.assertEqual(pred_app.canonical_team_name("Club Brujas"), pred_app.canonical_team_name("Club Brugge KV"))
+        self.assertEqual(pred_app.canonical_team_name("Slavia Praga"), pred_app.canonical_team_name("SK Slavia Praha"))
+        self.assertEqual(pred_app.canonical_team_name("PSG"), pred_app.canonical_team_name("Paris Saint-Germain FC"))
+        self.assertEqual(pred_app.canonical_team_name("Nápoles"), pred_app.canonical_team_name("SSC Napoli"))
+
+        # 2. Clave canónica incluye fecha_local + competición normalizada + local + visitante
+        k_ucl = pred_app.CalendarSyncService.canonical_fixture_key("Real Madrid CF", "PSV Eindhoven", "2026-11-24T20:00:00Z", competition_code="CL")
+        k_ucl_es = pred_app.CalendarSyncService.canonical_fixture_key("Real Madrid", "PSV", "2026-11-24", competition_code="UCL")
+        self.assertEqual(k_ucl, k_ucl_es)
+        self.assertEqual(k_ucl, "2026-11-24|UCL|real madrid|psv")
+
+        # 3. Función única CalendarDateService respeta America/Lima sin mezclar día 19 con día 20
+        self.assertEqual(pred_app.CalendarDateService.to_lima_date({"fecha_utc": "2026-11-20T00:30:00Z"}), "2026-11-19")
+        self.assertEqual(pred_app.CalendarDateService.to_lima_date({"fecha_utc": "2026-11-20T15:00:00Z"}), "2026-11-20")
+
+        # 4. Pipeline diario de 10 pasos a las 22:00 America/Lima + /api/v1/cron/daily-sync + /api/v1/sync/status
+        self.assertIn("/api/v1/sync/status", self.flask_app.routes)
+        self.assertIn("/api/v1/cron/daily-sync", self.flask_app.routes)
+
+        # Sin token debe responder 403
+        cron_handler = self.flask_app.routes["/api/v1/cron/daily-sync"]
+        flask_stub.request.headers = {}
+        flask_stub.request.args = {}
+        flask_stub.request.get_json = MagicMock(return_value={})
+        with patch.dict(os.environ, {"CRON_SECRET_TOKEN": "super_secret_cron_22h"}),              patch.object(pred_app, "_verificar_es_admin", return_value=False):
+            _, code_403 = cron_handler()
+            self.assertEqual(code_403, 403)
+
+        # Con token válido ejecuta los 10 pasos, regenera Top 3, envía Telegram y actualiza data_version
+        ver_before = self.flask_app.routes["/api/v1/sync/status"]()[0]["data_version"]
+        dt_22pe = pred_app.datetime(2026, 11, 24, 22, 0, 5, tzinfo=pred_app.timezone(pred_app.timedelta(hours=-5)))
+        for t in ("Sabah Baku", "Barcelona", "Slavia Praga", "Villarreal", "Atlético de Madrid", "Viking"):
+            self._add_verified_team(t, code="UCL", liga="UEFA Champions League", gf=2, ga=1)
+        mock_tg_ok = MagicMock(status_code=200, text="ok")
+        with patch.dict(os.environ, {"CRON_SECRET_TOKEN": "super_secret_cron_22h", "TELEGRAM_BOT_TOKEN": "tok_t", "TELEGRAM_CHANNEL_ID": "@chan_t"}),              patch.object(pred_app.CalendarSyncService, "sync_live_calendar_from_football_data", return_value={"ok": True, "total_fd_matches": 9}),              patch.object(requests, "post", return_value=mock_tg_ok):
+            pipe_res = pred_app.DailyAutomationPipeline.run_daily_pipeline(now_pe=dt_22pe, force=True, motivo="TEST_22H_INTEGRAL")
+        self.assertTrue(pipe_res["success"])
+        self.assertEqual(len(pipe_res["pasos"]), 10)
+        self.assertTrue(pipe_res["rotacion_top3"]["telegram_sent"])
+        self.assertEqual(pipe_res["auditoria_duplicados"]["duplicados_eliminados"], 0)
+        sync_after, code_st = self.flask_app.routes["/api/v1/sync/status"]()
+        self.assertEqual(code_st, 200)
+        self.assertNotEqual(sync_after["data_version"], ver_before)
+        self.assertIn("PE", sync_after["last_sync_lima"])
+
+        # 5. Verificación de frontend (index.html): polling sin recarga, última sincronización,
+        #    deduplicación UI y botón de audio con "Generando audio…", error visible y Reintentar
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as f:
+            html_c = f.read()
+        self.assertIn("telemetria-last-sync", html_c)
+        self.assertIn("function iniciarAutoSyncUI()", html_c)
+        self.assertIn("/api/v1/sync/status", html_c)
+        self.assertIn("function deduplicarPartidosUI(", html_c)
+        self.assertIn("Generando audio…", html_c)
+        self.assertIn("locutor-error-box", html_c)
+        self.assertIn("Reintentar", html_c)
+        self.assertIn("mostrarErrorLocutorUI", html_c)
 
 
 if __name__ == "__main__":

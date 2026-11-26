@@ -190,9 +190,15 @@
                     <span class="w-2.5 h-2.5 rounded-full bg-accentGreen animate-pulse"></span>
                     <span class="text-xs font-black uppercase tracking-wider text-slate-200">Modelo Estadístico • Poisson & Monte Carlo</span>
                 </div>
-                <div class="bg-baseDark/90 border border-cardBorder px-3.5 py-1.5 rounded-xl flex items-center gap-2.5">
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Partidos en Línea:</span>
-                    <span class="text-xs font-black text-cyan-400 font-mono" id="telemetria-partidos">0 Partidos</span>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div class="bg-baseDark/90 border border-cardBorder px-3 py-1.5 rounded-xl flex items-center gap-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Última sincronización:</span>
+                        <span class="text-[11px] font-bold text-accentGreen font-mono" id="telemetria-last-sync">--</span>
+                    </div>
+                    <div class="bg-baseDark/90 border border-cardBorder px-3.5 py-1.5 rounded-xl flex items-center gap-2.5">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Partidos en Línea:</span>
+                        <span class="text-xs font-black text-cyan-400 font-mono" id="telemetria-partidos">0 Partidos</span>
+                    </div>
                 </div>
             </div>
 
@@ -2556,10 +2562,15 @@
                 }
                 
                 const destacados = data.pronosticos_destacados || data.destacados || [];
+                if (data.data_version) window.__predicxionDataVersion = data.data_version;
+                if (data.last_sync_lima && document.getElementById('telemetria-last-sync')) {
+                    document.getElementById('telemetria-last-sync').innerText = data.last_sync_lima;
+                }
                 window.globalDestacadosMemoria = destacados;
                 window.globalCarteleraMeta = { hayPartidosHoy, fActual, fActivaDest, mensajeJornada: data.mensaje_jornada };
                 if (document.getElementById('destacados-count')) document.getElementById('destacados-count').innerText = `(${destacados.length})`;
                 renderizarCarrusel(destacados);
+                iniciarAutoSyncUI();
             } catch (e) {
                 console.error("Error en cargarDatosCartelera:", e);
                 const cont = document.getElementById('sidebar-matches');
@@ -2583,6 +2594,61 @@
             }
         }
 
+        function claveCanonicaPartidoUI(p) {
+            if (!p) return "";
+            const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+            const f = String(p.fecha_local_partido || p.fecha || "").slice(0, 10);
+            const c = String(p.codigo_liga || p.liga || "").toUpperCase().trim();
+            return `${f}|${c}|${norm(p.local)}|${norm(p.visitante)}`;
+        }
+
+        function deduplicarPartidosUI(lista) {
+            const vistos = new Set();
+            const out = [];
+            for (const p of (lista || [])) {
+                const k = claveCanonicaPartidoUI(p);
+                if (!k || vistos.has(k)) continue;
+                vistos.add(k);
+                out.push(p);
+            }
+            return out;
+        }
+
+        let _autoSyncIntervalId = null;
+        function iniciarAutoSyncUI() {
+            if (_autoSyncIntervalId) return;
+            _autoSyncIntervalId = setInterval(async () => {
+                if (document.hidden) return;
+                try {
+                    const r = await fetch(`${API_BASE}/api/v1/sync/status`, { cache: 'no-store' });
+                    if (!r.ok) return;
+                    const st = await r.json();
+                    if (st.last_sync_lima && document.getElementById('telemetria-last-sync')) {
+                        document.getElementById('telemetria-last-sync').innerText = st.last_sync_lima;
+                    }
+                    if (st.data_version && window.__predicxionDataVersion && st.data_version !== window.__predicxionDataVersion) {
+                        window.__predicxionDataVersion = st.data_version;
+                        // Refrescar datos silenciosamente sin recargar página ni borrar el análisis abierto del usuario
+                        const partidoAbierto = window.partidoModalActualMemoria ? window.partidoModalActualMemoria.id_partido : null;
+                        await cargarDatosCartelera();
+                        if (typeof cargarTop3 === 'function') {
+                            try { cargarTop3(null, true); } catch (e) {}
+                        }
+                        if (typeof cargarAuditoriaHistorial === 'function') {
+                            try { cargarAuditoriaHistorial(); } catch (e) {}
+                        }
+                        if (partidoAbierto) {
+                            // Mantener intacto el análisis seleccionado por el usuario
+                            const detailEl = document.getElementById('match-detail-view');
+                            if (detailEl) detailEl.classList.remove('hidden');
+                        }
+                    } else if (st.data_version && !window.__predicxionDataVersion) {
+                        window.__predicxionDataVersion = st.data_version;
+                    }
+                } catch (e) {}
+            }, 60000);
+        }
+
         function renderizarSidebar(ligas, filtro = "") {
             const query = filtro.toLowerCase().trim();
             const cont = document.getElementById('sidebar-matches');
@@ -2591,7 +2657,7 @@
             let id = 0;
 
             for (const [liga, partidos] of Object.entries(ligas)) {
-                const lista = Array.isArray(partidos) ? partidos : [];
+                const lista = deduplicarPartidosUI(Array.isArray(partidos) ? partidos : []);
                 let filtrados = lista;
                 if (typeof mesFiltroActivo !== 'undefined' && mesFiltroActivo && mesFiltroActivo !== 'todos') {
                     filtrados = filtrados.filter(p => (p.fecha || "").startsWith(mesFiltroActivo));
@@ -2694,7 +2760,7 @@
                 `;
             }
             const esVipCarrusel = verificarEsVip();
-            destacados.forEach((d, idx) => {
+            deduplicarPartidosUI(destacados).forEach((d, idx) => {
                 const pick = d.pronostico_principal || {};
                 const stks = d.organizacion_stakazos || {};
                 const n1 = stks.nivel_1_base || {};
@@ -2959,6 +3025,10 @@
                             <button onclick="reproducirAudioPartidoModal()" id="btn-audio-modal" class="bg-lime-400 hover:bg-lime-300 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition shadow-md shadow-lime-950/40 cursor-pointer">
                                 <i class="fa-solid fa-play"></i> <span>Escuchar Explicación</span>
                             </button>
+                        </div>
+                        <div id="locutor-error-box" class="hidden w-full mt-2 bg-rose-950/70 border border-rose-500/40 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-[11px] text-rose-200">
+                            <span id="locutor-error-msg">No se pudo reproducir el audio.</span>
+                            <button onclick="reproducirAudioPartidoModal()" class="px-2.5 py-1 bg-rose-500/30 hover:bg-rose-500/50 text-white font-bold rounded-lg text-[10px] cursor-pointer">Reintentar</button>
                         </div>
                     </div>
 
@@ -3964,8 +4034,25 @@
         let elementoAudioActivo = null;
         let _speechQueueActive = false;
 
+        function mostrarErrorLocutorUI(mensaje) {
+            const box = document.getElementById('locutor-error-box');
+            const msg = document.getElementById('locutor-error-msg');
+            if (box && msg) {
+                msg.innerText = mensaje || 'No se pudo reproducir el audio en este navegador.';
+                box.classList.remove('hidden');
+            }
+            if (typeof notificar === 'function') notificar(mensaje || 'Error al reproducir audio.');
+        }
+
+        function ocultarErrorLocutorUI() {
+            const box = document.getElementById('locutor-error-box');
+            if (box) box.classList.add('hidden');
+        }
+
         async function hablarTextoIA(texto, onEndCallback = null, botonId = null) {
             const estabaSonandoEste = (audioEnReproduccion === botonId);
+            ocultarErrorLocutorUI();
+
             if (elementoAudioActivo) {
                 try {
                     elementoAudioActivo.pause();
@@ -3991,15 +4078,25 @@
             if (!textoLimpio) {
                 audioEnReproduccion = null;
                 restaurarBotonesAudio();
+                mostrarErrorLocutorUI("No hay texto de análisis disponible para narrar.");
                 return;
             }
+
+            // Desbloqueo síncrono dentro del gesto del usuario (Chrome, Edge, Safari/móvil)
+            const aud = new Audio();
+            aud.preload = "auto";
+            elementoAudioActivo = aud;
+            if ('speechSynthesis' in window) {
+                try { window.speechSynthesis.resume(); } catch (e) {}
+            }
+
             const voz = window.vozPreferidaActual || 'gonzalo';
             const cacheKey = `${voz}::${textoLimpio}`;
 
             if (botonId) {
                 const btn = document.getElementById(botonId);
                 if (btn) {
-                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-slate-900"></i> <span>Cargando voz...</span>`;
+                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-slate-900"></i> <span>Generando audio…</span>`;
                 }
             }
 
@@ -4009,14 +4106,10 @@
                     playUrl = await precargarAudioTexto(textoLimpio);
                 }
 
-                // Si el usuario detuvo mientras cargaba, abortar limpiamente
                 if (audioEnReproduccion !== botonId) return;
 
                 if (playUrl) {
-                    const aud = new Audio(playUrl);
-                    aud.preload = "auto";
-                    elementoAudioActivo = aud;
-
+                    aud.src = playUrl;
                     if (botonId) {
                         const btn = document.getElementById(botonId);
                         if (btn) btn.innerHTML = `<i class="fa-solid fa-circle-stop text-rose-500 animate-pulse"></i> <span>Detener Audio</span>`;
@@ -4038,9 +4131,10 @@
                     return;
                 }
             } catch (errAudio) {
-                console.warn("[LocutorPredicXionIA] Fallback a voz local:", errAudio);
+                console.warn("[LocutorPredicXionIA] Error en audio remoto, usando SpeechSynthesis:", errAudio);
             }
 
+            elementoAudioActivo = null;
             reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback, botonId);
         }
 
@@ -4071,10 +4165,10 @@
         }
 
         function reproducirConSpeechSynthesisLocal(textoLimpio, onEndCallback = null, botonId = null) {
-            if (!('speechSynthesis' in window)) {
+            if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
                 audioEnReproduccion = null;
                 restaurarBotonesAudio();
-                if (typeof notificar === 'function') notificar("Tu navegador no permite reproducción de voz automática.");
+                mostrarErrorLocutorUI("No se pudo reproducir el audio: proveedor remoto no disponible y este navegador no soporta síntesis de voz.");
                 return;
             }
             try {
@@ -4106,10 +4200,12 @@
                 utter.pitch = 0.98;
                 if (vozSeleccionada) utter.voice = vozSeleccionada;
                 utter.onend = () => hablarBloque(idx + 1);
-                utter.onerror = () => {
+                utter.onerror = (ev) => {
+                    console.error("[LocutorPredicXionIA] Error en SpeechSynthesis:", ev);
                     _speechQueueActive = false;
                     audioEnReproduccion = null;
                     restaurarBotonesAudio();
+                    mostrarErrorLocutorUI("No se pudo iniciar la reproducción de voz. Verifica el volumen o permisos de audio y pulsa Reintentar.");
                 };
                 window.speechSynthesis.speak(utter);
             };

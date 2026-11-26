@@ -96,53 +96,167 @@ def is_competition_enabled(code: str = "", liga_name: str = "") -> bool:
         return False
     return True
 
+class CalendarDateService:
+    """
+    Función única de fechas y zona horaria (America/Lima, UTC-5) para toda la aplicación:
+      - convertir fechas UTC/ISO;
+      - asignar fecha local oficial de Perú (YYYY-MM-DD);
+      - ordenar partidos cronológicamente;
+      - filtrar exactamente el día seleccionado sin mezclar jornadas.
+    """
+    LIMA_TZ = timezone(timedelta(hours=-5))
+
+    @classmethod
+    def now_lima(cls) -> datetime:
+        return datetime.now(cls.LIMA_TZ)
+
+    @classmethod
+    def now_lima_str(cls) -> str:
+        return cls.now_lima().strftime("%Y-%m-%d %H:%M:%S PE")
+
+    @classmethod
+    def to_lima_datetime(cls, fix: dict) -> tuple:
+        if not isinstance(fix, dict):
+            return ("", "", "")
+        f_prog = str(fix.get("fecha_programada") or fix.get("fecha_utc") or fix.get("fecha") or "").strip()
+        if "T" in f_prog and (f_prog.endswith("Z") or "+" in f_prog[10:] or "-" in f_prog[10:]):
+            try:
+                dt_utc = datetime.fromisoformat(f_prog.replace("Z", "+00:00"))
+                if dt_utc.tzinfo is None:
+                    dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+                dt_pe = dt_utc.astimezone(cls.LIMA_TZ)
+                return (f_prog, dt_pe.strftime("%Y-%m-%d"), dt_pe.strftime("%Y-%m-%dT%H:%M:%S-05:00"))
+            except Exception:
+                pass
+        if fix.get("fecha_local_partido") and re.match(r"^\d{4}-\d{2}-\d{2}$", str(fix.get("fecha_local_partido"))):
+            fl = str(fix.get("fecha_local_partido"))
+            return (f_prog or fl, fl, f"{fl}T{str(fix.get('hora') or '15:00')[:5]}:00-05:00")
+        f_plain = str(fix.get("fecha") or f_prog)[:10]
+        return (f_prog, f_plain, f"{f_plain}T{str(fix.get('hora') or '15:00')[:5]}:00-05:00" if f_plain else "")
+
+    @classmethod
+    def to_lima_date(cls, fix: dict) -> str:
+        return cls.to_lima_datetime(fix)[1]
+
+    @classmethod
+    def sort_fixtures(cls, fixtures: list) -> list:
+        def _k(f):
+            f_prog, f_loc, f_lima = cls.to_lima_datetime(f)
+            return (f_loc or "9999-12-31", f_lima or f_prog or "", str(f.get("codigo_liga") or ""), str(f.get("local") or ""))
+        return sorted(list(fixtures or []), key=_k)
+
+    @classmethod
+    def filter_by_date(cls, fixtures: list, target_date: str) -> list:
+        t_d = str(target_date or "")[:10]
+        return [f for f in (fixtures or []) if cls.to_lima_date(f) == t_d]
+
+
+def normalize_competition_code(code: str = "", liga_name: str = "") -> str:
+    """Unifica códigos equivalentes de competición (ej. CL -> UCL, EL -> UEL) conservando la competición."""
+    c = str(code or "").strip().upper()
+    if c in ("CL", "UCL", "CHAMPIONS"):
+        return "UCL"
+    if c in ("EL", "UEL", "EUROPA"):
+        return "UEL"
+    if c in ("UNL", "NL", "NATIONS"):
+        return "UNL"
+    if c in ("BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "DED"):
+        return c
+    raw = str(liga_name or "").strip().lower()
+    if "champions" in raw:
+        return "UCL"
+    if "europa league" in raw:
+        return "UEL"
+    if "nations league" in raw:
+        return "UNL"
+    if any(k in raw for k in ("brasileir", "brasil", "bsa")):
+        return "BSA"
+    if any(k in raw for k in ("primera divisi", "laliga", "la liga", "españa")):
+        return "PD"
+    if any(k in raw for k in ("primeira liga", "liga portugal", "portugal")):
+        return "PPL"
+    if "premier league" in raw:
+        return "PL"
+    if "bundesliga" in raw:
+        return "BL1"
+    if "ligue 1" in raw:
+        return "FL1"
+    if "serie a" in raw and "brasil" not in raw:
+        return "SA"
+    return c or "OFL"
+
+
 def resolve_match_datetime_lima(fix: dict) -> tuple:
-    """
-    Convierte la fecha/hora UTC oficial del partido a America/Lima (UTC-5) sin truncar UTC.
-    Retorna: (fecha_utc_iso, fecha_local_lima, hora_local_lima_iso).
-    """
-    if not isinstance(fix, dict):
-        return ("", "", "")
-    f_prog = str(fix.get("fecha_programada") or fix.get("fecha_utc") or fix.get("fecha") or "").strip()
-    if "T" in f_prog and (f_prog.endswith("Z") or "+" in f_prog[10:] or "-" in f_prog[10:]):
-        try:
-            dt_utc = datetime.fromisoformat(f_prog.replace("Z", "+00:00"))
-            if dt_utc.tzinfo is None:
-                dt_utc = dt_utc.replace(tzinfo=timezone.utc)
-            dt_pe = dt_utc.astimezone(timezone(timedelta(hours=-5)))
-            return (f_prog, dt_pe.strftime("%Y-%m-%d"), dt_pe.strftime("%Y-%m-%dT%H:%M:%S-05:00"))
-        except Exception:
-            pass
-    if fix.get("fecha_local_partido") and re.match(r"^\d{4}-\d{2}-\d{2}$", str(fix.get("fecha_local_partido"))):
-        fl = str(fix.get("fecha_local_partido"))
-        return (f_prog or fl, fl, f"{fl}T{str(fix.get('hora') or '15:00')[:5]}:00-05:00")
-    f_plain = str(fix.get("fecha") or f_prog)[:10]
-    return (f_prog, f_plain, f"{f_plain}T{str(fix.get('hora') or '15:00')[:5]}:00-05:00" if f_plain else "")
+    return CalendarDateService.to_lima_datetime(fix)
+
 
 def resolve_match_local_date(fix: dict) -> tuple:
-    """
-    Separa explícitamente:
-      - fecha_programada: fecha/hora ISO programada oficial del fixture
-      - fecha_local_partido: fecha local del encuentro en America/Lima (YYYY-MM-DD)
-    Siempre prioriza la conversión exacta desde UTC a America/Lima (UTC-5) cuando hay timestamp ISO,
-    evitando que un truncamiento UTC mueva un partido a un día distinto.
-    """
-    f_prog, f_loc, _ = resolve_match_datetime_lima(fix)
+    f_prog, f_loc, _ = CalendarDateService.to_lima_datetime(fix)
     return (f_prog, f_loc)
 
+
 _EARLY_TEAM_ALIASES = {
+    # Francia / UCL / UEL
     "psg": "paris saint germain",
     "paris sg": "paris saint germain",
+    "paris saint germain": "paris saint germain",
+    "paris saint germain fc": "paris saint germain",
     "paris saintgermain": "paris saint germain",
+    "olympique de marseille": "olympique marseille",
+    "olympique marseille": "olympique marseille",
+    "marsella": "olympique marseille",
+    "marseille": "olympique marseille",
+    "olympique lyonnais": "olympique lyonnais",
+    "lyon": "olympique lyonnais",
+    "lille osc": "lille",
+    "losc lille": "lille",
+    "rc lens": "lens",
+    "racing club de lens": "lens",
+    "ogc nice": "nice",
+    "niza": "nice",
+    "estrasburgo": "strasbourg",
+    "rc strasbourg alsace": "strasbourg",
+    "as monaco": "monaco",
+    "as monaco fc": "monaco",
+    "stade brestois 29": "brest",
+    "stade rennais": "rennes",
+    "stade rennais fc 1901": "rennes",
+    # España
     "atletico de madrid": "atletico madrid",
     "club atletico de madrid": "atletico madrid",
+    "atletico madrid": "atletico madrid",
     "ath madrid": "atletico madrid",
-    "bayern munich": "bayern",
-    "fc bayern munich": "bayern",
-    "fc bayern munchen": "bayern",
-    "bayern munchen": "bayern",
+    "athletic bilbao": "athletic club",
+    "ath bilbao": "athletic club",
     "real madrid cf": "real madrid",
     "fc barcelona": "barcelona",
+    "real betis balompie": "real betis",
+    "betis": "real betis",
+    "villarreal cf": "villarreal",
+    "sevilla fc": "sevilla",
+    "valencia cf": "valencia",
+    "rc celta de vigo": "celta vigo",
+    "celta de vigo": "celta vigo",
+    "celta": "celta vigo",
+    "rayo vallecano de madrid": "rayo vallecano",
+    "vallecano": "rayo vallecano",
+    "real sociedad de futbol": "real sociedad",
+    "sociedad": "real sociedad",
+    "deportivo alaves": "alaves",
+    "rcd espanyol de barcelona": "espanyol",
+    "ca osasuna": "osasuna",
+    "getafe cf": "getafe",
+    "girona fc": "girona",
+    "rcd mallorca": "mallorca",
+    "ud las palmas": "las palmas",
+    "elche cf": "elche",
+    "levante ud": "levante",
+    "malaga cf": "malaga",
+    "real racing club": "racing santander",
+    "racing de santander": "racing santander",
+    "rc deportivo de la coruna": "deportivo la coruna",
+    "deportivo de la coruna": "deportivo la coruna",
+    # Inglaterra
     "manchester city fc": "manchester city",
     "man city": "manchester city",
     "manchester united fc": "manchester united",
@@ -151,28 +265,142 @@ _EARLY_TEAM_ALIASES = {
     "arsenal fc": "arsenal",
     "liverpool fc": "liverpool",
     "chelsea fc": "chelsea",
+    "aston villa fc": "aston villa",
     "tottenham": "tottenham hotspur",
+    "tottenham hotspur fc": "tottenham hotspur",
     "spurs": "tottenham hotspur",
+    "newcastle united fc": "newcastle",
+    "newcastle united": "newcastle",
     "wolves": "wolverhampton wanderers",
+    "wolverhampton wanderers fc": "wolverhampton wanderers",
     "nottm forest": "nottingham forest",
+    "nottingham forest fc": "nottingham forest",
+    "brighton hove albion": "brighton",
+    "brighton and hove albion": "brighton",
+    "west ham united": "west ham",
+    "west ham united fc": "west ham",
+    "crystal palace fc": "crystal palace",
+    "everton fc": "everton",
+    "fulham fc": "fulham",
+    "brentford fc": "brentford",
+    "afc bournemouth": "bournemouth",
+    "leeds united fc": "leeds united",
+    "sunderland afc": "sunderland",
+    "ipswich town": "ipswich",
+    "coventry city": "coventry",
+    "hull city": "hull",
+    # Alemania
+    "bayern munich": "bayern",
+    "fc bayern munich": "bayern",
+    "fc bayern munchen": "bayern",
+    "bayern munchen": "bayern",
+    "bayer 04 leverkusen": "bayer leverkusen",
+    "leverkusen": "bayer leverkusen",
+    "borussia dortmund": "borussia dortmund",
+    "bv borussia 09 dortmund": "borussia dortmund",
+    "dortmund": "borussia dortmund",
+    "monchengladbach": "borussia monchengladbach",
+    "borussia mgladbach": "borussia monchengladbach",
+    "vfb stuttgart": "stuttgart",
+    "rb leipzig": "rb leipzig",
+    "rasenballsport leipzig": "rb leipzig",
+    "eintracht frankfurt": "eintracht frankfurt",
+    "sc freiburg": "freiburg",
+    "friburgo": "freiburg",
+    "1 fc koln": "koln",
+    "colonia": "koln",
+    "fc cologne": "koln",
+    "fc augsburg": "augsburg",
+    "augsburgo": "augsburg",
+    "1 fsv mainz 05": "mainz",
+    "maguncia": "mainz",
+    "sv werder bremen": "werder bremen",
+    "vfl wolfsburg": "wolfsburg",
+    "hamburger sv": "hamburgo",
+    "hamburg": "hamburgo",
+    "tsg 1899 hoffenheim": "hoffenheim",
+    "1 fc union berlin": "union berlin",
+    "sv elversberg": "elversberg",
+    "sc paderborn 07": "paderborn",
+    # Italia
     "inter": "inter milan",
     "fc internazionale milano": "inter milan",
     "internazionale": "inter milan",
     "milan": "ac milan",
+    "ac milan": "ac milan",
     "roma": "as roma",
+    "as roma": "as roma",
     "napoli": "napoli",
+    "napoles": "napoli",
     "ssc napoli": "napoli",
     "juventus fc": "juventus",
-    "bayer 04 leverkusen": "bayer leverkusen",
-    "leverkusen": "bayer leverkusen",
-    "dortmund": "borussia dortmund",
-    "monchengladbach": "borussia monchengladbach",
-    "borussia mgladbach": "borussia monchengladbach",
+    "ss lazio": "lazio",
+    "atalanta bc": "atalanta",
+    "acf fiorentina": "fiorentina",
+    "bologna fc 1909": "bologna",
+    "bolonia": "bologna",
+    "torino fc": "torino",
+    "udinese calcio": "udinese",
+    "como 1907": "como",
+    "cagliari calcio": "cagliari",
+    "parma calcio 1913": "parma",
+    "us lecce": "lecce",
+    "us sassuolo calcio": "sassuolo",
+    "frosinone calcio": "frosinone",
+    "venezia fc": "venezia",
+    # Portugal
     "sport lisboa e benfica": "benfica",
     "sl benfica": "benfica",
     "fc porto": "porto",
     "sporting clube de portugal": "sporting cp",
+    "sporting cp": "sporting cp",
     "sporting lisboa": "sporting cp",
+    "sc braga": "sporting braga",
+    "sporting braga": "sporting braga",
+    "braga": "sporting braga",
+    "vitoria sc": "vitoria guimaraes",
+    # Resto de Europa (UCL / UEL)
+    "club brugge": "brugge",
+    "club brugge kv": "brugge",
+    "brugge kv": "brugge",
+    "club brujas": "brugge",
+    "brujas": "brugge",
+    "slavia praha": "slavia prague",
+    "sk slavia praha": "slavia prague",
+    "slavia praga": "slavia prague",
+    "sparta praha": "sparta prague",
+    "ac sparta praha": "sparta prague",
+    "sparta praga": "sparta prague",
+    "bodo glimt": "bodo glimt",
+    "bodoglimt": "bodo glimt",
+    "fk bodo glimt": "bodo glimt",
+    "feyenoord rotterdam": "feyenoord",
+    "psv eindhoven": "psv",
+    "afc ajax": "ajax",
+    "galatasaray sk": "galatasaray",
+    "fenerbahce sk": "fenerbahce",
+    "besiktas jk": "besiktas",
+    "fc shakhtar donetsk": "shakhtar",
+    "shakhtar donetsk": "shakhtar",
+    "sk slovan bratislava": "slovan bratislava",
+    "aek athens": "aek",
+    "aek athens fc": "aek",
+    "aek atenas": "aek",
+    "sabah fk": "sabah baku",
+    "sabah": "sabah baku",
+    "sabah baku": "sabah baku",
+    "viking fk": "viking",
+    "lask linz": "lask",
+    "fc red bull salzburg": "salzburg",
+    "salzburgo": "salzburg",
+    "sk sturm graz": "sturm graz",
+    "bsc young boys": "young boys",
+    "olympiacos fc": "olympiacos",
+    "paok fc": "paok",
+    "celtic fc": "celtic",
+    "rangers fc": "rangers",
+    "rsc anderlecht": "anderlecht",
+    # Brasil (BSA)
     "cr flamengo": "flamengo",
     "flamengo rj": "flamengo",
     "se palmeiras": "palmeiras",
@@ -221,10 +449,21 @@ _EARLY_TEAM_ALIASES = {
     "mirassol fc": "mirassol",
 }
 
+_CLUB_NOISE_TOKENS = {
+    "fc", "cf", "sc", "sk", "fk", "kv", "osc", "vfb", "rc", "as", "ss", "ssc",
+    "ec", "cr", "se", "ca", "cd", "ud", "sd", "rcd", "ac", "afc", "bc", "tsv",
+    "sv", "fsv", "ogc", "aj", "us", "acf", "uc", "jk", "rsc", "bsc", "fbc",
+    "club", "clube", "esporte", "balompie", "calcio", "1907", "1899", "04", "05",
+    "1846", "1913", "09", "1909", "1901", "29",
+}
+
 def canonical_team_name(nombre: str) -> str:
     if not nombre:
         return ""
-    s = str(nombre).lower().strip().replace("-", " ")
+    s = str(nombre).lower().strip()
+    # Normalizar caracteres especiales europeos (ø, ß, ł, đ) y separadores (/, -, .)
+    for ch_old, ch_new in (("ø", "o"), ("ß", "ss"), ("ł", "l"), ("đ", "d"), ("/", " "), ("-", " "), (".", " "), ("'", "")):
+        s = s.replace(ch_old, ch_new)
     s = re.sub(r'[\u0300-\u036f]', '', unicodedata.normalize('NFD', s))
     s = re.sub(r'[^a-z0-9 ]', '', s)
     s = re.sub(r'\s+', ' ', s).strip()
@@ -233,6 +472,15 @@ def canonical_team_name(nombre: str) -> str:
     alias_dict = globals().get("ALIAS_EQUIPOS_RATINGS") or {}
     if s in alias_dict:
         return alias_dict[s]
+    # Segundo pase: eliminar prefijos/sufijos institucionales genéricos sin perder identidad
+    tokens = [t for t in s.split(" ") if t and t not in _CLUB_NOISE_TOKENS]
+    if tokens:
+        s_clean = " ".join(tokens)
+        if s_clean in _EARLY_TEAM_ALIASES:
+            return _EARLY_TEAM_ALIASES[s_clean]
+        if s_clean in alias_dict:
+            return alias_dict[s_clean]
+        return s_clean
     return s
 
 def normalizar_nombre_liga(raw_name):
@@ -1060,6 +1308,133 @@ def ejecutar_envio_automatico_top5(
             return False, str(err)
 
 
+class DailyAutomationPipeline:
+    """
+    Orquestador de actualización automática diaria en el servidor (22:00 America/Lima)
+    compatible con worker interno, Render Cron Job y GitHub Actions.
+    Ejecuta los 10 pasos obligatorios y actualiza data_version / last_sync_lima
+    para que la interfaz web abierta se refresque automáticamente sin recargar.
+    """
+    _LOCK = threading.RLock()
+    _STATE = {
+        "data_version": datetime.now(timezone.utc).strftime("v%Y%m%d%H%M%S"),
+        "last_sync_lima": CalendarDateService.now_lima_str(),
+        "last_sync_utc": datetime.now(timezone.utc).isoformat(),
+        "last_reason": "ARRANQUE_INICIAL",
+        "last_pipeline_steps": [],
+    }
+
+    @classmethod
+    def bump_data_version(cls, reason: str = "SYNC") -> dict:
+        with cls._LOCK:
+            now_utc = datetime.now(timezone.utc)
+            cls._STATE["data_version"] = now_utc.strftime("v%Y%m%d%H%M%S%f")[:18]
+            cls._STATE["last_sync_lima"] = CalendarDateService.now_lima_str()
+            cls._STATE["last_sync_utc"] = now_utc.isoformat()
+            cls._STATE["last_reason"] = reason
+            return dict(cls._STATE)
+
+    @classmethod
+    def get_sync_status(cls) -> dict:
+        with cls._LOCK:
+            st = dict(cls._STATE)
+        rot_st = Top3RotationManager.get_status_report()
+        pool = globals().get("ALL_FIXTURES_POOL") or []
+        activos = [f for f in pool if is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))]
+        return {
+            "success": True,
+            "data_version": st["data_version"],
+            "last_sync_lima": st["last_sync_lima"],
+            "last_sync_utc": st["last_sync_utc"],
+            "last_reason": st["last_reason"],
+            "timezone": "America/Lima",
+            "fecha_operativa": get_current_operational_date(),
+            "top3_fecha_publicada": rot_st.get("fecha_partidos_publicada"),
+            "estado_telegram": rot_st.get("estado_telegram"),
+            "total_partidos_activos": len(activos),
+            "competiciones_deshabilitadas": sorted(list(get_disabled_competitions())),
+        }
+
+    @classmethod
+    def run_daily_pipeline(cls, now_pe=None, force: bool = False, motivo: str = "DAILY_22_00_PE") -> dict:
+        """
+        Ejecuta los 10 pasos de actualización diaria en orden:
+          1. Obtener calendario correcto (football-data.org + calendario manual).
+          2. Eliminar duplicados (3 niveles).
+          3. Verificar partidos reales.
+          4. Actualizar caché e índice de fechas.
+          5. Regenerar análisis e índices históricos.
+          6. Seleccionar Top 3 del día siguiente.
+          7. Actualizar pronósticos destacados.
+          8. Enviar Telegram (Top 3 + resultados pendientes).
+          9. Guardar resultados verificados.
+         10. Invalidar caché anterior y publicar nueva data_version.
+        """
+        with cls._LOCK:
+            dt_pe = now_pe or Top3RotationManager.now_peru()
+            hoy_pe = dt_pe.strftime("%Y-%m-%d")
+            steps_log = []
+
+            # Paso 1: Obtener calendario correcto
+            live_sync = CalendarSyncService.sync_live_calendar_from_football_data(days_back=7, days_ahead=35)
+            steps_log.append({"paso": 1, "nombre": "obtener_calendario", "ok": True, "live_fd_ok": bool(live_sync.get("ok")), "total_fd": live_sync.get("total_fd_matches", 0)})
+
+            # Paso 2: Eliminar duplicados (Nivel 1 y 2)
+            pool_raw = list(globals().get("ALL_FIXTURES_POOL") or [])
+            dedup_pool, dups_removed, disc_list = CalendarSyncService.deduplicate_fixtures(pool_raw, level="PIPELINE_22H")
+            globals()["ALL_FIXTURES_POOL"] = dedup_pool
+            steps_log.append({"paso": 2, "nombre": "eliminar_duplicados", "total_recibido": len(pool_raw), "total_valido": len(dedup_pool), "duplicados_eliminados": len(dups_removed), "discrepancias": len(disc_list)})
+
+            # Paso 3: Verificar partidos reales (auditoría del día actual)
+            aud_hoy = CalendarSyncService.audit_date_pipeline(hoy_pe)
+            steps_log.append({"paso": 3, "nombre": "verificar_partidos_reales", "fecha": hoy_pe, "oficiales": aud_hoy["partidos_oficiales"]})
+
+            # Paso 4: Actualizar caché e índice de fechas
+            invalidate_calendar_caches(rebuild_pool=False)
+            steps_log.append({"paso": 4, "nombre": "actualizar_cache", "fechas_indexadas": len(globals().get("_FIXTURES_DATES_SORTED") or [])})
+
+            # Paso 5: Regenerar índices de análisis
+            SportsAnalyticsEngine.rebuild_verified_history_index(force=True)
+            steps_log.append({"paso": 5, "nombre": "regenerar_analisis", "ok": True})
+
+            # Pasos 6, 7 y 8: Seleccionar Top 3, actualizar destacados y enviar Telegram (rotación 22:00 PE)
+            rot_res = Top3RotationManager.check_and_run_rotation(now_pe=dt_pe, force=force, motivo=motivo)
+            steps_log.append({"paso": 6, "nombre": "seleccionar_top3", "seleccionados": rot_res.get("cantidad_selecciones", 0), "fecha_partidos": rot_res.get("fecha_partidos")})
+            steps_log.append({"paso": 7, "nombre": "actualizar_destacados", "cache_limpia": True})
+            steps_log.append({"paso": 8, "nombre": "enviar_telegram", "enviado": bool(rot_res.get("telegram_sent") or rot_res.get("published")), "estado": rot_res.get("estado_telegram")})
+
+            # Paso 9: Guardar / liquidar resultados de la jornada actual y anterior
+            cierre = Top3RotationManager.close_previous_matchday(hoy_pe)
+            steps_log.append({"paso": 9, "nombre": "guardar_resultados", "finalizados": cierre.get("finalizados", 0), "resultados_enviados": cierre.get("resultados_enviados", False)})
+
+            # Paso 10: Invalidar caché anterior y publicar nueva versión para refresco automático de la UI
+            invalidate_calendar_caches(rebuild_pool=False)
+            ver_state = cls.bump_data_version(reason=motivo)
+            cls._STATE["last_pipeline_steps"] = steps_log
+            steps_log.append({"paso": 10, "nombre": "invalidar_cache_y_versionar", "data_version": ver_state["data_version"], "last_sync_lima": ver_state["last_sync_lima"]})
+
+            logger.info(
+                "[DailyAutomationPipeline] Completado motivo=%s fecha_pe=%s version=%s dup_eliminados=%d top3_enviado=%s",
+                motivo, hoy_pe, ver_state["data_version"], len(dups_removed), rot_res.get("telegram_sent")
+            )
+            return {
+                "success": True,
+                "motivo": motivo,
+                "timezone": "America/Lima",
+                "fecha_pe": hoy_pe,
+                "data_version": ver_state["data_version"],
+                "last_sync_lima": ver_state["last_sync_lima"],
+                "rotacion_top3": rot_res,
+                "auditoria_duplicados": {
+                    "total_recibido": len(pool_raw),
+                    "total_valido": len(dedup_pool),
+                    "duplicados_eliminados": len(dups_removed),
+                    "discrepancias": disc_list,
+                },
+                "pasos": steps_log,
+            }
+
+
 def _loop_auto_telegram():
     """Monitorea el reloj oficial de Perú (America/Lima, UTC-5) cada 30 segundos y ejecuta la rotación de las 22:00 PE
     o la recuperación automática si Render se reinició después de las 22:00 PE."""
@@ -1069,7 +1444,9 @@ def _loop_auto_telegram():
         try:
             now_pe = Top3RotationManager.now_peru()
             if now_pe.hour >= 22:
-                Top3RotationManager.check_and_run_rotation(now_pe=now_pe, motivo="ROTACION_22_00_PE")
+                win_chk = Top3RotationManager.compute_window(now_pe=now_pe)
+                if not Top3RotationManager.is_key_published(win_chk["idempotency_key"]):
+                    DailyAutomationPipeline.run_daily_pipeline(now_pe=now_pe, force=False, motivo="ROTACION_22_00_PE")
         except Exception as e:
             logger.error("Error en _loop_auto_telegram: %s", e)
         time.sleep(30)
@@ -17719,7 +18096,9 @@ def build_multimonth_calendar(extra_fd_fixtures: list = None):
                 )
                 continue
 
-        ckey = f"{f_loc}|{pair_k}"
+        comp_norm = normalize_competition_code(fix.get("codigo_liga", ""), fix.get("liga", ""))
+        fix["codigo_liga"] = comp_norm
+        ckey = f"{f_loc}|{comp_norm}|{pair_k}"
         if ckey in seen_canonical:
             continue
         seen_canonical.add(ckey)
@@ -17770,11 +18149,117 @@ class CalendarSyncService:
     VALID_COMPETITION_CODES = {"BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "UCL", "UEL", "UNL"}
 
     @classmethod
-    def canonical_fixture_key(cls, local: str, visitante: str, fecha: str) -> str:
+    def canonical_fixture_key(cls, local: str, visitante: str, fecha: str, competition_code: str = "") -> str:
+        """
+        Clave única canónica por partido:
+          fecha_local_lima | competicion_normalizada | local_normalizado | visitante_normalizado
+        """
         h = canonical_team_name(local)
         a = canonical_team_name(visitante)
         _, f_loc = resolve_match_local_date({"fecha_utc": str(fecha or "")}) if "T" in str(fecha or "") else ("", str(fecha or "")[:10])
+        comp = normalize_competition_code(competition_code) if competition_code else ""
+        if comp:
+            return f"{f_loc or str(fecha or '')[:10]}|{comp}|{h}|{a}"
         return f"{f_loc or str(fecha or '')[:10]}|{h}|{a}"
+
+    @classmethod
+    def canonical_fixture_key_for(cls, fix: dict) -> str:
+        loc = str((fix or {}).get("local") or "").strip()
+        vis = str((fix or {}).get("visitante") or "").strip()
+        f_loc = CalendarDateService.to_lima_date(fix)
+        comp = normalize_competition_code((fix or {}).get("codigo_liga", ""), (fix or {}).get("liga", ""))
+        return cls.canonical_fixture_key(loc, vis, f_loc, competition_code=comp)
+
+    @classmethod
+    def _fixture_completeness_score(cls, fix: dict) -> tuple:
+        src = str(fix.get("origen_fuente") or "calendario_maestro_embebido").lower()
+        src_rank = 3 if "football-data" in src else (2 if "manual" in src else 1)
+        has_utc = 1 if ("T" in str(fix.get("fecha_utc") or "") and str(fix.get("fecha_utc") or "").endswith("Z")) else 0
+        st = str(fix.get("estado") or "").upper()
+        st_rank = 2 if st in ("FINISHED", "IN_PLAY", "LIVE", "PAUSED", "POSTPONED", "TIMED") else (1 if st == "SCHEDULED" else 0)
+        filled_fields = sum(1 for v in fix.values() if v not in (None, "", [], {}))
+        return (src_rank, st_rank, has_utc, filled_fields)
+
+    @classmethod
+    def deduplicate_fixtures(cls, fixtures: list, level: str = "IMPORT") -> tuple:
+        """
+        Deduplicación canónica reutilizable en 3 niveles (IMPORT, CACHE, FRONTEND).
+        Conserva siempre el registro más completo cuando hay distinta hora o estado
+        y registra la discrepancia sin eliminar partidos legítimos.
+        Retorna: (lista_deduplicada, duplicados_eliminados, discrepancias_hora_estado)
+        """
+        chosen_by_key = {}
+        order_keys = []
+        duplicados = []
+        discrepancias = []
+
+        for raw_f in (fixtures or []):
+            if not isinstance(raw_f, dict):
+                continue
+            loc = str(raw_f.get("local") or "").strip()
+            vis = str(raw_f.get("visitante") or "").strip()
+            if not loc or not vis:
+                logger.warning("fixture descartado: equipos incompletos")
+                continue
+            fix = dict(raw_f)
+            f_prog, f_loc, f_lima_iso = CalendarDateService.to_lima_datetime(fix)
+            if not f_loc:
+                continue
+            comp = normalize_competition_code(fix.get("codigo_liga", ""), fix.get("liga", ""))
+            fix["codigo_liga"] = comp
+            fix["fecha"] = f_loc
+            fix["fecha_local_partido"] = f_loc
+            fix["fecha_programada"] = f_prog or fix.get("fecha_utc") or f_loc
+            fix["fecha_hora_america_lima"] = f_lima_iso
+            fix["liga"] = normalizar_nombre_liga(fix.get("liga") or FootballDataOrgClient.COMPETITION_NAMES.get(comp, comp))
+
+            ckey = cls.canonical_fixture_key(loc, vis, f_loc, competition_code=comp)
+            if ckey not in chosen_by_key:
+                chosen_by_key[ckey] = fix
+                order_keys.append(ckey)
+            else:
+                prev = chosen_by_key[ckey]
+                prev_h = str(prev.get("fecha_utc") or "")[11:16]
+                curr_h = str(fix.get("fecha_utc") or "")[11:16]
+                prev_st = str(prev.get("estado") or "").upper()
+                curr_st = str(fix.get("estado") or "").upper()
+                if (prev_h and curr_h and prev_h != curr_h) or (prev_st and curr_st and prev_st != curr_st):
+                    discrepancias.append({
+                        "nivel": level,
+                        "clave_canonica": ckey,
+                        "partido": f"{prev.get('local')} vs {prev.get('visitante')}",
+                        "hora_a": prev_h,
+                        "hora_b": curr_h,
+                        "estado_a": prev_st,
+                        "estado_b": curr_st,
+                        "fuente_a": prev.get("origen_fuente"),
+                        "fuente_b": fix.get("origen_fuente"),
+                    })
+                if cls._fixture_completeness_score(fix) > cls._fixture_completeness_score(prev):
+                    # Conservar el registro más completo preservando id_partido estable si ya existía
+                    if prev.get("id_partido") and not fix.get("id_partido"):
+                        fix["id_partido"] = prev["id_partido"]
+                    duplicados.append({
+                        "nivel": level,
+                        "clave_canonica": ckey,
+                        "descartado_id": prev.get("id_partido"),
+                        "conservado_id": fix.get("id_partido"),
+                        "fuente_descartada": prev.get("origen_fuente"),
+                        "fuente_conservada": fix.get("origen_fuente"),
+                    })
+                    chosen_by_key[ckey] = fix
+                else:
+                    duplicados.append({
+                        "nivel": level,
+                        "clave_canonica": ckey,
+                        "descartado_id": fix.get("id_partido"),
+                        "conservado_id": prev.get("id_partido"),
+                        "fuente_descartada": fix.get("origen_fuente"),
+                        "fuente_conservada": prev.get("origen_fuente"),
+                    })
+
+        dedup_list = CalendarDateService.sort_fixtures([chosen_by_key[k] for k in order_keys])
+        return dedup_list, duplicados, discrepancias
 
     @classmethod
     def audit_manual_calendar(cls, fixtures: list = None) -> dict:
@@ -18125,7 +18610,7 @@ class CalendarSyncService:
         seen_fd = set()
         for item in converted + list(_SYNCED_EXTERNAL_FD_FIXTURES or []):
             _, f_loc, _ = resolve_match_datetime_lima(item)
-            ck = cls.canonical_fixture_key(item.get("local", ""), item.get("visitante", ""), f_loc)
+            ck = cls.canonical_fixture_key(item.get("local", ""), item.get("visitante", ""), f_loc, competition_code=normalize_competition_code(item.get("codigo_liga", ""), item.get("liga", "")))
             if ck not in seen_fd:
                 seen_fd.add(ck)
                 merged_fd.append(item)
@@ -18253,7 +18738,9 @@ class CalendarSyncService:
                     eliminados_combinacion_dedup.append(rec)
                     continue
 
-            ckey = cls.canonical_fixture_key(loc, vis, f_loc)
+            comp_f = normalize_competition_code(fix.get("codigo_liga", ""), fix.get("liga", ""))
+            fix["codigo_liga"] = comp_f
+            ckey = cls.canonical_fixture_key(loc, vis, f_loc, competition_code=comp_f)
             if ckey in seen_keys:
                 rec = {
                     "id_partido": fix.get("id_partido"),
@@ -21439,12 +21926,7 @@ def _norm_equipo(nombre):
     cached = _NORM_EQUIPO_CACHE.get(key)
     if cached is not None:
         return cached
-    s = key.lower().strip()
-    s = s.replace("-", " ")
-    s = re.sub(r'[̀-ͯ]', '', unicodedata.normalize('NFD', s))
-    s = re.sub(r'[^a-z0-9 ]', '', s)
-    s = re.sub(r'\s+', ' ', s).strip()
-    res = ALIAS_EQUIPOS_RATINGS.get(s, _EARLY_TEAM_ALIASES.get(s, s))
+    res = canonical_team_name(key)
     _NORM_EQUIPO_CACHE[key] = res
     return res
 
@@ -22051,6 +22533,8 @@ def invalidate_calendar_caches(rebuild_pool: bool = False, extra_fd_fixtures: li
         _CARTELERA_MEMO_TS.clear()
     _FIXTURES_INDEX_SIG = None
     ensure_fixtures_date_index(force=True)
+    if "DailyAutomationPipeline" in globals():
+        DailyAutomationPipeline.bump_data_version("CALENDAR_CACHE_INVALIDATED")
     return len(ALL_FIXTURES_POOL)
 
 def ensure_fixtures_date_index(force: bool = False):
@@ -22080,7 +22564,9 @@ def ensure_fixtures_date_index(force: bool = False):
             fix["_visitante_norm"] = _norm_equipo(vis)
         if "_liga_norm" not in fix:
             fix["_liga_norm"] = normalizar_nombre_liga(fix.get("liga", "Otras Ligas"))
-        m_key = CalendarSyncService.canonical_fixture_key(loc, vis, fecha_dia)
+        comp_n = normalize_competition_code(fix.get("codigo_liga", ""), fix.get("liga", ""))
+        fix["codigo_liga"] = comp_n
+        m_key = CalendarSyncService.canonical_fixture_key(loc, vis, fecha_dia, competition_code=comp_n)
         id_p = fix.get("id_partido")
         if m_key in seen_global or (id_p and id_p in seen_global):
             continue
@@ -23167,6 +23653,9 @@ def create_app() -> Flask:
             for d in fechas_activas:
                 matches_to_process.extend(_FIXTURES_BY_DATE_INDEX.get(d, []))
 
+            # Deduplicación Nivel 3 antes de enviar al frontend
+            matches_to_process, dups_nivel3, disc_nivel3 = CalendarSyncService.deduplicate_fixtures(matches_to_process, level="FRONTEND_RESPONSE")
+
             todos = {}
             destacados = []
             partidos_fallidos = 0
@@ -23280,8 +23769,12 @@ def create_app() -> Flask:
             )
 
             rot_st = Top3RotationManager.get_status_report()
+            sync_meta = DailyAutomationPipeline.get_sync_status()
             res_cartelera = {
                 "success": True,
+                "data_version": sync_meta["data_version"],
+                "last_sync_lima": sync_meta["last_sync_lima"],
+                "duplicados_eliminados_nivel3": len(dups_nivel3),
                 "total_partidos": total_partidos,
                 "fecha_actual": today_str,
                 "fecha_publicacion": rot_st.get("fecha_publicacion") or get_telegram_publication_date(),
@@ -25115,6 +25608,32 @@ def create_app() -> Flask:
             "temporada": "2026/2027",
             "plantillas": MASTER_PLAYERS_PROPS
         }), 200
+
+    @app.route("/api/v1/sync/status", methods=["GET"])
+    def get_sync_status_endpoint():
+        """Devuelve la versión actual de los datos y la última sincronización (America/Lima) para polling ligero."""
+        return jsonify(DailyAutomationPipeline.get_sync_status()), 200
+
+    @app.route("/api/v1/cron/daily-sync", methods=["POST"])
+    def cron_daily_sync_endpoint():
+        """
+        Endpoint seguro para Render Cron Job o GitHub Actions (22:00 America/Lima).
+        Autentica mediante CRON_SECRET_TOKEN (X-Cron-Token / Bearer) o administrador autenticado.
+        """
+        expected_token = (os.getenv("CRON_SECRET_TOKEN") or "").strip()
+        provided_token = (
+            request.headers.get("X-Cron-Token")
+            or (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
+            or (request.args.get("token") or "").strip()
+        )
+        token_ok = bool(expected_token and provided_token and hmac.compare_digest(provided_token, expected_token))
+        if not token_ok and not _verificar_es_admin():
+            return jsonify({"success": False, "error": "No autorizado: configure CRON_SECRET_TOKEN o use sesión de administrador."}), 403
+        body = request.get_json(silent=True) or {}
+        force_run = bool(body.get("force", False))
+        motivo = str(body.get("motivo") or "CRON_HTTP_22_00_PE")[:60]
+        result = DailyAutomationPipeline.run_daily_pipeline(force=force_run, motivo=motivo)
+        return jsonify(result), 200
 
     @app.route("/api/v1/health", methods=["GET"])
     def health_check():
