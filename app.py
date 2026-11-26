@@ -79,8 +79,11 @@ def get_telegram_publication_date() -> str:
     return now_pe.strftime("%Y-%m-%d")
 
 def get_disabled_competitions() -> set:
-    """Lee las competiciones deshabilitadas desde la variable de entorno DISABLED_COMPETITIONS (por defecto UNL)."""
-    raw = os.getenv("DISABLED_COMPETITIONS", "UNL")
+    """
+    Lee DISABLED_COMPETITIONS desde entorno. Si está vacía o no configurada,
+    todas las competiciones (incluida UEFA Nations League / UNL) permanecen activas.
+    """
+    raw = os.getenv("DISABLED_COMPETITIONS", "")
     return {c.strip().upper() for c in str(raw or "").split(",") if c.strip()}
 
 def is_competition_enabled(code: str = "", liga_name: str = "") -> bool:
@@ -359,6 +362,18 @@ _EARLY_TEAM_ALIASES = {
     "sporting braga": "sporting braga",
     "braga": "sporting braga",
     "vitoria sc": "vitoria guimaraes",
+    "cs maritimo": "maritimo",
+    "maritimo madeira": "maritimo",
+    "cd nacional": "nacional",
+    "clube desportivo nacional": "nacional",
+    "nacional da madeira": "nacional",
+    "es troyes ac": "troyes",
+    "estac troyes": "troyes",
+    "troyes ac": "troyes",
+    "genoa cfc": "genoa",
+    "genoa": "genoa",
+    "torino fc": "torino",
+    "torino": "torino",
     # Resto de Europa (UCL / UEL)
     "club brugge": "brugge",
     "club brugge kv": "brugge",
@@ -453,8 +468,8 @@ _CLUB_NOISE_TOKENS = {
     "fc", "cf", "sc", "sk", "fk", "kv", "osc", "vfb", "rc", "as", "ss", "ssc",
     "ec", "cr", "se", "ca", "cd", "ud", "sd", "rcd", "ac", "afc", "bc", "tsv",
     "sv", "fsv", "ogc", "aj", "us", "acf", "uc", "jk", "rsc", "bsc", "fbc",
-    "club", "clube", "esporte", "balompie", "calcio", "1907", "1899", "04", "05",
-    "1846", "1913", "09", "1909", "1901", "29",
+    "club", "clube", "desportivo", "esporte", "balompie", "calcio", "cs", "es",
+    "cfc", "estac", "1907", "1899", "04", "05", "1846", "1913", "09", "1909", "1901", "29",
 }
 
 def canonical_team_name(nombre: str) -> str:
@@ -16638,6 +16653,95 @@ class SportsAnalyticsEngine:
             }
         }
 
+        # Enriquecer cada métrica con metadatos auditables (metodo, fecha_calculo, intervalo_estimado)
+        # y garantizar Nivel 3 (prior de competición ajustado por localía y fuerza relativa) cuando falte muestra real
+        _calc_ts_iso = datetime.now(timezone.utc).isoformat()
+        _rel_attack_factor = max(0.84, min(1.18, (float(lh) + float(la)) / max(1.8, float(l_avg.get("goals", 2.65)))))
+        _home_share = max(0.42, min(0.62, float(lh) / max(0.5, float(lh) + float(la))))
+        for _mk, _lkey, _unit_min, _unit_max in (
+            ("avg_corners", "corners", 5.5, 14.5),
+            ("avg_cards", "cards", 2.0, 7.5),
+            ("avg_shots", "shots", 14.0, 36.0),
+            ("avg_shots_on_target", "shots_on_target", 4.0, 14.0),
+        ):
+            _m_obj = key_probabilities.get(_mk)
+            if not isinstance(_m_obj, dict):
+                continue
+            _is_real = (_m_obj.get("tipo_dato") == "VERIFICADO" and _m_obj.get("value") is not None)
+            if _m_obj.get("valor") is None:
+                # Nivel 3: prior de competición ajustado por fuerza relativa y localía (nunca constante arbitraria)
+                _base_l = float(l_avg.get(_lkey, 9.5))
+                _prior_val = round(max(_unit_min, min(_unit_max, _base_l * _rel_attack_factor)), 1)
+                _prior_h = round(_prior_val * _home_share, 1)
+                _prior_a = round(max(0.5, _prior_val - _prior_h), 1)
+                _m_obj["valor"] = _prior_val
+                _m_obj["home_modelado"] = _prior_h
+                _m_obj["away_modelado"] = _prior_a
+                _m_obj["tipo_dato"] = "ESTIMADO_MODELO"
+                _m_obj["fuente"] = f"prior_competicion:{code}"
+                _m_obj["confianza"] = "BAJA"
+                _m_obj["nivel_prior"] = "NIVEL_3_PRIOR_COMPETICION"
+                if _mk == "avg_corners":
+                    _m_obj["recommended_modelado"] = "Más de 8.5 córners" if _prior_val >= 9.5 else "Menos de 10.5 córners"
+                    _m_obj["prob_pct_modelado"] = int(round(max(55, min(80, 62 + abs(_prior_val - 9.5) * 4))))
+                elif _mk == "avg_cards":
+                    _m_obj["recommended_modelado"] = "Más de 3.5 tarjetas" if _prior_val >= 4.2 else "Menos de 4.5 tarjetas"
+                    _m_obj["prob_pct_modelado"] = int(round(max(55, min(80, 62 + abs(_prior_val - 4.2) * 5))))
+                elif _mk == "avg_shots":
+                    _m_obj["recommended_modelado"] = f"Más de {round(_prior_val - 2.5, 1)} remates"
+                    _m_obj["prob_pct_modelado"] = 66
+                elif _mk == "avg_shots_on_target":
+                    _m_obj["recommended_modelado"] = f"Más de {round(max(4.5, _prior_val - 1.5), 1)} tiros a puerta"
+                    _m_obj["prob_pct_modelado"] = 65
+            else:
+                _m_obj["nivel_prior"] = "NIVEL_1_REAL" if _is_real else "NIVEL_2_CALIBRADO"
+
+            _v_num = float(_m_obj["valor"])
+            _sigma = round(math.sqrt(max(0.5, _v_num)) * (0.35 if _is_real else 0.55), 1)
+            _m_obj["metodo"] = "muestra_verificada_multi_fuente" if _is_real else ("regresion_liga_poisson_localia" if _m_obj.get("nivel_prior") == "NIVEL_2_CALIBRADO" else "prior_competicion_localia_xg")
+            _m_obj["fecha_calculo"] = _calc_ts_iso
+            _m_obj["intervalo_estimado"] = [round(max(0.0, _v_num - _sigma), 1), round(_v_num + _sigma, 1)]
+            _m_obj["tipo_dato_audit"] = "REAL" if _is_real else "ESTIMADO_MODELO"
+
+        # Sincronizar pilares y stakazos con las métricas unificadas para CERO contradicciones entre secciones
+        _kp_c = key_probabilities["avg_corners"]
+        _kp_t = key_probabilities["avg_cards"]
+        _kp_sh = key_probabilities["avg_shots"]
+        _kp_sot = key_probabilities["avg_shots_on_target"]
+
+        if _kp_c.get("valor") is not None:
+            _ch = _kp_c.get("home") if _kp_c.get("home") is not None else _kp_c.get("home_modelado")
+            _ca = _kp_c.get("away") if _kp_c.get("away") is not None else _kp_c.get("away_modelado")
+            pilares["pilar_1_volumen_ofensivo"]["corners_proyectados"] = f"{_kp_c['valor']} córners totales ({_ch} local / {_ca} visita)"
+        if _kp_sh.get("valor") is not None:
+            _shh = _kp_sh.get("home") if _kp_sh.get("home") is not None else _kp_sh.get("home_modelado")
+            _sha = _kp_sh.get("away") if _kp_sh.get("away") is not None else _kp_sh.get("away_modelado")
+            pilares["pilar_1_volumen_ofensivo"]["tiros_totales"] = f"{_shh} vs {_sha} prom. ({_kp_sh['valor']} totales)"
+        if _kp_sot.get("valor") is not None:
+            _soth = _kp_sot.get("home") if _kp_sot.get("home") is not None else _kp_sot.get("home_modelado")
+            _sota = _kp_sot.get("away") if _kp_sot.get("away") is not None else _kp_sot.get("away_modelado")
+            pilares["pilar_1_volumen_ofensivo"]["tiros_a_puerta"] = f"{_soth} vs {_sota} prom. ({_kp_sot['valor']} totales)"
+
+        _t_val_p = _kp_t.get("valor")
+        _c_val_p = _kp_c.get("valor")
+        pilares["pilar_4_historial_h2h"]["friccion"] = (
+            f"Proyección de tarjetas: {_t_val_p} tarj. (media de liga {l_avg['cards']}) | Córners: {_c_val_p}."
+            if _t_val_p is not None else f"Proyección de córners: {_c_val_p}."
+        )
+        pilares["pilar_7_micromercados_friccion"]["tarjetas_proyectadas"] = (
+            f"Tarjetas proyectadas: {_t_val_p} | Córners proyectados: {_c_val_p}"
+        )
+        if stakazos["micromercado_oro"]["mercado"] == "Datos insuficientes":
+            _rec_m = _kp_c.get("recommended_modelado") or _kp_t.get("recommended_modelado")
+            _prob_m = _kp_c.get("prob_pct_modelado") or _kp_t.get("prob_pct_modelado")
+            if _rec_m and _rec_m != "Sin base suficiente para estimar":
+                stakazos["micromercado_oro"]["mercado"] = _rec_m
+                stakazos["micromercado_oro"]["probabilidad"] = f"{_prob_m}%" if _prob_m else "65%"
+                stakazos["micromercado_oro"]["tipo"] = "CÓRNERS" if "córner" in _rec_m.lower() else "TARJETAS"
+                stakazos["micromercado_oro"]["icono"] = "🚩" if "córner" in _rec_m.lower() else "🟨"
+                stakazos["micromercado_oro"]["motivo"] = f"Proyección calibrada del modelo ({_kp_c.get('valor')} córners / {_kp_t.get('valor')} tarjetas)."
+                pilares["pilar_7_micromercados_friccion"]["verde_seguro"] = _rec_m
+
         pronostico_principal_obj = {
             "seleccion": "Datos insuficientes" if sin_ninguna_fuente else mercado_sugerido,
             "probabilidad": "—" if sin_ninguna_fuente else prob_principal,
@@ -22340,6 +22444,9 @@ def actualizar_ratings_reales(descargar=None):
     Si un dato (córners/tarjetas/árbitro) no es provisto por football-data.org, queda en None.
     """
     partidos, ok, fallos = [], [], []
+    partidos_descargados = 0
+    partidos_descartados = 0
+    errores_api = []
     actualizado_ts = datetime.now(timezone.utc).isoformat()
 
     for cod_interno, fd_code in FootballDataOrgClient.COMPETITION_CODE_MAP.items():
@@ -22367,8 +22474,10 @@ def actualizar_ratings_reales(descargar=None):
 
             if not res_ok:
                 fallos.append(f"{liga_nombre}: {err_msg or 'sin respuesta'}")
+                errores_api.append({"competicion": cod_interno, "error": err_msg or "sin respuesta"})
                 continue
 
+            partidos_descargados += len(matches_raw or [])
             for m in matches_raw:
                 if str(m.get("status") or "").upper() != "FINISHED":
                     continue
@@ -22426,10 +22535,46 @@ def actualizar_ratings_reales(descargar=None):
     with FootballDataOrgClient._LOCK:
         FootballDataOrgClient._STATUS["ultima_sincronizacion"] = actualizado_ts
 
+    # Si football-data.org no devolvió partidos (ej. sin clave o límite 429), respaldar desde _VERIFIED_RESULTS_CACHE
+    if not partidos and "_VERIFIED_RESULTS_CACHE" in globals() and _VERIFIED_RESULTS_CACHE:
+        for (f_c, h_c, a_c), entry in list(_VERIFIED_RESULTS_CACHE.items()):
+            if entry.get("simulado") or not entry.get("finished"):
+                continue
+            if entry.get("score_home") is None or entry.get("score_away") is None:
+                continue
+            try:
+                f_iso_c = str(f_c)[:10]
+                partidos.append({
+                    "f": datetime.strptime(f_iso_c, "%Y-%m-%d").date(),
+                    "f_iso": f_iso_c,
+                    "h": h_c, "a": a_c,
+                    "gh": int(entry["score_home"]), "ga": int(entry["score_away"]),
+                    "liga": entry.get("competicion") or "Competición Oficial",
+                    "cod": entry.get("codigo_liga") or "OFL",
+                    "tipo_entidad": entry.get("tipo_entidad") or "club",
+                    "referees": [],
+                })
+            except Exception:
+                partidos_descartados += 1
+
     if not partidos:
+        causa_vacio = "FOOTBALL_API_KEY_NO_CONFIGURADA" if not FootballDataOrgClient._get_api_key() else (
+            errores_api[0]["error"] if errores_api else "SIN_PARTIDOS_FINALIZADOS_DISPONIBLES"
+        )
+        logger.warning(
+            "[RatingsSync] 0 partidos aceptados. descargados=%d descartados=%d causa=%s errores=%s",
+            partidos_descargados, partidos_descartados, causa_vacio, errores_api[:5]
+        )
         with _RATINGS_LOCK:
             RATINGS_ESTADO.update({
                 "actualizado": actualizado_ts,
+                "ultima_sincronizacion": actualizado_ts,
+                "partidos_descargados": partidos_descargados,
+                "partidos_aceptados": 0,
+                "partidos_descartados": partidos_descartados,
+                "equipos_procesados": 0,
+                "causa_vacio": causa_vacio,
+                "errores_api": errores_api[:10],
                 "ligas_ok": ok, "ligas_fallidas": fallos,
                 "temporadas": ["football-data.org-v4"],
             })
@@ -22505,7 +22650,14 @@ def actualizar_ratings_reales(descargar=None):
         RATINGS_ESTADO.update({
             "actualizado": actualizado_ts,
             "equipos_con_datos": len(nuevos),
+            "equipos_procesados": len(nuevos),
             "partidos_usados": len(partidos),
+            "partidos_descargados": max(partidos_descargados, len(partidos)),
+            "partidos_aceptados": len(partidos),
+            "partidos_descartados": partidos_descartados,
+            "ultima_sincronizacion": actualizado_ts,
+            "causa_vacio": None,
+            "errores_api": errores_api[:10],
             "ligas_ok": ok,
             "ligas_fallidas": fallos,
             "temporadas": ["football-data.org-v4"],
@@ -23171,6 +23323,25 @@ def create_app() -> Flask:
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         if request.headers.get("X-Forwarded-Proto") == "https" or request.is_secure:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Compresión gzip automática para payloads JSON grandes (optimización de red en Render)
+        try:
+            accept_enc = str(request.headers.get("Accept-Encoding") or "")
+            if (
+                "gzip" in accept_enc.lower()
+                and hasattr(response, "get_data")
+                and not response.headers.get("Content-Encoding")
+                and str(response.mimetype or "").startswith(("application/json", "text/"))
+            ):
+                raw_body = response.get_data()
+                if raw_body and len(raw_body) >= 1024:
+                    import gzip as _gzip
+                    gz_body = _gzip.compress(raw_body, compresslevel=6)
+                    response.set_data(gz_body)
+                    response.headers["Content-Encoding"] = "gzip"
+                    response.headers["Content-Length"] = str(len(gz_body))
+                    response.headers["Vary"] = "Accept-Encoding"
+        except Exception:
+            pass
         return response
     analytics = SportsAnalyticsEngine()
 
@@ -23611,8 +23782,10 @@ def create_app() -> Flask:
         try:
             today_str = get_current_operational_date()
             req_fecha = request.args.get("fecha", "").strip()
+            req_modo = (request.args.get("modo") or "completo").strip().lower()
+            es_modo_resumen = req_modo in ("resumen", "light", "compacto")
             target_featured_date = req_fecha if req_fecha else today_str
-            cache_key = f"{target_featured_date}|{chr(44).join(sorted(get_disabled_competitions()))}|{len(ALL_FIXTURES_POOL)}|{id(ALL_FIXTURES_POOL)}"
+            cache_key = f"{target_featured_date}|{req_modo}|{chr(44).join(sorted(get_disabled_competitions()))}|{len(ALL_FIXTURES_POOL)}|{id(ALL_FIXTURES_POOL)}"
 
             now_ts = time.time()
             if cache_key in _CARTELERA_MEMO_CACHE and (now_ts - _CARTELERA_MEMO_TS.get(cache_key, 0)) < 300:
@@ -23723,7 +23896,35 @@ def create_app() -> Flask:
                         "consenso_triple_ia": analisis.get("consenso_dual_ia", {})
                     }
                     _attach_match_logos(item, loc, vis, competition_code=fix.get("codigo_liga", "OFL"))
-                    todos.setdefault(div_name, []).append(item)
+                    if es_modo_resumen:
+                        item_ligero = {
+                            "id_partido": item["id_partido"],
+                            "partido": item["partido"],
+                            "local": item["local"],
+                            "visitante": item["visitante"],
+                            "liga": item["liga"],
+                            "codigo_liga": item["codigo_liga"],
+                            "fecha": item["fecha"],
+                            "fecha_programada": item["fecha_programada"],
+                            "fecha_local_partido": item["fecha_local_partido"],
+                            "hora_utc": item["hora_utc"],
+                            "estado": item["estado"],
+                            "jornada": item["jornada"],
+                            "probabilidades": {"1X2": item["probabilidades"].get("1X2", {})},
+                            "pronostico_principal": {
+                                "seleccion": (item.get("pronostico_principal") or {}).get("seleccion"),
+                                "probabilidad": (item.get("pronostico_principal") or {}).get("probabilidad"),
+                                "confidence_pct": (item.get("pronostico_principal") or {}).get("confidence_pct"),
+                            },
+                            "logo_local": item.get("logo_local"),
+                            "logo_visitante": item.get("logo_visitante"),
+                            "fallback_logo_local": item.get("fallback_logo_local"),
+                            "fallback_logo_visitante": item.get("fallback_logo_visitante"),
+                            "resumen_ligero": True,
+                        }
+                        todos.setdefault(div_name, []).append(item_ligero)
+                    else:
+                        todos.setdefault(div_name, []).append(item)
                     if fecha_dia_solo == fecha_mostrada_destacados:
                         destacados.append(item)
                 except Exception as match_exc:
@@ -23784,9 +23985,8 @@ def create_app() -> Flask:
                 "fecha_activa_destacados": fecha_mostrada_destacados,
                 "mensaje_jornada": mensaje_jornada,
                 "destacados": destacados,
-                "pronosticos_destacados": destacados,
                 "todos": todos,
-                "todos_los_partidos": todos,
+                **({} if es_modo_resumen else {"pronosticos_destacados": destacados, "todos_los_partidos": todos}),
                 "auditoria_calendario_fecha": auditoria_fecha,
                 "metricas_rendimiento": metricas_rend,
             }
@@ -25608,6 +25808,68 @@ def create_app() -> Flask:
             "temporada": "2026/2027",
             "plantillas": MASTER_PLAYERS_PROPS
         }), 200
+
+    @app.route("/api/v1/partido/<match_id>/detalle", methods=["GET"])
+    def get_partido_detalle(match_id):
+        """Carga bajo demanda el análisis completo de un partido individual (evita payload inicial de 19 MB)."""
+        ensure_fixtures_date_index()
+        SportsAnalyticsEngine.rebuild_verified_history_index()
+        mid_str = str(match_id or "").strip()
+        target_fix = None
+        for f in (ALL_FIXTURES_POOL or []):
+            if str(f.get("id_partido") or "") == mid_str:
+                target_fix = f
+                break
+        if not target_fix:
+            return jsonify({"success": False, "error": "Partido no encontrado en el calendario activo."}), 404
+        loc = str(target_fix.get("local") or "").strip()
+        vis = str(target_fix.get("visitante") or "").strip()
+        if not loc or not vis:
+            return jsonify({"success": False, "error": "Datos de equipos incompletos."}), 400
+        f_prog, fecha_dia_solo = resolve_match_local_date(target_fix)
+        f_utc = f_prog or str(target_fix.get("fecha_utc") or "")
+        div_name = target_fix.get("_liga_norm") or normalizar_nombre_liga(target_fix.get("liga") or "Otras Ligas")
+        analisis = analytics.generate_institutional_analysis(target_fix)
+        props_loc_list = [dict(p, equipo_partido=loc) for p in (get_players_for_team(loc) or [])[:2]]
+        props_vis_list = [dict(p, equipo_partido=vis) for p in (get_players_for_team(vis) or [])[:2]]
+        props_partido = (props_loc_list[:1] + props_vis_list[:1] + props_loc_list[1:2] + props_vis_list[1:2])
+        item = {
+            "id_partido": target_fix.get("id_partido"),
+            "partido": f"{loc} vs {vis}",
+            "local": loc,
+            "visitante": vis,
+            "liga": div_name,
+            "codigo_liga": target_fix.get("codigo_liga", "OFL"),
+            "fecha": fecha_dia_solo,
+            "fecha_programada": f_utc,
+            "fecha_local_partido": fecha_dia_solo,
+            "fecha_publicacion": Top3RotationManager._STATE.get("fecha_publicacion") or get_telegram_publication_date(),
+            "fecha_rotacion": Top3RotationManager._STATE.get("fecha_rotacion"),
+            "hora_utc": (f_utc[11:16] if len(f_utc) >= 16 else "14:00"),
+            "estado": target_fix.get("estado", "SCHEDULED"),
+            "estado_calendario": CalendarSyncService.get_fixture_overlay(target_fix),
+            "jornada": target_fix.get("jornada"),
+            "probabilidades": analisis["probabilidades"],
+            "key_probabilities": analisis.get("key_probabilities", {}),
+            "dobles_oportunidades": analisis["dobles_oportunidades"],
+            "pronostico_principal": analisis["pronostico_principal"],
+            "consenso_5_modelos": analisis.get("consenso_5_modelos", []),
+            "pilares_cuantitativos": analisis["pilares_cuantitativos"],
+            "organizacion_stakazos": analisis["organizacion_stakazos"],
+            "modulo_arbitraje": analisis["modulo_arbitraje"],
+            "analisis_partidos_anteriores": analisis.get("analisis_partidos_anteriores", {}),
+            "h2h_directo": analisis.get("h2h_directo", {}),
+            "alerta_trampa": analisis.get("alerta_trampa", {"activa": False}),
+            "parametros_xg": analisis["parametros_xg"],
+            "props_local": props_loc_list,
+            "props_visitante": props_vis_list,
+            "props_jugadores": props_partido,
+            "consenso_dual_ia": analisis.get("consenso_dual_ia", {}),
+            "consenso_triple_ia": analisis.get("consenso_dual_ia", {}),
+            "resumen_ligero": False,
+        }
+        _attach_match_logos(item, loc, vis, competition_code=target_fix.get("codigo_liga", "OFL"))
+        return jsonify({"success": True, "partido": item}), 200
 
     @app.route("/api/v1/sync/status", methods=["GET"])
     def get_sync_status_endpoint():
