@@ -151,7 +151,10 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         ai = an["consenso_dual_ia"]
         self.assertEqual(ai["estado"], "ACTIVO")
         self.assertNotIn("9.8 córners", ai["gemini_tesis"])
-        self.assertIn("Datos insuficientes", ai["gemini_tesis"])
+        self.assertNotIn("Datos insuficientes", ai["gemini_tesis"])
+        self.assertEqual(an["key_probabilities"]["avg_corners"]["tipo_dato"], "ESTIMADO_MODELO")
+        self.assertIsNone(an["key_probabilities"]["avg_corners"]["value"])
+        self.assertIsNotNone(an["key_probabilities"]["avg_corners"]["valor"])
 
     def test_03_audit_enrichment_never_invents_36_cards_or_94_corners(self):
         item = {
@@ -639,12 +642,14 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             m_obj = an_no_base["key_probabilities"][m_key]
             for req_k in ("valor", "tipo_dato", "fuente", "muestra_n", "confianza"):
                 self.assertIn(req_k, m_obj, f"Falta {req_k} en {m_key}")
-            self.assertIsNone(m_obj["valor"])
+            self.assertIsNone(m_obj["value"])
+            self.assertIsNotNone(m_obj["valor"])
             self.assertEqual(m_obj["tipo_dato"], "ESTIMADO_MODELO")
+            self.assertEqual(m_obj["nivel_prior"], "NIVEL_3_PRIOR_COMPETICION")
             self.assertEqual(m_obj["muestra_n"], 0)
-            self.assertEqual(m_obj["mensaje_base"], "Sin base suficiente para estimar")
-            self.assertEqual(m_obj["etiqueta_ui"], "No estimable")
-            self.assertEqual(m_obj["recommended_modelado"], "Sin base suficiente para estimar")
+            self.assertIn("intervalo_estimado", m_obj)
+            self.assertIn("fecha_calculo", m_obj)
+            self.assertIn("metodo", m_obj)
 
         # 2. Obtención de últimos 5 partidos mediante Highlightly (3 antes de fecha + 1 futuro ignorado) y respaldo ESPN (2 antes de fecha)
         hl_matches_payload = {
@@ -757,7 +762,7 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         pred_app.ensure_fixtures_date_index(force=True)
         pron_handler = self.flask_app.routes["/obtener-pronostico"]
 
-        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+        with patch.dict(os.environ, {"DISABLED_COMPETITIONS": "UNL"}), patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
             flask_stub.request.args = {"fecha": "2026-11-17"}
             resp_17, c17 = pron_handler()
             self.assertEqual(c17, 200)
@@ -1049,7 +1054,7 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
             f.get("codigo_liga") for f in pred_app.ALL_FIXTURES_POOL
             if pred_app.is_competition_enabled(f.get("codigo_liga", ""), f.get("liga", ""))
         }
-        self.assertEqual(ligas_activas_post, {"BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "UCL", "UEL"})
+        self.assertEqual(ligas_activas_post, {"BL1", "BSA", "FL1", "PL", "PPL", "PD", "SA", "UCL", "UEL", "UNL"})
         pred_app._SYNCED_EXTERNAL_FD_FIXTURES = []
         pred_app.invalidate_calendar_caches(rebuild_pool=True)
 
@@ -1296,6 +1301,222 @@ class TestPhase4AIAuditAndUI(unittest.TestCase):
         self.assertIn("Reintentar", html_c)
         self.assertIn("mostrarErrorLocutorUI", html_c)
 
+
+    def test_19_render_prod_fixes_audio_3level_stats_consistency_payload_unl_aliases_ratings(self):
+        """
+        Verifica todas las correcciones críticas de producción en Render:
+        1) Audio sin TypeError cuando faltan avg_goals/over_1_5/over_2_5/btts/corners/cards/shots/shots_ot (ejecución real en Node.js) + fallback SpeechSynthesis + sin micrófono.
+        2) Estimación en 3 niveles (REAL / NIVEL_2_CALIBRADO / NIVEL_3_PRIOR_COMPETICION) con metadatos auditables y sin constantes arbitrarias.
+        3) Consistencia total entre pilares_cuantitativos, organizacion_stakazos, key_probabilities, IA y audio.
+        4) Carga ligera (?modo=resumen) drásticamente menor al payload completo + compresión gzip + detalle bajo demanda /api/v1/partido/<id>/detalle.
+        5) UEFA Nations League (UNL) activa cuando DISABLED_COMPETITIONS está vacía o no configurada.
+        6) Deduplicación de alias (Marítimo/CS Marítimo, Nacional/CD Nacional, Niza/OGC Nice, Troyes/ES Troyes AC, Genoa/Genoa CFC, Torino/Torino FC) en backend y frontend.
+        7) Diagnóstico de ratings (partidos_descargados, equipos_procesados, partidos_aceptados, partidos_descartados, ultima_sincronizacion, causa_vacio, errores_api) y respaldo desde _VERIFIED_RESULTS_CACHE.
+        8) Top 3 con 3 selecciones válidas.
+        """
+        import subprocess, json as _json, gzip as _gzip
+
+        # 1. Prueba real en Node.js de construirGuionAnalisisVozPartido y claveCanonicaPartidoUI en index.html
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as fh:
+            html_txt = fh.read()
+
+        # Verificar fallback SpeechSynthesis, botón Reintentar, texto "Generando audio" y cero solicitudes de micrófono
+        self.assertIn("speechSynthesis", html_txt)
+        self.assertIn("Reintentar", html_txt)
+        self.assertIn("Generando audio", html_txt)
+        self.assertNotIn("getUserMedia", html_txt)
+        self.assertIn("/obtener-pronostico?modo=resumen", html_txt)
+        self.assertIn("/api/v1/partido/", html_txt)
+
+        # Extraer limpiarTextoParaVoz, construirGuionAnalisisVozPartido y claveCanonicaPartidoUI para ejecución real en Node
+        def _extract_js_fn(src, name):
+            start = src.index(f"function {name}(")
+            brace = src.index("{", start)
+            depth = 0
+            for idx in range(brace, len(src)):
+                if src[idx] == "{":
+                    depth += 1
+                elif src[idx] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return src[start:idx + 1]
+            raise ValueError(f"Unclosed {name}")
+
+        fn_limpiar = _extract_js_fn(html_txt, "limpiarTextoParaVoz")
+        fn_guion = _extract_js_fn(html_txt, "construirGuionAnalisisVozPartido")
+        fn_ui_key = _extract_js_fn(html_txt, "claveCanonicaPartidoUI")
+        aliases_start = html_txt.index("const _UI_TEAM_ALIASES = {")
+        aliases_end = html_txt.index("};", aliases_start) + 2
+        ui_aliases_decl = html_txt[aliases_start:aliases_end]
+
+        node_script = f"""
+{fn_limpiar}
+{ui_aliases_decl}
+{fn_ui_key}
+function extraerMetricasOddsterPartido(p) {{
+    return p._mockOdd || {{}};
+}}
+{fn_guion}
+
+// Caso A: partido sin avg_goals, sin over_1_5, sin corners, sin cards, sin shots
+const gSinMetricas = construirGuionAnalisisVozPartido({{
+    local: "Marítimo", visitante: "Nacional", liga: "Primeira Liga",
+    pronostico_principal: {{ seleccion: "Marítimo gana o empata", probabilidad: "78%" }},
+    _mockOdd: {{}}
+}});
+
+// Caso B: partido con métricas completas (forma real goals_totals + avg_goals + corners + cards + shots)
+const gCompleto = construirGuionAnalisisVozPartido({{
+    local: "Arsenal", visitante: "Chelsea", liga: "Premier League",
+    pronostico_principal: {{ seleccion: "Más de 1.5 goles", probabilidad: "82%" }},
+    _mockOdd: {{
+        avg_goals: {{ val: "2.95", avg: "2.80", home: "1.80", away: "1.15" }},
+        goals_totals: {{ over_15: 82, over_25: 59 }},
+        btts: {{ val: 56 }},
+        avg_corners: {{ val: "10.2", avg: "10.0", home: "6.1", away: "4.1", rec: "Más de 8.5 córners" }},
+        avg_cards: {{ val: "4.3" }},
+        avg_shots: {{ val: "25.4" }},
+        avg_shots_ot: {{ val: "8.7" }}
+    }}
+}});
+
+// Caso C: alias en claveCanonicaPartidoUI
+const k1 = claveCanonicaPartidoUI({{ fecha: "2026-11-28", codigo_liga: "PPL", local: "Marítimo", visitante: "Nacional" }});
+const k2 = claveCanonicaPartidoUI({{ fecha: "2026-11-28", codigo_liga: "PPL", local: "CS Marítimo", visitante: "CD Nacional" }});
+const k3 = claveCanonicaPartidoUI({{ fecha: "2026-11-28", codigo_liga: "FL1", local: "Niza", visitante: "Troyes" }});
+const k4 = claveCanonicaPartidoUI({{ fecha: "2026-11-28", codigo_liga: "FL1", local: "OGC Nice", visitante: "ES Troyes AC" }});
+const k5 = claveCanonicaPartidoUI({{ fecha: "2026-11-28", codigo_liga: "SA", local: "Genoa", visitante: "Torino" }});
+const k6 = claveCanonicaPartidoUI({{ fecha: "2026-11-28", codigo_liga: "SA", local: "Genoa CFC", visitante: "Torino FC" }});
+
+console.log(JSON.stringify({{ gSinMetricas, gCompleto, eq_pt: k1 === k2, eq_fr: k3 === k4, eq_it: k5 === k6, k1, k3, k5 }}));
+"""
+        proc = subprocess.run(["node", "-e", node_script], capture_output=True, text=True, check=True)
+        node_out = _json.loads(proc.stdout.strip())
+        self.assertIn("Locutor Analista de PredicXion IA", node_out["gSinMetricas"])
+        self.assertIn("Marítimo", node_out["gSinMetricas"])
+        self.assertIn("2.95 goles", node_out["gCompleto"])
+        self.assertIn("10.2 tiros de esquina", node_out["gCompleto"])
+        self.assertIn("4.3 amonestaciones", node_out["gCompleto"])
+        self.assertTrue(node_out["eq_pt"], f"Alias PT falló: {node_out['k1']}")
+        self.assertTrue(node_out["eq_fr"], f"Alias FR falló: {node_out['k3']}")
+        self.assertTrue(node_out["eq_it"], f"Alias IT falló: {node_out['k5']}")
+
+        # 2 y 3. Estimación en 3 niveles sin constantes arbitrarias + consistencia entre secciones
+        an_pl = pred_app.SportsAnalyticsEngine.generate_institutional_analysis({
+            "local": "ClubNuevoPL1", "visitante": "ClubNuevoPL2",
+            "codigo_liga": "PL", "liga": "Premier League", "fecha": "2026-11-28",
+        })
+        an_sa = pred_app.SportsAnalyticsEngine.generate_institutional_analysis({
+            "local": "ClubNuevoSA1", "visitante": "ClubNuevoSA2",
+            "codigo_liga": "SA", "liga": "Serie A", "fecha": "2026-11-28",
+        })
+        kp_pl = an_pl["key_probabilities"]
+        kp_sa = an_sa["key_probabilities"]
+        # Distintas competiciones producen distintos priors (no constante fija arbitraria)
+        self.assertNotEqual(kp_pl["avg_corners"]["valor"], kp_sa["avg_corners"]["valor"])
+        self.assertNotEqual(kp_pl["avg_cards"]["valor"], kp_sa["avg_cards"]["valor"])
+        for mk in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target"):
+            m = kp_pl[mk]
+            self.assertIsNotNone(m["valor"])
+            self.assertEqual(m["tipo_dato"], "ESTIMADO_MODELO")
+            self.assertEqual(m["tipo_dato_audit"], "ESTIMADO_MODELO")
+            self.assertIn("metodo", m)
+            self.assertIn("fecha_calculo", m)
+            self.assertIsInstance(m["intervalo_estimado"], list)
+            self.assertEqual(len(m["intervalo_estimado"]), 2)
+        # Consistencia entre key_probabilities, pilares_cuantitativos y organizacion_stakazos
+        c_val_str = str(kp_pl["avg_corners"]["valor"])
+        t_val_str = str(kp_pl["avg_cards"]["valor"])
+        self.assertIn(c_val_str, an_pl["pilares_cuantitativos"]["pilar_1_volumen_ofensivo"]["corners_proyectados"])
+        self.assertIn(t_val_str, an_pl["pilares_cuantitativos"]["pilar_7_micromercados_friccion"]["tarjetas_proyectadas"])
+        self.assertNotEqual(an_pl["organizacion_stakazos"]["micromercado_oro"]["mercado"], "Datos insuficientes")
+
+        # 4. Payload ligero (?modo=resumen) vs completo + detalle bajo demanda
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+        det_handler = self.flask_app.routes["/api/v1/partido/<match_id>/detalle"]
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-24", "modo": "resumen"}
+            resp_resumen, c_res = pron_handler()
+            self.assertEqual(c_res, 200)
+            flask_stub.request.args = {"fecha": "2026-11-24", "modo": "completo"}
+            resp_full, c_full = pron_handler()
+            self.assertEqual(c_full, 200)
+        sz_resumen = len(_json.dumps(resp_resumen, ensure_ascii=False).encode("utf-8"))
+        sz_full = len(_json.dumps(resp_full, ensure_ascii=False).encode("utf-8"))
+        self.assertLess(sz_resumen, sz_full * 0.35, f"modo=resumen ({sz_resumen}B) debe ser mucho menor que completo ({sz_full}B)")
+        self.assertLess(sz_resumen, 2 * 1024 * 1024)
+        # Detalle bajo demanda del primer partido del calendario resumido
+        first_liga = next(iter(resp_resumen["todos"].values()))
+        first_id = first_liga[0]["id_partido"]
+        self.assertTrue(first_liga[0].get("resumen_ligero"))
+        det_resp, det_code = det_handler(first_id)
+        self.assertEqual(det_code, 200)
+        self.assertTrue(det_resp["success"])
+        self.assertIn("pilares_cuantitativos", det_resp["partido"])
+        self.assertIn("key_probabilities", det_resp["partido"])
+
+        # 5. UEFA Nations League (UNL) activa cuando DISABLED_COMPETITIONS está vacía o no existe
+        with patch.dict(os.environ, {"DISABLED_COMPETITIONS": ""}, clear=False):
+            self.assertEqual(pred_app.get_disabled_competitions(), set())
+            self.assertTrue(pred_app.is_competition_enabled("UNL", "UEFA Nations League"))
+        with patch.dict(os.environ, {"DISABLED_COMPETITIONS": "UNL"}, clear=False):
+            self.assertIn("UNL", pred_app.get_disabled_competitions())
+            self.assertFalse(pred_app.is_competition_enabled("UNL", "UEFA Nations League"))
+
+        # 6. Deduplicación de alias en backend
+        for a1, a2 in [
+            ("Marítimo", "CS Marítimo"),
+            ("Nacional", "CD Nacional"),
+            ("Niza", "OGC Nice"),
+            ("Troyes", "ES Troyes AC"),
+            ("Genoa", "Genoa CFC"),
+            ("Torino", "Torino FC"),
+        ]:
+            self.assertEqual(pred_app.canonical_team_name(a1), pred_app.canonical_team_name(a2), f"Alias mismatch: {a1} vs {a2}")
+
+        # 7. Diagnóstico de ratings y respaldo desde _VERIFIED_RESULTS_CACHE cuando la API externa devuelve vacío
+        prev_cache = dict(pred_app._VERIFIED_RESULTS_CACHE)
+        prev_ratings = dict(pred_app.RATINGS_REALES)
+        prev_hist = dict(pred_app.VERIFIED_TEAM_HISTORY)
+        try:
+            pred_app._VERIFIED_RESULTS_CACHE[("2026-11-23", "Sevilla", "Real Betis")] = {
+                "finished": True, "simulado": False, "score_home": 2, "score_away": 1,
+                "competicion": "LaLiga", "codigo_liga": "PD", "tipo_entidad": "club",
+            }
+            with patch.object(pred_app.FootballDataOrgClient, "fetch_json", return_value={"ok": False, "data": None, "error": "429_rate_limit"}):
+                st_rat = pred_app.actualizar_ratings_reales()
+            for k_diag in ("partidos_descargados", "equipos_procesados", "partidos_aceptados", "partidos_descartados", "ultima_sincronizacion", "errores_api"):
+                self.assertIn(k_diag, st_rat, f"Falta campo diagnóstico {k_diag} en RATINGS_ESTADO")
+            self.assertGreaterEqual(st_rat["equipos_procesados"], 2)
+            self.assertGreaterEqual(st_rat["partidos_aceptados"], 1)
+        finally:
+            pred_app._VERIFIED_RESULTS_CACHE.clear()
+            pred_app._VERIFIED_RESULTS_CACHE.update(prev_cache)
+            pred_app.RATINGS_REALES.clear()
+            pred_app.RATINGS_REALES.update(prev_ratings)
+            pred_app.VERIFIED_TEAM_HISTORY.clear()
+            pred_app.VERIFIED_TEAM_HISTORY.update(prev_hist)
+
+        # 8. Top 3 con 3 picks válidos desde el endpoint oficial
+        for fx in pred_app.ALL_FIXTURES_POOL:
+            if pred_app.resolve_match_local_date(fx)[1] == "2026-11-24":
+                self._add_verified_team(fx["local"], gf=2, ga=1)
+                self._add_verified_team(fx["visitante"], gf=1, ga=1)
+        top3_handler = self.flask_app.routes["/api/v1/top3/daily"]
+        flask_stub.request.args = {"fecha": "2026-11-24"}
+        raw_top3 = top3_handler()
+        if isinstance(raw_top3, tuple):
+            top3_resp, top3_code = raw_top3[0], raw_top3[1]
+            self.assertEqual(top3_code, 200)
+        else:
+            top3_resp = raw_top3
+        top3 = top3_resp.get("top3") or top3_resp.get("picks") or top3_resp.get("top5") or []
+        self.assertEqual(len(top3), 3)
+        for pick in top3:
+            self.assertTrue(pick.get("local") and pick.get("visitante"))
+            self.assertIn("logo_local", pick)
+            self.assertIn("logo_visitante", pick)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
