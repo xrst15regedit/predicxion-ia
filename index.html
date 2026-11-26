@@ -2266,7 +2266,7 @@
             if (!destacados.length) {
                 const t0Alt = performance.now();
                 try {
-                    const res = await fetch(`${API_BASE}/obtener-pronostico`, { headers: await authHeaders() });
+                    const res = await fetch(`${API_BASE}/obtener-pronostico?modo=resumen`, { headers: await authHeaders() });
                     const durAlt = Math.round(performance.now() - t0Alt);
                     console.info(`[MercadosAlternativos] status=${res.status} duracion_ms=${durAlt}`);
                     if (!res.ok) {
@@ -2594,11 +2594,24 @@
             }
         }
 
+        const _UI_TEAM_ALIASES = {
+            "cs maritimo": "maritimo", "cd nacional": "nacional", "clube desportivo nacional": "nacional",
+            "niza": "nice", "ogc nice": "nice", "es troyes ac": "troyes", "estac troyes": "troyes",
+            "genoa cfc": "genoa", "torino fc": "torino", "club brujas": "brugge", "club brugge kv": "brugge",
+            "napoles": "napoli", "ssc napoli": "napoli", "psg": "paris saint germain", "paris saint germain fc": "paris saint germain"
+        };
         function claveCanonicaPartidoUI(p) {
             if (!p) return "";
-            const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+            const norm = (s) => {
+                const base = String(s || "").toLowerCase().replace(/ø/g, "o").replace(/ß/g, "ss").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+                if (_UI_TEAM_ALIASES[base]) return _UI_TEAM_ALIASES[base];
+                const clean = base.split(" ").filter(t => !["fc","cf","sc","sk","fk","kv","cs","cd","es","ac","cfc","ogc","osc","vfb","rc","as","ss","ssc","club","clube","1907"].includes(t)).join(" ");
+                return _UI_TEAM_ALIASES[clean] || clean || base;
+            };
             const f = String(p.fecha_local_partido || p.fecha || "").slice(0, 10);
-            const c = String(p.codigo_liga || p.liga || "").toUpperCase().trim();
+            let c = String(p.codigo_liga || p.liga || "").toUpperCase().trim();
+            if (c === "CL") c = "UCL";
+            if (c === "EL") c = "UEL";
             return `${f}|${c}|${norm(p.local)}|${norm(p.visitante)}`;
         }
 
@@ -2831,19 +2844,45 @@
             }
         }
 
-        function mostrarDetalle(matchId) {
+        window._detallePartidoCache = window._detallePartidoCache || {};
+        async function mostrarDetalle(matchId) {
             cambiarModuloPrincipal('partidos');
             document.getElementById('welcome-view')?.classList.add('hidden');
             document.getElementById('carousel-destacados-container')?.classList.add('hidden');
             const v = document.getElementById('match-detail-view');
             v.classList.remove('hidden');
 
-            let item = null;
-            for (const l in globalTodosPartidos) {
-                const found = globalTodosPartidos[l].find(x => x.id_partido === matchId);
-                if (found) { item = found; break; }
+            let item = window._detallePartidoCache[matchId] || null;
+            if (!item) {
+                for (const l in globalTodosPartidos) {
+                    const found = (globalTodosPartidos[l] || []).find(x => x.id_partido === matchId);
+                    if (found) { item = found; break; }
+                }
+            }
+            if (!item) {
+                const dMem = (window.globalDestacadosMemoria || []).find(x => x.id_partido === matchId);
+                if (dMem) item = dMem;
             }
             if (!item) return;
+
+            // Si el partido proviene del calendario resumido (?modo=resumen), cargar detalle completo bajo demanda
+            if (item.resumen_ligero || !item.pilares_cuantitativos) {
+                v.innerHTML = `<div class="p-8 text-center text-slate-300 text-xs"><i class="fa-solid fa-spinner fa-spin text-accentGreen text-xl mb-2"></i><p>Cargando análisis cuantitativo de ${esc(item.local)} vs ${esc(item.visitante)}...</p></div>`;
+                try {
+                    const rDet = await fetch(`${API_BASE}/api/v1/partido/${encodeURIComponent(matchId)}/detalle`, { headers: await authHeaders() });
+                    if (rDet.ok) {
+                        const dJson = await rDet.json();
+                        if (dJson && dJson.success && dJson.partido) {
+                            item = dJson.partido;
+                            window._detallePartidoCache[matchId] = item;
+                        }
+                    }
+                } catch (eDet) {
+                    console.warn("Aviso cargando detalle bajo demanda:", eDet);
+                }
+            } else {
+                window._detallePartidoCache[matchId] = item;
+            }
 
             const u = window.currentUserState;
             const esVip = verificarEsVip();
@@ -4273,6 +4312,9 @@
         }
 
         function construirGuionAnalisisVozPartido(p) {
+            if (!p || typeof p !== 'object') {
+                return "Hola, soy el Locutor Analista de PredicXion IA. Selecciona un partido para escuchar el análisis.";
+            }
             const local = p.local || "el equipo local";
             const vis = p.visitante || "el visitante";
             const liga = p.liga || "su competición oficial";
@@ -4282,42 +4324,90 @@
 
             const pil = p.pilares_cuantitativos || {};
             const stks = p.organizacion_stakazos || {};
-            const xgLoc = parseFloat(pil.pilar_1_volumen_ofensivo?.xg_proyectado_local ?? p.parametros_xg?.lambda_local ?? 1.4).toFixed(2);
-            const xgVis = parseFloat(pil.pilar_1_volumen_ofensivo?.xg_proyectado_visitante ?? p.parametros_xg?.lambda_visitante ?? 1.1).toFixed(2);
+            const xgLocNum = parseFloat(pil?.pilar_1_volumen_ofensivo?.xg_proyectado_local ?? p?.parametros_xg?.lambda_local ?? 1.4);
+            const xgVisNum = parseFloat(pil?.pilar_1_volumen_ofensivo?.xg_proyectado_visitante ?? p?.parametros_xg?.lambda_visitante ?? 1.1);
+            const xgLoc = Number.isFinite(xgLocNum) ? xgLocNum.toFixed(2) : "1.40";
+            const xgVis = Number.isFinite(xgVisNum) ? xgVisNum.toFixed(2) : "1.10";
             const xgTotal = (parseFloat(xgLoc) + parseFloat(xgVis)).toFixed(2);
 
-            const mOdd = (typeof extraerMetricasOddsterPartido === 'function') ? extraerMetricasOddsterPartido(p) : null;
-            let bloqueGoles = `En proyección de goles, ${local} llega con ${xgLoc} goles esperados por localía y volumen ofensivo, frente a ${xgVis} de ${vis}, para un total estimado de ${xgTotal} goles.`;
+            let mOdd = null;
+            try {
+                mOdd = (typeof extraerMetricasOddsterPartido === 'function') ? extraerMetricasOddsterPartido(p) : null;
+            } catch (eMetric) {
+                console.warn("[LocutorPredicXionIA] Aviso extrayendo métricas:", eMetric);
+                mOdd = null;
+            }
+
+            const _esValido = (v) => v !== undefined && v !== null && String(v).trim() !== '' && String(v) !== 'No estimable' && String(v) !== 'NaN';
+
+            // 1. Bloque de goles (validación segura de avg_goals, over_1_5/goals_totals.over_15, over_2_5/goals_totals.over_25, btts)
+            let bloqueGoles = `En proyección de goles, ${local} llega con ${xgLoc} goles esperados jugando en casa, frente a ${xgVis} de ${vis}, para un total estimado de ${xgTotal} goles.`;
+            if (mOdd && typeof mOdd === 'object') {
+                const gVal = mOdd?.avg_goals?.val;
+                const gAvg = mOdd?.avg_goals?.avg;
+                const gHome = mOdd?.avg_goals?.home ?? xgLoc;
+                const gAway = mOdd?.avg_goals?.away ?? xgVis;
+                const o15 = mOdd?.over_1_5?.val ?? mOdd?.goals_totals?.over_15;
+                const o25 = mOdd?.over_2_5?.val ?? mOdd?.goals_totals?.over_25;
+                const bttsV = mOdd?.btts?.val;
+
+                const partesGoles = [];
+                if (_esValido(gVal)) {
+                    partesGoles.push(`En goles totales, el partido proyecta ${gVal} goles${_esValido(gAvg) ? ` frente a la media de liga de ${gAvg}` : ''}, con ${gHome} esperados para ${local} y ${gAway} para ${vis}.`);
+                } else {
+                    partesGoles.push(bloqueGoles);
+                }
+                const probsG = [];
+                if (_esValido(o15)) probsG.push(`el Más de 1.5 goles alcanza un ${o15} por ciento`);
+                if (_esValido(o25)) probsG.push(`el Más de 2.5 goles marca un ${o25} por ciento`);
+                if (_esValido(bttsV)) probsG.push(`ambos anotan está en ${bttsV} por ciento`);
+                if (probsG.length > 0) {
+                    partesGoles.push(`Por probabilidades clave, ${probsG.join(', ')}.`);
+                }
+                bloqueGoles = partesGoles.join(' ');
+            }
+
+            // 2. Bloque de córners
             let bloqueCorners = "";
-            let bloqueExtras = "";
-            let bloqueJugadas = "";
-
-            if (mOdd) {
-                bloqueGoles = `En goles totales, el partido proyecta ${mOdd.avg_goals.val} goles frente a la media de liga de ${mOdd.avg_goals.avg}. ${local} aporta ${mOdd.avg_goals.home} goles esperados jugando en casa y ${vis} suma ${mOdd.avg_goals.away}. Por eso, el Más de 1.5 goles tiene un ${mOdd.over_1_5.val} por ciento de probabilidad, el Más de 2.5 goles marca un ${mOdd.over_2_5.val} por ciento y el mercado de ambos anotan está en ${mOdd.btts.val} por ciento.`;
-
-                if (mOdd.avg_corners && mOdd.avg_corners.val && mOdd.avg_corners.val !== 'No estimable') {
-                    const cRec = limpiarTextoParaVoz(mOdd.avg_corners.rec || 'córners totales');
-                    bloqueCorners = `Pasando a córners totales, el promedio proyectado es de ${mOdd.avg_corners.val} tiros de esquina frente a una media de liga de ${mOdd.avg_corners.avg}, con ${mOdd.avg_corners.home} proyectados para ${local} y ${mOdd.avg_corners.away} para ${vis}. La línea destacada aquí es ${cRec}.`;
+            if (mOdd?.avg_corners && _esValido(mOdd.avg_corners.val)) {
+                const cVal = mOdd.avg_corners.val;
+                const cAvg = mOdd.avg_corners.avg;
+                const cHome = mOdd.avg_corners.home;
+                const cAway = mOdd.avg_corners.away;
+                const cRec = _esValido(mOdd.avg_corners.rec) ? limpiarTextoParaVoz(mOdd.avg_corners.rec) : "";
+                bloqueCorners = `Pasando a córners totales, la proyección es de ${cVal} tiros de esquina${_esValido(cAvg) ? ` frente a la media de liga de ${cAvg}` : ''}`;
+                if (_esValido(cHome) && _esValido(cAway)) {
+                    bloqueCorners += `, con ${cHome} para ${local} y ${cAway} para ${vis}`;
                 }
-
-                const extrasParts = [];
-                if (mOdd.avg_cards && mOdd.avg_cards.val && mOdd.avg_cards.val !== 'No estimable') {
-                    extrasParts.push(`en tarjetas se proyecta un promedio de ${mOdd.avg_cards.val} amonestaciones`);
-                }
-                if (mOdd.avg_shots && mOdd.avg_shots.val && mOdd.avg_shots.val !== 'No estimable') {
-                    extrasParts.push(`en remates totales se estiman ${mOdd.avg_shots.val} disparos`);
-                }
-                if (mOdd.avg_shots_ot && mOdd.avg_shots_ot.val && mOdd.avg_shots_ot.val !== 'No estimable') {
-                    extrasParts.push(`con ${mOdd.avg_shots_ot.val} tiros a puerta`);
-                }
-                if (extrasParts.length > 0) {
-                    bloqueExtras = `Además, ${extrasParts.join(', ')}.`;
+                bloqueCorners += ".";
+                if (cRec && !cRec.toLowerCase().includes("insuficiente")) {
+                    bloqueCorners += ` La línea destacada es ${cRec}.`;
                 }
             }
 
+            // 3. Bloque de tarjetas, remates y tiros a puerta
+            let bloqueExtras = "";
+            const extrasParts = [];
+            if (mOdd?.avg_cards && _esValido(mOdd.avg_cards.val)) {
+                extrasParts.push(`en tarjetas se proyecta un promedio de ${mOdd.avg_cards.val} amonestaciones`);
+            }
+            if (mOdd?.avg_shots && _esValido(mOdd.avg_shots.val)) {
+                extrasParts.push(`en remates totales se estiman ${mOdd.avg_shots.val} disparos`);
+            }
+            if (mOdd?.avg_shots_ot && _esValido(mOdd.avg_shots_ot.val)) {
+                extrasParts.push(`con ${mOdd.avg_shots_ot.val} tiros a puerta`);
+            }
+            if (extrasParts.length > 0) {
+                bloqueExtras = `Además, ${extrasParts.join(', ')}.`;
+            }
+
+            // 4. Jugadas complementarias
+            let bloqueJugadas = "";
             const jugadasExtra = [];
-            if (stks.nivel_1_base?.mercado) jugadasExtra.push(`como jugada base ${limpiarTextoParaVoz(stks.nivel_1_base.mercado)}`);
-            if (stks.micromercado_oro?.mercado) jugadasExtra.push(`y en mercados alternativos ${limpiarTextoParaVoz(stks.micromercado_oro.mercado)}`);
+            if (_esValido(stks?.nivel_1_base?.mercado)) jugadasExtra.push(`como jugada base ${limpiarTextoParaVoz(stks.nivel_1_base.mercado)}`);
+            if (_esValido(stks?.micromercado_oro?.mercado) && !String(stks.micromercado_oro.mercado).toLowerCase().includes('insuficiente')) {
+                jugadasExtra.push(`y en mercados alternativos ${limpiarTextoParaVoz(stks.micromercado_oro.mercado)}`);
+            }
             if (jugadasExtra.length > 0) {
                 bloqueJugadas = `Como complemento a las jugadas, tenemos ${jugadasExtra.join(' ')}.`;
             }
