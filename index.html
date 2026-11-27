@@ -2546,10 +2546,21 @@
             renderizarSidebar(globalTodosPartidos, document.getElementById('sidebar-filter') ? document.getElementById('sidebar-filter').value : "");
         }
 
-        async function cargarDatosCartelera() {
+        async function cargarDatosCartelera(fechaPublicadaSolicitada = null) {
             try {
                 window.__carteleraCargada = true;
-                const res = await fetch(`${API_BASE}/obtener-pronostico`, { headers: await authHeaders() });
+                const params = new URLSearchParams();
+                if (fechaPublicadaSolicitada && /^\d{4}-\d{2}-\d{2}$/.test(String(fechaPublicadaSolicitada).trim())) {
+                    params.set('fecha', String(fechaPublicadaSolicitada).trim());
+                }
+                if (window.__predicxionDataVersion) {
+                    params.set('_v', String(window.__predicxionDataVersion));
+                }
+                const qs = params.toString() ? `?${params.toString()}` : '';
+                const res = await fetch(`${API_BASE}/obtener-pronostico${qs}`, {
+                    headers: await authHeaders(),
+                    cache: 'no-store'
+                });
                 const data = await res.json();
                 const todos = data.todos_los_partidos || data.todos || {};
                 if (todos && Object.keys(todos).length > 0) {
@@ -2559,25 +2570,40 @@
                     if (document.getElementById('sidebar-total-badge')) document.getElementById('sidebar-total-badge').innerText = totalP;
                     if (document.getElementById('telemetria-partidos')) document.getElementById('telemetria-partidos').innerText = `${totalP} Partidos`;
                 }
-                const fActual = data.fecha_actual || "2026-10-15";
-                const fActivaDest = data.fecha_activa_destacados || fActual;
+                const fActual = data.fecha_actual || "";
+                const fActivaDest = data.fecha_activa_destacados || data.fecha_publicacion || data.top3_fecha_publicada || fActual;
                 const hayPartidosHoy = data.hay_partidos_hoy !== false;
                 const lblFecha = document.getElementById('destacados-fecha-label');
                 if (lblFecha) {
-                    if (hayPartidosHoy) {
-                        lblFecha.innerText = `Partidos de Hoy • ${fActual} (Actualización 22:00 PE)`;
+                    if (data.mensaje_jornada) {
+                        lblFecha.innerText = data.mensaje_jornada;
+                    } else if (hayPartidosHoy) {
+                        lblFecha.innerText = (fActivaDest && fActivaDest !== fActual)
+                            ? `Jornada Publicada • ${fActivaDest} (Rotación 22:00 PE)`
+                            : `Partidos de Hoy • ${fActivaDest || fActual} (Actualización 22:00 PE)`;
                     } else {
                         lblFecha.innerText = `Partidos no disponibles hoy (${fActual}) • Próxima jornada: ${fActivaDest}`;
                     }
                 }
                 
-                const destacados = data.pronosticos_destacados || data.destacados || [];
+                const destacados = Array.isArray(data.pronosticos_destacados || data.destacados)
+                    ? (data.pronosticos_destacados || data.destacados)
+                    : [];
                 if (data.data_version) window.__predicxionDataVersion = data.data_version;
+                if (fActivaDest) window.__predicxionFechaPublicada = fActivaDest;
                 if (data.last_sync_lima && document.getElementById('telemetria-last-sync')) {
                     document.getElementById('telemetria-last-sync').innerText = data.last_sync_lima;
                 }
+                // Nunca conservar tarjetas antiguas en memoria al actualizar la jornada
+                window.globalDestacadosMemoria = [];
                 window.globalDestacadosMemoria = destacados;
-                window.globalCarteleraMeta = { hayPartidosHoy, fActual, fActivaDest, mensajeJornada: data.mensaje_jornada };
+                window.globalCarteleraMeta = {
+                    hayPartidosHoy,
+                    fActual,
+                    fActivaDest,
+                    fechaPublicacion: data.fecha_publicacion || fActivaDest,
+                    mensajeJornada: data.mensaje_jornada
+                };
                 if (document.getElementById('destacados-count')) document.getElementById('destacados-count').innerText = `(${destacados.length})`;
                 renderizarCarrusel(destacados);
                 iniciarAutoSyncUI();
@@ -2653,13 +2679,18 @@
                     if (st.last_sync_lima && document.getElementById('telemetria-last-sync')) {
                         document.getElementById('telemetria-last-sync').innerText = st.last_sync_lima;
                     }
-                    if (st.data_version && window.__predicxionDataVersion && st.data_version !== window.__predicxionDataVersion) {
-                        window.__predicxionDataVersion = st.data_version;
-                        // Refrescar datos silenciosamente sin recargar página ni borrar el análisis abierto del usuario
+                    const fechaPubBackend = st.fecha_activa_destacados || st.fecha_publicacion || st.top3_fecha_publicada || null;
+                    const cambioVersion = Boolean(st.data_version && window.__predicxionDataVersion && st.data_version !== window.__predicxionDataVersion);
+                    const cambioFechaPub = Boolean(fechaPubBackend && window.__predicxionFechaPublicada && fechaPubBackend !== window.__predicxionFechaPublicada);
+                    if (cambioVersion || cambioFechaPub) {
+                        if (st.data_version) window.__predicxionDataVersion = st.data_version;
+                        if (fechaPubBackend) window.__predicxionFechaPublicada = fechaPubBackend;
+                        // Limpiar memoria previa de destacados y refrescar carrusel + Top 3 con la misma fecha publicada real
+                        window.globalDestacadosMemoria = [];
                         const partidoAbierto = window.partidoModalActualMemoria ? window.partidoModalActualMemoria.id_partido : null;
-                        await cargarDatosCartelera();
+                        await cargarDatosCartelera(fechaPubBackend);
                         if (typeof cargarTop3 === 'function') {
-                            try { cargarTop3(null, true); } catch (e) {}
+                            try { await cargarTop3(fechaPubBackend, true); } catch (e) {}
                         }
                         if (typeof cargarAuditoriaHistorial === 'function') {
                             try { cargarAuditoriaHistorial(); } catch (e) {}
@@ -2669,8 +2700,13 @@
                             const detailEl = document.getElementById('match-detail-view');
                             if (detailEl) detailEl.classList.remove('hidden');
                         }
-                    } else if (st.data_version && !window.__predicxionDataVersion) {
-                        window.__predicxionDataVersion = st.data_version;
+                    } else {
+                        if (st.data_version && !window.__predicxionDataVersion) {
+                            window.__predicxionDataVersion = st.data_version;
+                        }
+                        if (fechaPubBackend && !window.__predicxionFechaPublicada) {
+                            window.__predicxionFechaPublicada = fechaPubBackend;
+                        }
                     }
                 } catch (e) {}
             }, 60000);
@@ -2772,6 +2808,7 @@
         function renderizarCarrusel(destacados) {
             const cont = document.getElementById('carousel-cards');
             if (!cont) return;
+            cont.innerHTML = '';
             const meta = window.globalCarteleraMeta || {};
             let html = '';
             if (meta.hayPartidosHoy === false) {
