@@ -257,6 +257,11 @@ _EARLY_TEAM_ALIASES = {
     "malaga cf": "malaga",
     "real racing club": "racing santander",
     "racing de santander": "racing santander",
+    "racing club": "racing santander",
+    "paris fc": "paris fc",
+    "borussia m gladbach": "borussia monchengladbach",
+    "borussia m'gladbach": "borussia monchengladbach",
+    "borussia m’gladbach": "borussia monchengladbach",
     "rc deportivo de la coruna": "deportivo la coruna",
     "deportivo de la coruna": "deportivo la coruna",
     # Inglaterra
@@ -1331,12 +1336,14 @@ class DailyAutomationPipeline:
     para que la interfaz web abierta se refresque automáticamente sin recargar.
     """
     _LOCK = threading.RLock()
+    _EXEC_GUARD = threading.Lock()
     _STATE = {
         "data_version": datetime.now(timezone.utc).strftime("v%Y%m%d%H%M%S"),
         "last_sync_lima": CalendarDateService.now_lima_str(),
         "last_sync_utc": datetime.now(timezone.utc).isoformat(),
         "last_reason": "ARRANQUE_INICIAL",
         "last_pipeline_steps": [],
+        "execution_history": [],
     }
 
     @classmethod
@@ -1385,6 +1392,22 @@ class DailyAutomationPipeline:
           9. Guardar resultados verificados.
          10. Invalidar caché anterior y publicar nueva data_version.
         """
+        if not cls._EXEC_GUARD.acquire(blocking=False):
+            logger.warning("[DailyAutomationPipeline] Ejecución simultánea bloqueada (motivo=%s).", motivo)
+            return {
+                "success": True,
+                "skipped": True,
+                "motivo": "EJECUCION_SIMULTANEA_BLOQUEADA",
+                "timezone": "America/Lima",
+                "last_sync_lima": cls._STATE.get("last_sync_lima"),
+            }
+        try:
+            return cls._run_daily_pipeline_locked(now_pe=now_pe, force=force, motivo=motivo)
+        finally:
+            cls._EXEC_GUARD.release()
+
+    @classmethod
+    def _run_daily_pipeline_locked(cls, now_pe=None, force: bool = False, motivo: str = "DAILY_22_00_PE") -> dict:
         with cls._LOCK:
             dt_pe = now_pe or Top3RotationManager.now_peru()
             hoy_pe = dt_pe.strftime("%Y-%m-%d")
@@ -1426,6 +1449,16 @@ class DailyAutomationPipeline:
             invalidate_calendar_caches(rebuild_pool=False)
             ver_state = cls.bump_data_version(reason=motivo)
             cls._STATE["last_pipeline_steps"] = steps_log
+            cls._STATE.setdefault("execution_history", []).append({
+                "timestamp_lima": ver_state["last_sync_lima"],
+                "timestamp_utc": ver_state["last_sync_utc"],
+                "fecha_pe": hoy_pe,
+                "motivo": motivo,
+                "top3_enviado": bool(rot_res.get("telegram_sent") or rot_res.get("published")),
+                "duplicados_eliminados": len(dups_removed),
+                "data_version": ver_state["data_version"],
+            })
+            cls._STATE["execution_history"] = cls._STATE["execution_history"][-10:]
             steps_log.append({"paso": 10, "nombre": "invalidar_cache_y_versionar", "data_version": ver_state["data_version"], "last_sync_lima": ver_state["last_sync_lima"]})
 
             logger.info(
@@ -16742,6 +16775,55 @@ class SportsAnalyticsEngine:
                 stakazos["micromercado_oro"]["motivo"] = f"Proyección calibrada del modelo ({_kp_c.get('valor')} córners / {_kp_t.get('valor')} tarjetas)."
                 pilares["pilar_7_micromercados_friccion"]["verde_seguro"] = _rec_m
 
+        # Construir estructura única normalizada de métricas por partido (REAL_VERIFICADO / ESTIMADO_MODELO / NO_DISPONIBLE)
+        metricas_unificadas = {}
+        _kp_goals = key_probabilities.get("avg_goals") or {}
+        metricas_unificadas["avg_goals"] = {
+            "valor": _kp_goals.get("value"),
+            "home": _kp_goals.get("home"),
+            "away": _kp_goals.get("away"),
+            "recommended": _kp_goals.get("recommended"),
+            "prob_pct": _kp_goals.get("prob_pct"),
+            "tipo_dato": "REAL_VERIFICADO" if (int(muestra_h or 0) > 0 or int(muestra_a or 0) > 0) else "ESTIMADO_MODELO",
+            "fuente": "modelo_poisson_dixon_coles_ratings",
+            "muestra_n": max(int(muestra_h or 0), int(muestra_a or 0)),
+            "confianza": _confianza_por_muestra(min(int(muestra_h or 0), int(muestra_a or 0)), True) if (int(muestra_h or 0) > 0 and int(muestra_a or 0) > 0) else "BAJA",
+            "metodo": "Poisson + Dixon-Coles + fuerza local/visitante",
+            "fecha_calculo": _calc_ts_iso,
+            "es_dato_real": bool(int(muestra_h or 0) > 0 and int(muestra_a or 0) > 0),
+        }
+        for _mk_u in ("avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target", "avg_fouls"):
+            _mo = key_probabilities.get(_mk_u) or {}
+            _is_ver = (_mo.get("tipo_dato") == "VERIFICADO" and _mo.get("value") is not None)
+            _has_val = (_mo.get("valor") is not None)
+            _estado_u = "REAL_VERIFICADO" if _is_ver else ("ESTIMADO_MODELO" if _has_val else "NO_DISPONIBLE")
+            _val_eff = _mo.get("value") if _is_ver else _mo.get("valor")
+            _h_eff = _mo.get("home") if _mo.get("home") is not None else _mo.get("home_modelado")
+            _a_eff = _mo.get("away") if _mo.get("away") is not None else _mo.get("away_modelado")
+            _rec_eff = _mo.get("recommended") if _is_ver else (_mo.get("recommended_modelado") if _has_val else "No disponible")
+            _prob_eff = _mo.get("prob_pct") if _is_ver else _mo.get("prob_pct_modelado")
+            _mo["estado_dato"] = _estado_u
+            _mo["valor_efectivo"] = _val_eff
+            _mo["home_efectivo"] = _h_eff
+            _mo["away_efectivo"] = _a_eff
+            _mo["recommended_efectivo"] = _rec_eff
+            _mo["prob_pct_efectivo"] = _prob_eff
+            metricas_unificadas[_mk_u] = {
+                "valor": _val_eff,
+                "home": _h_eff,
+                "away": _a_eff,
+                "recommended": _rec_eff,
+                "prob_pct": _prob_eff,
+                "tipo_dato": _estado_u,
+                "fuente": _mo.get("fuente") or "modelo_poisson_liga_historico",
+                "muestra_n": int(_mo.get("muestra_n") or 0),
+                "confianza": _mo.get("confianza") or ("BAJA" if _has_val else "NULA"),
+                "metodo": _mo.get("metodo") or "Poisson + promedio de liga + ajuste local/visitante",
+                "fecha_calculo": _mo.get("fecha_calculo") or _calc_ts_iso,
+                "intervalo_estimado": _mo.get("intervalo_estimado"),
+                "es_dato_real": _is_ver,
+            }
+
         pronostico_principal_obj = {
             "seleccion": "Datos insuficientes" if sin_ninguna_fuente else mercado_sugerido,
             "probabilidad": "—" if sin_ninguna_fuente else prob_principal,
@@ -16765,9 +16847,20 @@ class SportsAnalyticsEngine:
             "consenso_5_modelos": consenso_5_mod
         }
 
+        # Sincronizar consenso_5_mod con metricas_unificadas para CERO contradicciones
+        _c_u_val = (metricas_unificadas.get("avg_corners") or {}).get("valor")
+        _t_u_val = (metricas_unificadas.get("avg_cards") or {}).get("valor")
+        for _c5_item in (consenso_5_mod or []):
+            _m_txt = str(_c5_item.get("metrica") or "")
+            if _c_u_val is not None and ("Córners: No disponible" in _m_txt or "Córners: Datos insuficientes" in _m_txt):
+                _c5_item["metrica"] = _m_txt.replace("Córners: No disponible", f"Córners est.: {_c_u_val}").replace("Córners: Datos insuficientes", f"Córners est.: {_c_u_val}")
+            if _t_u_val is not None and ("Tarjetas: No disponible" in _m_txt or "Tarjetas: Datos insuficientes" in _m_txt):
+                _c5_item["metrica"] = _m_txt.replace("Tarjetas: No disponible", f"Tarjetas est.: {_t_u_val}").replace("Tarjetas: Datos insuficientes", f"Tarjetas est.: {_t_u_val}")
+
         return {
             "probabilidades": probs,
             "key_probabilities": key_probabilities,
+            "metricas_unificadas": metricas_unificadas,
             "dobles_oportunidades": {
                 "1X": p1X,
                 "X2": pX2,
@@ -16844,7 +16937,7 @@ def _extraer_consenso_5_modelos(home: str, away: str, lh: float, la: float, corn
             "id": "calculo_poisson",
             "nombre": "3. Cálculo Poisson",
             "autor": "Piso de Goles y Córners",
-            "metrica": f"Más de 1.5 goles: {round(pGoles15_over, 1)}%" + (f" · Córners prom: {corners_est:.1f}" if corners_est is not None else " · Córners: Datos insuficientes"),
+            "metrica": f"Más de 1.5 goles: {round(pGoles15_over, 1)}%" + (f" · Córners prom: {corners_est:.1f}" if corners_est is not None else " · Córners: No disponible"),
             "estado": "VERDE",
             "confianza": f"Probabilidad: {max(74, conf_val - 1)}%"
         },
@@ -16860,7 +16953,7 @@ def _extraer_consenso_5_modelos(home: str, away: str, lh: float, la: float, corn
             "id": "balance_promedio",
             "nombre": "5. Balance y Promedio",
             "autor": "Estabilidad del Partido",
-            "metrica": f"Doble oport. {fav_do_label}" + (f" · Tarjetas prom: {tarjetas_esp:.1f}" if tarjetas_esp is not None else " · Tarjetas: Datos insuficientes"),
+            "metrica": f"Doble oport. {fav_do_label}" + (f" · Tarjetas prom: {tarjetas_esp:.1f}" if tarjetas_esp is not None else " · Tarjetas: No disponible"),
             "estado": "VERDE",
             "confianza": "Tendencia Firme ✓"
         }
@@ -17732,11 +17825,11 @@ OFFICIAL_ACTIVE_MATCHES_RAW = [
     ("pl-2026-j12-ful-bou_361", "Fulham", "Bournemouth", "2026-11-29T09:05:00Z", "Jornada 12", "Premier League", "PL"),
     ("pl-2026-j12-sun-tot_362", "Sunderland", "Tottenham", "2026-11-29T09:05:00Z", "Jornada 12", "Premier League", "PL"),
     ("bl1-2026-j11-fri-rb_997", "Friburgo", "RB Leipzig", "2026-11-29T09:30:00Z", "Jornada 11", "Bundesliga", "BL1"),
-    ("pd-2026-j14-cel-vil_53", "Celta de Vigo", "Villarreal", "2026-11-27T15:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j14-cel-vil_53", "Celta de Vigo", "Villarreal", "2026-11-29T15:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
     ("pd-2026-j14-dep-bar_54", "Deportivo de La Coruña", "Barcelona", "2026-11-28T08:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
     ("pd-2026-j14-elc-atl_55", "Elche", "Atlético de Madrid", "2026-11-28T10:15:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
     ("pd-2026-j14-esp-get_56", "Espanyol", "Getafe", "2026-11-28T12:30:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
-    ("pd-2026-j14-lev-rac_57", "Levante", "Racing de Santander", "2026-11-28T15:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
+    ("pd-2026-j14-lev-rac_57", "Levante", "Racing de Santander", "2026-11-27T20:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
     ("pd-2026-j14-mál-ath_58", "Málaga CF", "Athletic Club", "2026-11-29T08:00:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
     ("pd-2026-j14-rea-ray_59", "Real Betis", "Rayo Vallecano", "2026-11-29T12:30:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
     ("pd-2026-j14-rea-ala_60", "Real Madrid", "Alavés", "2026-11-29T10:15:00Z", "Jornada 14", "LaLiga EA Sports", "PD"),
@@ -17756,7 +17849,7 @@ OFFICIAL_ACTIVE_MATCHES_RAW = [
     ("bsa-2026-j37-cha-pal_1761", "Chapecoense", "Palmeiras", "2026-11-25T00:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
     ("bsa-2026-j37-cor-gre_1762", "Corinthians", "Gremio", "2026-11-29T14:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
     ("bsa-2026-j37-cor-fla_1763", "Coritiba", "Flamengo", "2026-11-28T19:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
-    ("bsa-2026-j37-flu-cru_1764", "Fluminense", "Cruzeiro", "2026-11-29T14:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
+    ("bsa-2026-j37-flu-cru_1764", "Fluminense", "Cruzeiro", "2026-11-27T23:00:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
     ("bsa-2026-j37-int-red_1765", "Internacional", "Red Bull Bragantino", "2026-11-29T16:30:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
     ("bsa-2026-j37-mir-atl_1766", "Mirassol", "Atlético Paranaense", "2026-11-29T16:30:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
     ("bsa-2026-j37-são-rem_1767", "São Paulo", "Remo", "2026-11-29T18:30:00Z", "Jornada 37", "Campeonato Brasileiro Série A", "BSA"),
@@ -18170,16 +18263,20 @@ def build_multimonth_calendar(extra_fd_fixtures: list = None):
         verified_fd_by_pair.setdefault(pair_k, []).append(f_loc)
         ordered_candidates.append(d_copy)
 
-    # 2. Agregar calendario maestro embebido y tuplas manuales (solo si no contradicen fecha verificada)
+    # 2. Prioridad estricta: 3) calendario manual validado, 4) calendario maestro únicamente como respaldo
+    for f in raw_manual_source:
+        d_man = dict(f)
+        d_man.setdefault("origen_fuente", "calendario_manual_validado")
+        ordered_candidates.append(d_man)
     for f in (master_source or []):
         d_copy = dict(f)
-        d_copy.setdefault("origen_fuente", "calendario_maestro_embebido")
+        d_copy.setdefault("origen_fuente", "calendario_maestro_respaldo")
         ordered_candidates.append(d_copy)
-    for f in raw_manual_source:
-        ordered_candidates.append(dict(f))
 
     calendar = []
     seen_canonical = set()
+    seen_ids = set()
+    seen_pair_comp_dates = {}
     for fix in ordered_candidates:
         loc = str(fix.get("local") or "").strip()
         vis = str(fix.get("visitante") or "").strip()
@@ -18202,10 +18299,22 @@ def build_multimonth_calendar(extra_fd_fixtures: list = None):
 
         comp_norm = normalize_competition_code(fix.get("codigo_liga", ""), fix.get("liga", ""))
         fix["codigo_liga"] = comp_norm
+        mid_k = str(fix.get("id_partido") or "").strip()
+        if mid_k and mid_k in seen_ids:
+            logger.debug("[CalendarPriority] Descartado respaldo con id_partido duplicado %s (%s vs %s en %s, fuente=%s)", mid_k, loc, vis, f_loc, src)
+            continue
+        pc_key = f"{comp_norm}|{pair_k}"
+        prev_dates = seen_pair_comp_dates.get(pc_key, [])
+        if prev_dates and f_loc not in prev_dates and any(_dates_within_days(f_loc, pd_d, 7) for pd_d in prev_dates):
+            logger.info("[CalendarPriority] Discrepancia de fecha entre fuentes para %s vs %s (%s): se conserva %s y se descarta %s (%s)", loc, vis, comp_norm, prev_dates, f_loc, src)
+            continue
         ckey = f"{f_loc}|{comp_norm}|{pair_k}"
         if ckey in seen_canonical:
             continue
         seen_canonical.add(ckey)
+        if mid_k:
+            seen_ids.add(mid_k)
+        seen_pair_comp_dates.setdefault(pc_key, []).append(f_loc)
         fix["fecha"] = f_loc
         fix["fecha_local_partido"] = f_loc
         fix["fecha_programada"] = f_prog or fix.get("fecha_utc") or f_loc
@@ -18240,6 +18349,12 @@ _log_pool_counts("ARRANQUE_INICIAL")
 
 
 class CalendarSyncService:
+    SOURCE_PRIORITY = {
+        1: "fuente_oficial_verificada",
+        2: "fuente_secundaria_verificada",
+        3: "calendario_manual_validado",
+        4: "calendario_maestro_respaldo",
+    }
     """
     Fase 2: Auditoría y sincronización segura del Calendario Maestro.
     - Respeta el calendario manual (ALL_FIXTURES_POOL) como fuente propia de fixtures:
@@ -23279,6 +23394,87 @@ if os.getenv("DISABLE_BACKGROUND_WORKERS", "false").lower() != "true":
     threading.Thread(target=_loop_mantenimiento_quincenal_y_calendario, daemon=True).start()
 
 
+def auditar_partido_completo(fixture_or_id) -> dict:
+    """
+    Audita de forma integral cualquier partido:
+      - fecha UTC / America/Lima / programada;
+      - competición y equipos;
+      - duplicados canónicos en ALL_FIXTURES_POOL;
+      - fuente, tipo_dato (REAL_VERIFICADO / ESTIMADO_MODELO / NO_DISPONIBLE), muestra_n y confianza;
+      - métricas faltantes y discrepancias entre proveedores;
+      - suma de probabilidades 1X2, cuota justa y ausencia de cuota real inventada;
+      - consistencia entre pilares, stakazos, key_probabilities, consenso y metricas_unificadas.
+    """
+    ensure_fixtures_date_index()
+    pool = list(globals().get("ALL_FIXTURES_POOL") or [])
+    if isinstance(fixture_or_id, dict):
+        fx = fixture_or_id
+    else:
+        mid = str(fixture_or_id or "").strip()
+        fx = next((f for f in pool if str(f.get("id_partido") or "") == mid), None)
+    if not fx:
+        return {"success": False, "error": "Partido no encontrado en el calendario activo."}
+
+    def _canon_key_audit(item):
+        _, loc_d = resolve_match_local_date(item)
+        comp_c = normalize_competition_code(item.get("codigo_liga", ""), item.get("liga", ""))
+        return f"{loc_d}|{comp_c}|{canonical_team_name(item.get('local', ''))}|{canonical_team_name(item.get('visitante', ''))}"
+
+    f_prog, f_local = resolve_match_local_date(fx)
+    canon_key = _canon_key_audit(fx)
+    dups_pool = [f for f in pool if _canon_key_audit(f) == canon_key]
+    an = SportsAnalyticsEngine.generate_institutional_analysis(fx)
+    mu = an.get("metricas_unificadas") or {}
+    kp = an.get("key_probabilities") or {}
+    meta = kp.get("_meta") or {}
+    p1x2 = (an.get("probabilidades") or {}).get("1X2") or {}
+    suma_1x2 = round(float(p1x2.get("1", p1x2.get("local", 0)) or 0) + float(p1x2.get("X", p1x2.get("empate", 0)) or 0) + float(p1x2.get("2", p1x2.get("visitante", 0)) or 0), 2)
+    pp = an.get("pronostico_principal") or {}
+
+    metricas_faltantes = [k for k, v in mu.items() if v.get("tipo_dato") == "NO_DISPONIBLE"]
+    inconsistencias = []
+    c_val = (mu.get("avg_corners") or {}).get("valor")
+    t_val = (mu.get("avg_cards") or {}).get("valor")
+    p1_txt = str((an.get("pilares_cuantitativos") or {}).get("pilar_1_volumen_ofensivo", {}).get("corners_proyectados", ""))
+    p7_txt = str((an.get("pilares_cuantitativos") or {}).get("pilar_7_micromercados_friccion", {}).get("tarjetas_proyectadas", ""))
+    if c_val is not None and "insuficiente" in p1_txt.lower():
+        inconsistencias.append("pilar_1_volumen_ofensivo muestra Datos insuficientes pese a existir valor de córners.")
+    if t_val is not None and "insuficiente" in p7_txt.lower():
+        inconsistencias.append("pilar_7_micromercados_friccion muestra Datos insuficientes pese a existir valor de tarjetas.")
+    for c5 in (an.get("consenso_5_modelos") or []):
+        m_txt = str(c5.get("metrica") or "")
+        if "insuficiente" in m_txt.lower() and (c_val is not None and t_val is not None):
+            inconsistencias.append(f"consenso_5_modelos ({c5.get('modelo')}) muestra Datos insuficientes pese a estimación disponible.")
+
+    muestra_min = min(int(meta.get("muestra_local") or 0), int(meta.get("muestra_visitante") or 0))
+    advertencia_muestra = muestra_min <= 1
+
+    return {
+        "success": True,
+        "id_partido": fx.get("id_partido"),
+        "partido": f"{fx.get('local')} vs {fx.get('visitante')}",
+        "competicion": fx.get("liga"),
+        "codigo_liga": fx.get("codigo_liga"),
+        "fecha_utc": fx.get("fecha_utc"),
+        "fecha_local_lima": f_local,
+        "fecha_programada": f_prog,
+        "clave_canonica": canon_key,
+        "duplicados_en_pool": max(0, len(dups_pool) - 1),
+        "metricas_unificadas": mu,
+        "metricas_faltantes": metricas_faltantes,
+        "discrepancias_proveedores": meta.get("discrepancias") or [],
+        "probabilidades_1x2_suma": suma_1x2,
+        "probabilidades_1x2_valido": abs(suma_1x2 - 100.0) <= 1.5,
+        "cuota_justa_modelo": pp.get("cuota_justa_modelo"),
+        "es_cuota_real": bool(pp.get("es_cuota_real", False)),
+        "sin_cuota_real_inventada": (pp.get("cuota_real") is None and not pp.get("es_cuota_real", False)),
+        "consistencia_secciones_ok": len(inconsistencias) == 0,
+        "inconsistencias_detectadas": inconsistencias,
+        "muestra_minima_equipos": muestra_min,
+        "advertencia_muestra_baja": advertencia_muestra,
+    }
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
     _ORIGENES = [o.strip() for o in (os.getenv("ALLOWED_ORIGINS") or "https://predicxion-ia.onrender.com").split(",") if o.strip()]
@@ -23879,6 +24075,8 @@ def create_app() -> Flask:
                         "jornada": fix.get("jornada"),
                         "probabilidades": analisis["probabilidades"],
                         "key_probabilities": analisis.get("key_probabilities", {}),
+            "metricas_unificadas": analisis.get("metricas_unificadas", {}),
+                        "metricas_unificadas": analisis.get("metricas_unificadas", {}),
                         "dobles_oportunidades": analisis["dobles_oportunidades"],
                         "pronostico_principal": analisis["pronostico_principal"],
                         "consenso_5_modelos": analisis.get("consenso_5_modelos", []),
@@ -25870,6 +26068,12 @@ def create_app() -> Flask:
         }
         _attach_match_logos(item, loc, vis, competition_code=target_fix.get("codigo_liga", "OFL"))
         return jsonify({"success": True, "partido": item}), 200
+
+    @app.route("/api/v1/partido/<match_id>/auditoria", methods=["GET"])
+    def get_partido_auditoria(match_id):
+        """Auditoría integral verificable de un partido: fecha, liga, duplicados, métricas, cuotas y consistencia."""
+        res_aud = auditar_partido_completo(match_id)
+        return jsonify(res_aud), (200 if res_aud.get("success") else 404)
 
     @app.route("/api/v1/sync/status", methods=["GET"])
     def get_sync_status_endpoint():
