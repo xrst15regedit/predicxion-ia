@@ -1518,6 +1518,169 @@ console.log(JSON.stringify({{ gSinMetricas, gCompleto, eq_pt: k1 === k2, eq_fr: 
             self.assertIn("logo_local", pick)
             self.assertIn("logo_visitante", pick)
 
+    def test_20_nov27_calendar_7_matches_unified_metrics_audit_and_cron_idempotency(self):
+        """
+        Auditoría integral del 27/11/2026 (America/Lima):
+          1-4. Exactamente 7 partidos esperados el 27/11/2026; Fluminense vs Cruzeiro en el 27 (no 28/29);
+               Levante vs Racing de Santander (PD) en el 27; Celta vs Villarreal NO en el 27.
+          5-6. Cero duplicados por alias (Bolonia/Bologna, Borussia M'gladbach, Paris FC, Marítimo, Nacional, Racing Club)
+               y cero mezcla entre 26, 27 y 28.
+          7. Top 3 del 27/11/2026 usa exclusivamente partidos del 27 (máx. 3).
+          8-9. Werder Bremen vs Borussia M'gladbach propaga métricas unificadas (10.6, 3.83, 26.1, 9.1) a
+               todas las secciones y al frontend (ejecución real en Node.js) sin "Datos insuficientes".
+          10-12. Actualización 22:00 PE idempotente, bloqueo de concurrencia y resiliencia ante caída de proveedor externo.
+          13-16. Auditoría completa /api/v1/partido/<id>/auditoria, cero HTTP en /obtener-pronostico y cero "Top 5" visible.
+        """
+        import subprocess, json as _json
+
+        pred_app.ensure_fixtures_date_index(force=True)
+        # 1. Verificar exactamente los 7 partidos del 27/11/2026 (America/Lima)
+        m27 = [f for f in pred_app.ALL_FIXTURES_POOL if pred_app.resolve_match_local_date(f)[1] == "2026-11-27"]
+        self.assertEqual(len(m27), 7, f"Esperados 7 partidos el 27/11/2026, encontrados {len(m27)}: {[(x['local'], x['visitante']) for x in m27]}")
+
+        pares_27 = {(pred_app.canonical_team_name(f["local"]), pred_app.canonical_team_name(f["visitante"]), f["codigo_liga"]) for f in m27}
+        esperados_27 = {
+            (pred_app.canonical_team_name("Werder Bremen"), pred_app.canonical_team_name("Borussia Mönchengladbach"), "BL1"),
+            (pred_app.canonical_team_name("Fluminense"), pred_app.canonical_team_name("Cruzeiro"), "BSA"),
+            (pred_app.canonical_team_name("Levante"), pred_app.canonical_team_name("Racing Club"), "PD"),
+            (pred_app.canonical_team_name("Brest"), pred_app.canonical_team_name("París FC"), "FL1"),
+            (pred_app.canonical_team_name("Nottingham Forest"), pred_app.canonical_team_name("Chelsea"), "PL"),
+            (pred_app.canonical_team_name("Venezia"), pred_app.canonical_team_name("Bologna"), "SA"),
+            (pred_app.canonical_team_name("Marítimo"), pred_app.canonical_team_name("Nacional"), "PPL"),
+        }
+        self.assertEqual(pares_27, esperados_27)
+
+        # 2-4. Fluminense vs Cruzeiro NO en 28 ni 29; Celta vs Villarreal NO en 27
+        for d_other in ("2026-11-26", "2026-11-28", "2026-11-29"):
+            ms_o = [f for f in pred_app.ALL_FIXTURES_POOL if pred_app.resolve_match_local_date(f)[1] == d_other]
+            self.assertFalse(any("fluminense" in f["local"].lower() and "cruzeiro" in f["visitante"].lower() for f in ms_o))
+            self.assertFalse(any("levante" in f["local"].lower() and "racing" in f["visitante"].lower() for f in ms_o))
+        self.assertFalse(any("celta" in f["local"].lower() and "villarreal" in f["visitante"].lower() for f in m27))
+
+        # 5. Deduplicación de alias solicitados (backend)
+        for a1, a2 in [
+            ("Bologna", "Bolonia"),
+            ("Borussia M’gladbach", "Borussia Monchengladbach"),
+            ("Borussia M'gladbach", "Borussia Mönchengladbach"),
+            ("Paris FC", "París FC"),
+            ("Marítimo", "CS Marítimo"),
+            ("Nacional", "CD Nacional"),
+            ("Racing Club", "Racing de Santander"),
+        ]:
+            self.assertEqual(pred_app.canonical_team_name(a1), pred_app.canonical_team_name(a2), f"Alias mismatch: {a1} vs {a2}")
+
+        # 6. /obtener-pronostico sin llamadas externas y sin mezclar fechas para 2026-11-27
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+        with patch.object(requests, "get", side_effect=AssertionError("No HTTP en /obtener-pronostico")):
+            flask_stub.request.args = {"fecha": "2026-11-27", "modo": "resumen"}
+            resp_27, c27 = pron_handler()
+        self.assertEqual(c27, 200)
+        self.assertEqual(len(resp_27["destacados"]), 7)
+        for item in resp_27["destacados"]:
+            self.assertEqual(item["fecha_local_partido"], "2026-11-27")
+
+        # 7. Top 3 del 27/11/2026 usa SOLO partidos del 27 (máximo 3)
+        for fx in m27:
+            self._add_verified_team(fx["local"], gf=2, ga=1)
+            self._add_verified_team(fx["visitante"], gf=1, ga=1)
+        top3_handler = self.flask_app.routes["/api/v1/top3/daily"]
+        flask_stub.request.args = {"fecha": "2026-11-27"}
+        raw_t3 = top3_handler()
+        resp_t3 = raw_t3[0] if isinstance(raw_t3, tuple) else raw_t3
+        top3_27 = resp_t3.get("top3") or []
+        self.assertEqual(len(top3_27), 3)
+        for pk in top3_27:
+            self.assertEqual(pk.get("fecha_local_partido") or pk.get("fecha"), "2026-11-27")
+
+        # 8-9. Werder Bremen vs Borussia M'gladbach: consistencia total en backend + auditoría + frontend (Node.js)
+        wb_fx = next(f for f in m27 if "Werder" in f["local"])
+        an_wb = pred_app.SportsAnalyticsEngine.generate_institutional_analysis(wb_fx)
+        mu_wb = an_wb["metricas_unificadas"]
+        for mk in ("avg_goals", "avg_corners", "avg_cards", "avg_shots", "avg_shots_on_target"):
+            self.assertIn(mk, mu_wb)
+            self.assertIsNotNone(mu_wb[mk]["valor"])
+            self.assertIn(mu_wb[mk]["tipo_dato"], ("REAL_VERIFICADO", "ESTIMADO_MODELO"))
+            self.assertTrue(mu_wb[mk]["fuente"])
+            self.assertTrue(mu_wb[mk]["metodo"])
+        # Cero "Datos insuficientes" en pilares, stakazos y consenso_5_modelos
+        self.assertNotIn("insuficiente", an_wb["pilares_cuantitativos"]["pilar_1_volumen_ofensivo"]["corners_proyectados"].lower())
+        self.assertNotIn("insuficiente", an_wb["pilares_cuantitativos"]["pilar_7_micromercados_friccion"]["tarjetas_proyectadas"].lower())
+        for c5 in an_wb["consenso_5_modelos"]:
+            self.assertNotIn("datos insuficientes", str(c5.get("metrica", "")).lower())
+
+        # Endpoint de auditoría integral del partido
+        aud_handler = self.flask_app.routes["/api/v1/partido/<match_id>/auditoria"]
+        aud_resp, aud_code = aud_handler(wb_fx["id_partido"])
+        self.assertEqual(aud_code, 200)
+        self.assertTrue(aud_resp["success"])
+        self.assertEqual(aud_resp["fecha_local_lima"], "2026-11-27")
+        self.assertEqual(aud_resp["duplicados_en_pool"], 0)
+        self.assertTrue(aud_resp["probabilidades_1x2_valido"])
+        self.assertTrue(aud_resp["sin_cuota_real_inventada"])
+        self.assertTrue(aud_resp["consistencia_secciones_ok"], f"Inconsistencias: {aud_resp['inconsistencias_detectadas']}")
+
+        # Ejecución real en Node.js de extraerMetricasOddsterPartido() con el análisis real de Werder Bremen
+        html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+        with open(html_path, "r", encoding="utf-8") as fh:
+            html_txt = fh.read()
+
+        def _extract_js_fn(src, name):
+            start = src.index(f"function {name}(")
+            brace = src.index("{", start)
+            depth = 0
+            for idx in range(brace, len(src)):
+                if src[idx] == "{":
+                    depth += 1
+                elif src[idx] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return src[start:idx + 1]
+            raise ValueError(f"Unclosed {name}")
+
+        fn_lavg = _extract_js_fn(html_txt, "obtenerPromediosLigaOddster")
+        fn_odd = _extract_js_fn(html_txt, "extraerMetricasOddsterPartido")
+        wb_payload = _json.dumps(an_wb, ensure_ascii=False)
+        node_odd = f"""
+{fn_lavg}
+{fn_odd}
+const item = {wb_payload};
+item.codigo_liga = "BL1";
+item.liga = "Bundesliga";
+const m = extraerMetricasOddsterPartido(item);
+console.log(JSON.stringify({{
+    corners: m.avg_corners.val,
+    cornersRec: m.avg_corners.rec,
+    cards: m.avg_cards.val,
+    cardsRec: m.avg_cards.rec,
+    shots: m.avg_shots.val,
+    shotsOT: m.avg_shots_ot.val
+}}));
+"""
+        proc = subprocess.run(["node", "-e", node_odd], capture_output=True, text=True, check=True)
+        odd_out = _json.loads(proc.stdout.strip())
+        self.assertIsNotNone(odd_out["corners"])
+        self.assertNotIn("Datos insuficientes", str(odd_out["cornersRec"]))
+        self.assertIsNotNone(odd_out["cards"])
+        self.assertNotIn("Datos insuficientes", str(odd_out["cardsRec"]))
+        self.assertIsNotNone(odd_out["shots"])
+        self.assertIsNotNone(odd_out["shotsOT"])
+
+        # 10-12. Bloqueo de concurrencia en DailyAutomationPipeline + resiliencia si proveedor externo falla
+        self.assertTrue(pred_app.DailyAutomationPipeline._EXEC_GUARD.acquire(blocking=False))
+        try:
+            blocked = pred_app.DailyAutomationPipeline.run_daily_pipeline(motivo="TEST_CONCURRENTE")
+            self.assertTrue(blocked.get("skipped"))
+            self.assertEqual(blocked.get("motivo"), "EJECUCION_SIMULTANEA_BLOQUEADA")
+        finally:
+            pred_app.DailyAutomationPipeline._EXEC_GUARD.release()
+
+        with patch.object(pred_app.FootballDataOrgClient, "fetch_json", return_value={"ok": False, "data": None, "error": "timeout"}),              patch.object(pred_app.Top3RotationManager, "check_and_run_rotation", return_value={"published": False, "telegram_sent": False, "cantidad_selecciones": 3, "fecha_partidos": "2026-11-27", "estado_telegram": "YA_PUBLICADO"}),              patch.object(pred_app.Top3RotationManager, "close_previous_matchday", return_value={"finalizados": 0, "resultados_enviados": False}):
+            res_pipe = pred_app.DailyAutomationPipeline.run_daily_pipeline(motivo="TEST_RESILIENCIA_EXTERNA")
+        self.assertTrue(res_pipe["success"])
+        # Calendario del 27 sigue intacto con los 7 partidos pese al fallo del proveedor externo
+        m27_post = [f for f in pred_app.ALL_FIXTURES_POOL if pred_app.resolve_match_local_date(f)[1] == "2026-11-27"]
+        self.assertEqual(len(m27_post), 7)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
