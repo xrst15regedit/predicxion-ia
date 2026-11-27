@@ -3,10 +3,14 @@ services:
     name: predicxion-ia
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 2 --threads 4 --timeout 120
+    # Un solo worker con 4 hilos garantiza estado consistente de Top3RotationManager,
+    # caché del carrusel, índice de fechas y data_version en memoria.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120
     envVars:
+      - key: TZ
+        value: "America/Lima"
       - key: DISABLED_COMPETITIONS
-        value: ""
+        value: "UNL"
       - key: ALLOW_SIMULATED_ACTA
         value: "false"
       - key: CRON_SECRET_TOKEN
@@ -19,18 +23,6 @@ services:
         sync: false
       - key: TELEGRAM_CHANNEL_ID
         sync: false
-
-  # Cron Job diario en Render a las 22:00 America/Lima (03:00 UTC del día siguiente)
-  - type: cron
-    name: predicxion-ia-daily-22h-lima
-    env: python
-    schedule: "0 3 * * *"
-    buildCommand: "echo 'Cron job ready'"
-    startCommand: >-
-      curl -fsS -X POST https://predicxion-ia.onrender.com/api/v1/cron/daily-sync
-      -H "X-Cron-Token: ${CRON_SECRET_TOKEN}"
-      -H "Content-Type: application/json"
-      -d '{"motivo":"RENDER_CRON_22_00_PE"}'
-    envVars:
-      - key: CRON_SECRET_TOKEN
-        sync: false
+# Programación diaria 22:00 America/Lima gestionada exclusivamente por
+# .github/workflows/predicxion_daily_sync.yml contra POST /api/v1/cron/daily-sync
+# (evita ejecuciones duplicadas simultáneas con Render Cron).
