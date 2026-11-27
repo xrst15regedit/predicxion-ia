@@ -1818,31 +1818,41 @@
             const bttsRec = kp.btts?.recommended || ((bttsVal >= 55 && lh >= 1.15 && la >= 1.05) ? 'Ambos anotan: Sí' : 'Ambos anotan: No');
             const bttsProb = kp.btts?.prob_pct != null ? Math.round(kp.btts.prob_pct) : Math.min(86, Math.max(72, bttsRec.includes('Sí') ? bttsVal + 10 : bttsNoVal + 10));
 
-            const cardsInsuf = Boolean(kp.avg_cards?.datos_insuficientes || kp.avg_cards?.value === null);
-            const cardsH = cardsInsuf ? null : parseFloat(kp.avg_cards?.home ?? locAnt.tarjetas_prom ?? 0);
-            const cardsA = cardsInsuf ? null : parseFloat(kp.avg_cards?.away ?? visAnt.tarjetas_prom ?? 0);
-            const avgCardsVal = cardsInsuf ? null : (kp.avg_cards?.value != null ? parseFloat(kp.avg_cards.value) : Math.round((cardsH + cardsA) * 100) / 100);
+            const mu = item.metricas_unificadas || {};
+            const _resolveNum = (uObj, kpObj) => {
+                const raw = uObj?.valor ?? kpObj?.valor_efectivo ?? kpObj?.value ?? kpObj?.valor;
+                return (raw !== undefined && raw !== null && Number.isFinite(parseFloat(raw))) ? parseFloat(raw) : null;
+            };
+            const _resolveSide = (uObj, kpObj, side, fallbackAnt) => {
+                const raw = uObj?.[side] ?? kpObj?.[`${side}_efectivo`] ?? kpObj?.[side] ?? kpObj?.[`${side}_modelado`] ?? fallbackAnt;
+                return (raw !== undefined && raw !== null && Number.isFinite(parseFloat(raw))) ? parseFloat(raw) : null;
+            };
 
-            const cornersInsuf = Boolean(kp.avg_corners?.datos_insuficientes || kp.avg_corners?.value === null);
-            const cornersH = cornersInsuf ? null : parseFloat(kp.avg_corners?.home ?? locAnt.corners_prom ?? 0);
-            const cornersA = cornersInsuf ? null : parseFloat(kp.avg_corners?.away ?? visAnt.corners_prom ?? 0);
-            const avgCornersVal = cornersInsuf ? null : (kp.avg_corners?.value != null ? parseFloat(kp.avg_corners.value) : Math.round((cornersH + cornersA) * 100) / 100);
+            const avgCardsVal = _resolveNum(mu.avg_cards, kp.avg_cards);
+            const cardsInsuf = (avgCardsVal === null);
+            const cardsH = cardsInsuf ? null : (_resolveSide(mu.avg_cards, kp.avg_cards, 'home', locAnt.tarjetas_prom) ?? Math.round((avgCardsVal * 0.48) * 10) / 10);
+            const cardsA = cardsInsuf ? null : (_resolveSide(mu.avg_cards, kp.avg_cards, 'away', visAnt.tarjetas_prom) ?? Math.round((avgCardsVal - cardsH) * 10) / 10);
 
-            const shotsInsuf = Boolean(kp.avg_shots?.datos_insuficientes || kp.avg_shots?.value === null);
-            const shotsH = shotsInsuf ? null : parseFloat(kp.avg_shots?.home ?? locAnt.tiros_totales_prom ?? 0);
-            const shotsA = shotsInsuf ? null : parseFloat(kp.avg_shots?.away ?? visAnt.tiros_totales_prom ?? 0);
-            const avgShotsVal = shotsInsuf ? null : (kp.avg_shots?.value != null ? parseFloat(kp.avg_shots.value) : Math.round((shotsH + shotsA) * 10) / 10);
+            const avgCornersVal = _resolveNum(mu.avg_corners, kp.avg_corners);
+            const cornersInsuf = (avgCornersVal === null);
+            const cornersH = cornersInsuf ? null : (_resolveSide(mu.avg_corners, kp.avg_corners, 'home', locAnt.corners_prom) ?? Math.round((avgCornersVal * 0.53) * 10) / 10);
+            const cornersA = cornersInsuf ? null : (_resolveSide(mu.avg_corners, kp.avg_corners, 'away', visAnt.corners_prom) ?? Math.round((avgCornersVal - cornersH) * 10) / 10);
 
-            const shotsOTInsuf = Boolean(kp.avg_shots_on_target?.datos_insuficientes || kp.avg_shots_on_target?.value === null);
-            const shotsOTH = shotsOTInsuf ? null : parseFloat(kp.avg_shots_on_target?.home ?? locAnt.tiros_puerta_prom ?? 0);
-            const shotsOTA = shotsOTInsuf ? null : parseFloat(kp.avg_shots_on_target?.away ?? visAnt.tiros_puerta_prom ?? 0);
-            const avgShotsOTVal = shotsOTInsuf ? null : (kp.avg_shots_on_target?.value != null ? parseFloat(kp.avg_shots_on_target.value) : Math.round((shotsOTH + shotsOTA) * 10) / 10);
+            const avgShotsVal = _resolveNum(mu.avg_shots, kp.avg_shots);
+            const shotsInsuf = (avgShotsVal === null);
+            const shotsH = shotsInsuf ? null : (_resolveSide(mu.avg_shots, kp.avg_shots, 'home', locAnt.tiros_totales_prom) ?? Math.round((avgShotsVal * 0.54) * 10) / 10);
+            const shotsA = shotsInsuf ? null : (_resolveSide(mu.avg_shots, kp.avg_shots, 'away', visAnt.tiros_totales_prom) ?? Math.round((avgShotsVal - shotsH) * 10) / 10);
+
+            const avgShotsOTVal = _resolveNum(mu.avg_shots_on_target, kp.avg_shots_on_target);
+            const shotsOTInsuf = (avgShotsOTVal === null);
+            const shotsOTH = shotsOTInsuf ? null : (_resolveSide(mu.avg_shots_on_target, kp.avg_shots_on_target, 'home', locAnt.tiros_puerta_prom) ?? Math.round((avgShotsOTVal * 0.54) * 10) / 10);
+            const shotsOTA = shotsOTInsuf ? null : (_resolveSide(mu.avg_shots_on_target, kp.avg_shots_on_target, 'away', visAnt.tiros_puerta_prom) ?? Math.round((avgShotsOTVal - shotsOTH) * 10) / 10);
 
             const recGoals = kp.avg_goals?.recommended || (avgGoalsVal >= 2.85 ? 'Más de 2.5 goles' : (avgGoalsVal <= 1.98 ? 'Menos de 2.5 goles' : (avgGoalsVal <= 2.32 ? 'Menos de 3.5 goles' : 'Más de 1.5 goles')));
             const probGoals = kp.avg_goals?.prob_pct != null ? Math.round(kp.avg_goals.prob_pct) : (recGoals.includes('2.5') ? Math.max(over25Val, under25Val) + 8 : (recGoals.includes('3.5') ? under35Val : over15Val));
 
-            let recCards = cardsInsuf ? 'Datos insuficientes' : kp.avg_cards?.recommended;
-            if (!recCards) {
+            let recCards = cardsInsuf ? 'Datos insuficientes' : (mu.avg_cards?.recommended || kp.avg_cards?.recommended_efectivo || (kp.avg_cards?.recommended !== 'Datos insuficientes' ? kp.avg_cards?.recommended : kp.avg_cards?.recommended_modelado));
+            if (!recCards || recCards === 'Datos insuficientes') {
                 if (avgCardsVal <= 2.95) recCards = 'Menos de 3.5 tarjetas';
                 else if (avgCardsVal <= 3.55) recCards = 'Menos de 4.5 tarjetas';
                 else if (avgCardsVal <= 3.95) recCards = 'Menos de 5.5 tarjetas';
@@ -1852,8 +1862,8 @@
             }
             const probCards = kp.avg_cards?.prob_pct != null ? Math.round(kp.avg_cards.prob_pct) : 84;
 
-            let recCorners = cornersInsuf ? 'Datos insuficientes' : kp.avg_corners?.recommended;
-            if (!recCorners) {
+            let recCorners = cornersInsuf ? 'Datos insuficientes' : (mu.avg_corners?.recommended || kp.avg_corners?.recommended_efectivo || (kp.avg_corners?.recommended !== 'Datos insuficientes' ? kp.avg_corners?.recommended : kp.avg_corners?.recommended_modelado));
+            if (!recCorners || recCorners === 'Datos insuficientes') {
                 if (avgCornersVal <= 7.8) recCorners = 'Menos de 8.5 córners';
                 else if (avgCornersVal <= 8.6) recCorners = 'Menos de 9.5 córners';
                 else if (avgCornersVal <= 9.2) recCorners = 'Menos de 10.5 córners';
@@ -1863,11 +1873,11 @@
             }
             const probCorners = kp.avg_corners?.prob_pct != null ? Math.round(kp.avg_corners.prob_pct) : 83;
 
-            const recShots = kp.avg_shots?.recommended || `Más de ${Math.floor(avgShotsVal - 2.5) + 0.5} remates`;
-            const probShots = kp.avg_shots?.prob_pct != null ? Math.round(kp.avg_shots.prob_pct) : 81;
+            const recShots = shotsInsuf ? 'Datos insuficientes' : (mu.avg_shots?.recommended || kp.avg_shots?.recommended_efectivo || kp.avg_shots?.recommended_modelado || `Más de ${Math.floor(avgShotsVal - 2.5) + 0.5} remates`);
+            const probShots = (mu.avg_shots?.prob_pct ?? kp.avg_shots?.prob_pct_efectivo ?? kp.avg_shots?.prob_pct ?? kp.avg_shots?.prob_pct_modelado) != null ? Math.round(mu.avg_shots?.prob_pct ?? kp.avg_shots?.prob_pct_efectivo ?? kp.avg_shots?.prob_pct ?? kp.avg_shots?.prob_pct_modelado) : 68;
 
-            const recShotsOT = kp.avg_shots_on_target?.recommended || `Más de ${Math.max(5.5, Math.floor(avgShotsOTVal - 1.5) + 0.5)} tiros a puerta`;
-            const probShotsOT = kp.avg_shots_on_target?.prob_pct != null ? Math.round(kp.avg_shots_on_target.prob_pct) : 82;
+            const recShotsOT = shotsOTInsuf ? 'Datos insuficientes' : (mu.avg_shots_on_target?.recommended || kp.avg_shots_on_target?.recommended_efectivo || kp.avg_shots_on_target?.recommended_modelado || `Más de ${Math.max(4.5, Math.floor(avgShotsOTVal - 1.5) + 0.5)} tiros a puerta`);
+            const probShotsOT = (mu.avg_shots_on_target?.prob_pct ?? kp.avg_shots_on_target?.prob_pct_efectivo ?? kp.avg_shots_on_target?.prob_pct ?? kp.avg_shots_on_target?.prob_pct_modelado) != null ? Math.round(mu.avg_shots_on_target?.prob_pct ?? kp.avg_shots_on_target?.prob_pct_efectivo ?? kp.avg_shots_on_target?.prob_pct ?? kp.avg_shots_on_target?.prob_pct_modelado) : 67;
 
             const over85Corn = kp.avg_corners?.over_8_5_pct ?? Math.min(88, Math.max(68, Math.round(avgCornersVal >= 9.5 ? 78 + (avgCornersVal - 9.5) * 4 : 70)));
             const under105Corn = kp.avg_corners?.under_10_5_pct ?? Math.min(90, Math.max(72, Math.round(avgCornersVal <= 9.5 ? 78 + (9.5 - avgCornersVal) * 4 : 72)));
@@ -2598,7 +2608,11 @@
             "cs maritimo": "maritimo", "cd nacional": "nacional", "clube desportivo nacional": "nacional",
             "niza": "nice", "ogc nice": "nice", "es troyes ac": "troyes", "estac troyes": "troyes",
             "genoa cfc": "genoa", "torino fc": "torino", "club brujas": "brugge", "club brugge kv": "brugge",
-            "napoles": "napoli", "ssc napoli": "napoli", "psg": "paris saint germain", "paris saint germain fc": "paris saint germain"
+            "napoles": "napoli", "ssc napoli": "napoli", "psg": "paris saint germain", "paris saint germain fc": "paris saint germain",
+            "bolonia": "bologna", "bologna fc 1909": "bologna",
+            "borussia m gladbach": "borussia monchengladbach", "borussia mgladbach": "borussia monchengladbach",
+            "borussia monchengladbach": "borussia monchengladbach", "paris fc": "paris fc",
+            "racing club": "racing santander", "racing de santander": "racing santander", "real racing club": "racing santander"
         };
         function claveCanonicaPartidoUI(p) {
             if (!p) return "";
