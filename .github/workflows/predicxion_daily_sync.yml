@@ -13,6 +13,11 @@ on:
         required: false
         default: "false"
 
+# Bloquea ejecuciones simultáneas para evitar duplicados de calendario o Telegram
+concurrency:
+  group: predicxion-ia-daily-sync
+  cancel-in-progress: false
+
 jobs:
   daily-sync:
     runs-on: ubuntu-latest
