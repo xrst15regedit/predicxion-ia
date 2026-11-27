@@ -1681,6 +1681,261 @@ console.log(JSON.stringify({{
         m27_post = [f for f in pred_app.ALL_FIXTURES_POOL if pred_app.resolve_match_local_date(f)[1] == "2026-11-27"]
         self.assertEqual(len(m27_post), 7)
 
+
+    def test_21_carousel_top3_sync_22h_workers_cache_canonical_json_and_ui_autorefresh(self):
+        """Valida las 15 reglas obligatorias de sincronización carrusel/Top 3, caché, 1 worker, cron único, JSON canónico y auto-refresh UI."""
+        import base64 as _b64, zlib as _zlib, json as _json, subprocess as _sp
+        peru_tz = timezone(timedelta(hours=-5))
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # 13. Calendario JSON en disco y EMBEDDED_CALENDAR_2026_2027_B64 son 100% idénticos
+        json_path = os.path.join(base_dir, "calendario_completo_temporada_2026_2027.json")
+        with open(json_path, "r", encoding="utf-8") as jf:
+            disk_cal = _json.load(jf)
+        emb_cal = _json.loads(_zlib.decompress(_b64.b64decode(pred_app.EMBEDDED_CALENDAR_2026_2027_B64.encode("ascii"))).decode("utf-8"))
+        self.assertEqual(len(disk_cal), len(emb_cal))
+        self.assertEqual(len(disk_cal), 2046)
+        for d_item, e_item in zip(disk_cal, emb_cal):
+            for field in ("id_partido", "local", "visitante", "fecha", "fecha_utc", "hora", "liga", "codigo_liga"):
+                self.assertEqual(d_item.get(field), e_item.get(field), f"Desfase JSON vs embebido en {d_item.get('id_partido')}.{field}")
+
+        # 8 & 10. render.yaml usa --workers 1 y no tiene type: cron duplicado; GitHub Actions tiene concurrency
+        with open(os.path.join(base_dir, "render.yaml"), "r", encoding="utf-8") as rf:
+            render_txt = rf.read()
+        self.assertIn("--workers 1 --threads 4 --timeout 120", render_txt)
+        self.assertNotIn("type: cron", render_txt)
+        with open(os.path.join(base_dir, ".github", "workflows", "predicxion_daily_sync.yml"), "r", encoding="utf-8") as wf:
+            gh_txt = wf.read()
+        self.assertIn("concurrency:", gh_txt)
+        self.assertIn("CRON_SECRET_TOKEN", gh_txt)
+
+        # Preparar pool real reconstruido
+        pred_app.Top3RotationManager.reset_state()
+        pred_app.invalidate_calendar_caches(rebuild_pool=True)
+        pron_handler = self.flask_app.routes["/obtener-pronostico"]
+        top3_handler = self.flask_app.routes["/api/v1/top3/daily"]
+        sync_status_handler = self.flask_app.routes["/api/v1/sync/status"]
+
+        # 1. Antes de las 22:00 PE (2026-11-26 21:30 PE): carrusel y Top 3 usan la jornada actual 2026-11-26
+        dt_before = datetime(2026, 11, 26, 21, 30, 0, tzinfo=peru_tz)
+        with patch.object(pred_app.Top3RotationManager, "now_peru", return_value=dt_before), \
+             patch.object(pred_app, "get_current_operational_date", return_value="2026-11-26"):
+            self.assertEqual(pred_app.get_fecha_publicada_para_cartelera(), "2026-11-26")
+            flask_stub.request.args = {"modo": "resumen"}
+            res_pre, c_pre = pron_handler()
+            self.assertEqual(c_pre, 200)
+            self.assertEqual(res_pre["fecha_actual"], "2026-11-26")
+            self.assertEqual(res_pre["fecha_activa_destacados"], "2026-11-26")
+            self.assertEqual(res_pre["fecha_publicacion"], "2026-11-26")
+            self.assertEqual(res_pre["top3_fecha_publicada"], "2026-11-26")
+            self.assertTrue(all(d["fecha_local_partido"] == "2026-11-26" for d in res_pre["destacados"]))
+
+            flask_stub.request.args = {}
+            t3_pre = top3_handler()
+            t3_pre = t3_pre[0] if isinstance(t3_pre, tuple) else t3_pre
+            self.assertEqual(t3_pre["fecha"], "2026-11-26")
+
+        # 2, 3, 4, 5, 6, 7, 9, 14. Después de las 22:00 PE (2026-11-26 22:04:45 PE):
+        # Rotación + Top 3 + carrusel cambian juntos al 2026-11-27, cero partidos del 26, cero duplicados, idempotencia Telegram
+        dt_after = datetime(2026, 11, 26, 22, 4, 45, tzinfo=peru_tz)
+        m27 = [f for f in pred_app.ALL_FIXTURES_POOL if pred_app.resolve_match_local_date(f)[1] == "2026-11-27"]
+        self.assertEqual(len(m27), 7)
+        for fx in m27:
+            self._add_verified_team(fx["local"], gf=2, ga=1)
+            self._add_verified_team(fx["visitante"], gf=1, ga=1)
+
+        mock_tg_resp = MagicMock()
+        mock_tg_resp.status_code = 200
+        mock_tg_resp.text = '{"ok": true}'
+
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "bot123:token", "TELEGRAM_CHANNEL_ID": "@predicxionIA"}), \
+             patch.object(pred_app.Top3RotationManager, "now_peru", return_value=dt_after), \
+             patch.object(pred_app, "get_current_operational_date", return_value="2026-11-26"), \
+             patch.object(pred_app.CalendarSyncService, "sync_live_calendar_from_football_data", return_value={"ok": False, "total_fd_matches": 0}), \
+             patch.object(pred_app.MatchEnrichmentCache, "enrich_calendar_worker", return_value={"procesados": 7}), \
+             patch.object(requests, "post", return_value=mock_tg_resp) as tg_post:
+
+            # Primera ejecución del cron diario a las 22:04:45 PE
+            pipe_1 = pred_app.DailyAutomationPipeline.run_daily_pipeline(now_pe=dt_after, force=False, motivo="GITHUB_ACTIONS_CRON_PE")
+            self.assertTrue(pipe_1["success"])
+            self.assertEqual(pipe_1["rotacion_top3"]["idempotency_key"], "top3:2026-11-26:2026-11-27")
+            self.assertEqual(tg_post.call_count, 1)
+
+            # Segunda ejecución inmediata (idempotencia): NO duplica Telegram
+            pipe_2 = pred_app.DailyAutomationPipeline.run_daily_pipeline(now_pe=dt_after, force=False, motivo="GITHUB_ACTIONS_CRON_PE_RETRY")
+            self.assertTrue(pipe_2["success"])
+            self.assertTrue(pipe_2["rotacion_top3"]["already_published"])
+            self.assertEqual(tg_post.call_count, 1)
+
+            # /api/v1/sync/status refleja fecha publicada 2026-11-27 coherente
+            st_resp, st_code = sync_status_handler()
+            self.assertEqual(st_code, 200)
+            self.assertEqual(st_resp["top3_fecha_publicada"], "2026-11-27")
+            self.assertEqual(st_resp["fecha_activa_destacados"], "2026-11-27")
+            self.assertEqual(st_resp["fecha_publicacion"], "2026-11-27")
+
+            # /obtener-pronostico?modo=resumen sin ?fecha devuelve los 7 partidos del 2026-11-27 y CERO del 26
+            flask_stub.request.args = {"modo": "resumen"}
+            res_post, c_post = pron_handler()
+            self.assertEqual(c_post, 200)
+            self.assertEqual(res_post["fecha_actual"], "2026-11-26")
+            self.assertEqual(res_post["fecha_activa_destacados"], "2026-11-27")
+            self.assertEqual(res_post["fecha_publicacion"], "2026-11-27")
+            self.assertEqual(res_post["top3_fecha_publicada"], "2026-11-27")
+            self.assertEqual(len(res_post["destacados"]), 7)
+            dest_ids = [d["id_partido"] for d in res_post["destacados"]]
+            self.assertEqual(len(dest_ids), len(set(dest_ids)))
+            for d in res_post["destacados"]:
+                self.assertEqual(d["fecha_local_partido"], "2026-11-27")
+                self.assertNotIn("Juventus", d["partido"])
+                self.assertNotIn("Omonia", d["partido"])
+                # 14. Las métricas del partido no se pierden durante la actualización
+                self.assertIn("metricas_unificadas", d)
+                self.assertIsNotNone(d["metricas_unificadas"]["avg_corners"]["valor"])
+
+            # Top 3 usa exactamente la misma fecha 2026-11-27
+            flask_stub.request.args = {}
+            t3_post = top3_handler()
+            t3_post = t3_post[0] if isinstance(t3_post, tuple) else t3_post
+            self.assertEqual(t3_post["fecha"], "2026-11-27")
+            self.assertEqual(t3_post["fecha_partidos_publicada"], "2026-11-27")
+            self.assertEqual(len(t3_post["top3"]), 3)
+
+            # ?fecha explícita del usuario sigue teniendo prioridad
+            flask_stub.request.args = {"fecha": "2026-11-26", "modo": "resumen"}
+            res_exp, c_exp = pron_handler()
+            self.assertEqual(c_exp, 200)
+            self.assertEqual(res_exp["fecha_activa_destacados"], "2026-11-26")
+
+            # 7. Caché se invalida inmediatamente al cambiar data_version (sin esperar 300s)
+            flask_stub.request.args = {"modo": "resumen"}
+            r_hit1, _ = pron_handler()
+            r_hit2, _ = pron_handler()
+            self.assertTrue(r_hit2["metricas_rendimiento"]["cache_hit_cartelera"])
+            pred_app.DailyAutomationPipeline.bump_data_version(reason="TEST_INVALIDACION")
+            r_miss, _ = pron_handler()
+            self.assertFalse(r_miss["metricas_rendimiento"]["cache_hit_cartelera"])
+
+        # 11 & 15. Verificación real en Node.js: pestaña abierta detecta nueva data_version,
+        # refresca carrusel + Top 3 con fecha 2026-11-27, actualiza texto/contador y elimina tarjetas antiguas del 26
+        with open(os.path.join(base_dir, "index.html"), "r", encoding="utf-8") as hf:
+            html_txt = hf.read()
+
+        def _extract_js_fn(src, name):
+            for prefix in (f"async function {name}(", f"function {name}("):
+                if prefix in src:
+                    start = src.index(prefix)
+                    break
+            else:
+                raise ValueError(f"Missing {name}")
+            brace = src.index("{", start)
+            depth = 0
+            for idx in range(brace, len(src)):
+                if src[idx] == "{":
+                    depth += 1
+                elif src[idx] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return src[start:idx + 1]
+            raise ValueError(f"Unclosed {name}")
+
+        fn_cargar = _extract_js_fn(html_txt, "cargarDatosCartelera")
+        fn_auto = _extract_js_fn(html_txt, "iniciarAutoSyncUI")
+        fn_render = _extract_js_fn(html_txt, "renderizarCarrusel")
+        fn_dedup = _extract_js_fn(html_txt, "deduplicarPartidosUI")
+        fn_clave = _extract_js_fn(html_txt, "claveCanonicaPartidoUI")
+
+        node_script = f"""
+const _UI_TEAM_ALIASES = {{}};
+const API_BASE = "";
+let globalTodosPartidos = {{}};
+let _autoSyncIntervalId = null;
+let capturedIntervalFn = null;
+let top3Calls = [];
+const els = {{
+  'destacados-fecha-label': {{ innerText: 'Partidos de Hoy • 2026-11-26' }},
+  'destacados-count': {{ innerText: '(18)' }},
+  'carousel-cards': {{ innerHTML: '<div>Juventus vs Omonia</div>' }},
+  'telemetria-last-sync': {{ innerText: '' }},
+  'sidebar-total-badge': {{ innerText: '' }},
+  'telemetria-partidos': {{ innerText: '' }}
+}};
+const document = {{ hidden: false, getElementById: (id) => els[id] || null }};
+const window = {{
+  __predicxionDataVersion: 'v20261126210000',
+  __predicxionFechaPublicada: '2026-11-26',
+  globalDestacadosMemoria: [{{ id_partido: 'uel-old', local: 'Juventus', visitante: 'Omonia', fecha: '2026-11-26' }}]
+}};
+function setInterval(fn, ms) {{ capturedIntervalFn = fn; return 1; }}
+function esc(s) {{ return String(s || ''); }}
+function verificarEsVip() {{ return true; }}
+function renderizarSidebar() {{}}
+async function authHeaders() {{ return {{}}; }}
+async function cargarTop3(fecha, silent) {{ top3Calls.push({{ fecha, silent }}); }}
+let fetchedUrls = [];
+async function fetch(url) {{
+  fetchedUrls.push(url);
+  if (url.includes('/api/v1/sync/status')) {{
+    return {{
+      ok: true,
+      json: async () => ({{
+        data_version: 'v20261127030445',
+        last_sync_lima: '2026-11-26 22:04:45 PE',
+        top3_fecha_publicada: '2026-11-27',
+        fecha_activa_destacados: '2026-11-27',
+        fecha_publicacion: '2026-11-27'
+      }})
+    }};
+  }}
+  return {{
+    ok: true,
+    json: async () => ({{
+      data_version: 'v20261127030445',
+      last_sync_lima: '2026-11-26 22:04:45 PE',
+      fecha_actual: '2026-11-26',
+      fecha_activa_destacados: '2026-11-27',
+      fecha_publicacion: '2026-11-27',
+      top3_fecha_publicada: '2026-11-27',
+      hay_partidos_hoy: true,
+      mensaje_jornada: 'Jornada Publicada • 2026-11-27 (Rotación 22:00 PE)',
+      destacados: [
+        {{ id_partido: 'p1', local: 'Werder Bremen', visitante: "Borussia M'gladbach", fecha: '2026-11-27', hora_utc: '14:30', pronostico_principal: {{ seleccion: 'Over 2.5' }} }},
+        {{ id_partido: 'p2', local: 'Nottingham Forest', visitante: 'Chelsea', fecha: '2026-11-27', hora_utc: '15:00', pronostico_principal: {{ seleccion: 'Chelsea' }} }}
+      ],
+      todos: {{}}
+    }})
+  }};
+}}
+{fn_clave}
+{fn_dedup}
+{fn_render}
+{fn_cargar}
+{fn_auto}
+(async () => {{
+  iniciarAutoSyncUI();
+  await capturedIntervalFn();
+  console.log(JSON.stringify({{
+    label: els['destacados-fecha-label'].innerText,
+    count: els['destacados-count'].innerText,
+    carouselHasOld: els['carousel-cards'].innerHTML.includes('Juventus'),
+    carouselHasNew: els['carousel-cards'].innerHTML.includes('Werder Bremen'),
+    memLen: window.globalDestacadosMemoria.length,
+    top3Calls,
+    fetchedUrls
+  }}));
+}})();
+"""
+        proc = _sp.run(["node", "-e", node_script], capture_output=True, text=True, check=True)
+        ui_res = _json.loads(proc.stdout.strip().splitlines()[-1])
+        self.assertIn("2026-11-27", ui_res["label"])
+        self.assertEqual(ui_res["count"], "(2)")
+        self.assertFalse(ui_res["carouselHasOld"])
+        self.assertTrue(ui_res["carouselHasNew"])
+        self.assertEqual(ui_res["memLen"], 2)
+        self.assertEqual(ui_res["top3Calls"][0]["fecha"], "2026-11-27")
+        self.assertTrue(any("fecha=2026-11-27" in u for u in ui_res["fetchedUrls"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
